@@ -3,20 +3,20 @@ import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
-import { sleep } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
-import { MOCK_AUTH_USER } from '@/stores/auth/mock-users';
 import { useUserStore } from '@/stores/user';
 
 /**
  * Mock Cognito login page.
  *
  * In production, Cognito Hosted UI handles authentication and this page does not exist.
- * In the mock, a single button simulates the OAuth redirect returning with a session.
+ * In the mock, a single button calls POST /auth/callback — MSW intercepts the request
+ * and returns the mock user + token, simulating the real Cognito OAuth redirect flow.
  */
 export default function MockCognitoPage(): React.JSX.Element {
   const [loading, setLoading] = React.useState(false);
-  const mockCognitoLogin = useAuthStore((s) => s.mockCognitoLogin);
+  const [error, setError] = React.useState<string | null>(null);
+  const login = useAuthStore((s) => s.login);
   const setProfile = useUserStore((s) => s.setProfile);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -25,15 +25,21 @@ export default function MockCognitoPage(): React.JSX.Element {
 
   const handleLogin = async (): Promise<void> => {
     setLoading(true);
-    await sleep(800);
+    setError(null);
 
-    mockCognitoLogin();
+    try {
+      await login('mock-cognito-code');
 
-    if (MOCK_AUTH_USER.description !== null) {
-      setProfile(MOCK_AUTH_USER.description, MOCK_AUTH_USER.activeTags);
+      const { user } = useAuthStore.getState();
+      if (user?.description !== null && user?.description !== undefined) {
+        setProfile(user.description, user.activeTags);
+      }
+
+      navigate(returnTo, { replace: true });
+    } catch {
+      setError('Login failed. Please try again.');
+      setLoading(false);
     }
-
-    navigate(returnTo, { replace: true });
   };
 
   return (
@@ -55,9 +61,16 @@ export default function MockCognitoPage(): React.JSX.Element {
           </p>
           <h2 className="text-lg font-semibold text-white">Sign in to continue</h2>
           <p className="mt-1 text-sm text-gray-400">
-            In production, Cognito handles authentication. This simulates the OAuth redirect.
+            In production, Cognito handles authentication. This simulates the OAuth redirect via
+            POST /auth/callback intercepted by MSW.
           </p>
         </div>
+
+        {error !== null && (
+          <p className="mb-4 rounded-lg bg-red-950 px-3 py-2 text-center text-sm text-red-400">
+            {error}
+          </p>
+        )}
 
         <Button
           variant="primary"
@@ -78,7 +91,7 @@ export default function MockCognitoPage(): React.JSX.Element {
         </Button>
 
         <p className="mt-4 text-center text-xs text-gray-600">
-          Logs in as <span className="text-gray-400">{MOCK_AUTH_USER.email}</span>
+          POST /auth/callback → MSW → mock user session
         </p>
       </div>
     </div>

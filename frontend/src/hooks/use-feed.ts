@@ -1,16 +1,20 @@
 import * as React from 'react';
 
 import { FEED_PAGE_SIZE } from '@/lib/constants';
-import { sleep } from '@/lib/utils';
-import { MOCK_POSTS } from '@/mocks/data';
+import { api } from '@/services/api';
 import { useFeedStore } from '@/stores/feed';
-import type { Post } from '@/types';
+import type { FeedResponse, Post } from '@/types';
 
 /**
- * Paginates the mock post list, simulating GET /feed?limit=5&cursor=...
+ * Fetches and paginates the authenticated user's post feed via GET /feed.
  *
- * In production this calls the real API Gateway endpoint.
- * The cursor is a numeric string representing the slice offset into MOCK_POSTS.
+ * In development, MSW intercepts the request and returns a slice of MOCK_POSTS.
+ * In production, the request goes to the real API Gateway endpoint which queries
+ * DynamoDB via the userId-createdAt-index GSI.
+ *
+ * The cursor is a base-10 numeric string (offset into the result set) in the mock
+ * and a base64-encoded DynamoDB LastEvaluatedKey in production — the hook handles
+ * both transparently since it just passes the cursor back opaquely.
  */
 export function useFeed(): {
   posts: Post[];
@@ -25,19 +29,16 @@ export function useFeed(): {
 
     setLoading(true);
 
-    const offset = cursor !== null ? Number(cursor) : 0;
-    const slice = MOCK_POSTS.slice(offset, offset + FEED_PAGE_SIZE);
+    const params = new URLSearchParams({ limit: String(FEED_PAGE_SIZE) });
+    if (cursor !== null) params.append('cursor', cursor);
 
-    void sleep(400).then(() => {
+    void api.get<FeedResponse>(`/feed?${params.toString()}`).then((data) => {
       if (posts.length === 0) {
-        setPosts(slice);
+        setPosts(data.posts);
       } else {
-        appendPosts(slice);
+        appendPosts(data.posts);
       }
-
-      const nextOffset = offset + slice.length;
-      const nextCursor = nextOffset < MOCK_POSTS.length ? String(nextOffset) : null;
-      setCursor(nextCursor);
+      setCursor(data.cursor);
       setLoading(false);
     });
   }, [isLoading, hasMore, cursor, posts.length, setPosts, appendPosts, setCursor, setLoading]);

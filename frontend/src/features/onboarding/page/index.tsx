@@ -6,19 +6,21 @@ import { ExtractedTags } from './extracted-tags';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { TAG_EXTRACTION_DELAY_MS } from '@/lib/constants';
-import { sleep } from '@/lib/utils';
-import { mockExtractTags } from '@/mocks/data';
+import { api } from '@/services/api';
 import { useUserStore } from '@/stores/user';
-import type { Tag } from '@/types';
+import type { Tag, UpdateProfileResponse } from '@/types';
 
 type Step = 'input' | 'extracting' | 'review';
 
 /**
  * Post-signup onboarding page at /onboarding.
  *
- * Guides the user through writing a profile description, simulating AI tag
- * extraction, and confirming their areas of interest before redirecting to /feed.
+ * Guides the user through writing a profile description and confirming their
+ * AI-extracted areas of interest before redirecting to /feed.
+ *
+ * Calls PUT /user/profile with the description. MSW intercepts the request,
+ * runs mockExtractTags() to simulate Gemini, and returns { description, activeTags }
+ * after a 2s delay that mirrors the real API latency.
  */
 export default function OnboardingPage(): React.JSX.Element {
   const navigate = useNavigate();
@@ -29,17 +31,26 @@ export default function OnboardingPage(): React.JSX.Element {
   const [extractedTags, setExtractedTags] = React.useState<Tag[]>([]);
   const [localActiveTags, setLocalActiveTags] = React.useState<Tag[]>([]);
   const [isConfirming, setIsConfirming] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const canExtract = description.trim().length >= 20;
 
   const handleExtract = async (): Promise<void> => {
     setStep('extracting');
-    await sleep(TAG_EXTRACTION_DELAY_MS);
+    setError(null);
 
-    const tags = mockExtractTags(description);
-    setExtractedTags(tags);
-    setLocalActiveTags(tags);
-    setStep('review');
+    try {
+      const response = await api.put<UpdateProfileResponse>('/user/profile', {
+        description: description.trim(),
+      });
+
+      setExtractedTags(response.activeTags);
+      setLocalActiveTags(response.activeTags);
+      setStep('review');
+    } catch {
+      setError('Failed to extract tags. Please try again.');
+      setStep('input');
+    }
   };
 
   const handleToggle = (tag: Tag): void => {
@@ -52,9 +63,15 @@ export default function OnboardingPage(): React.JSX.Element {
 
   const handleConfirm = async (): Promise<void> => {
     setIsConfirming(true);
-    await sleep(600);
-    setProfile(description, localActiveTags);
-    navigate('/feed', { replace: true });
+
+    try {
+      await api.put('/user/preferences', { activeTags: localActiveTags });
+      setProfile(description.trim(), localActiveTags);
+      navigate('/feed', { replace: true });
+    } catch {
+      setError('Failed to save preferences. Please try again.');
+      setIsConfirming(false);
+    }
   };
 
   return (
@@ -90,6 +107,10 @@ export default function OnboardingPage(): React.JSX.Element {
           </p>
         </div>
 
+        {error !== null && (
+          <p className="rounded-lg bg-red-950 px-3 py-2 text-sm text-red-400">{error}</p>
+        )}
+
         {step === 'input' && (
           <Button
             variant="primary"
@@ -110,6 +131,7 @@ export default function OnboardingPage(): React.JSX.Element {
             <p className="animate-pulse text-sm text-gray-400">
               Analysing your profile with AI…
             </p>
+            <p className="text-xs text-gray-600">PUT /user/profile → MSW → mockExtractTags()</p>
           </div>
         )}
 

@@ -50,7 +50,7 @@ Every AI agent working on this codebase must follow this exact sequence before w
 
 ```
 src/
-├── main.tsx                         Entry point. Calls Amplify.configure(), renders App.
+├── main.tsx                         Entry point. Starts MSW worker in dev, then renders App.
 ├── app/
 │   ├── App.tsx                      Root component. Toast + Tooltip providers + AppRouter.
 │   └── layouts/
@@ -72,31 +72,41 @@ src/
 │       └── toast/                   ToastContainer + ToastViewport (Radix Toast).
 ├── features/                        One folder per feature, structured as {feature}/page/.
 │   ├── auth/
-│   │   └── login/page/              MockCognitoPage — simulates Cognito OAuth redirect.
+│   │   └── login/page/              MockCognitoPage — calls POST /auth/callback (MSW).
 │   ├── onboarding/page/             OnboardingPage + extracted-tags.tsx
 │   ├── feed/page/                   FeedPage + feed-container.tsx + post-card.tsx + post-detail.tsx
 │   ├── profile/page/                ProfilePage + description-form.tsx + tag-manager.tsx
 │   └── post/page/                   PostPage — deep-link single post view (/post/:id).
 ├── hooks/
-│   ├── use-feed.ts                  Paginates MOCK_POSTS, returns { posts, isLoading, fetchMore }.
-│   └── use-jit.ts                   JIT generation — appends posts when buffer ≤ TRIGGER_THRESHOLD.
+│   ├── use-feed.ts                  Calls GET /feed via api.ts; paginates with cursor.
+│   └── use-jit.ts                   Calls POST /feed/request when buffer ≤ TRIGGER_THRESHOLD.
 ├── lib/
+│   ├── env.ts                       Single source of truth for all VITE_* env vars. Every
+│   │                                import.meta.env access goes through here — nowhere else.
 │   ├── utils.ts                     cn(), formatDate(), formatRelativeTime(), truncate(), sleep().
 │   └── constants.ts                 AVAILABLE_TAGS, DEFAULT_TAGS, TRIGGER_THRESHOLD,
 │                                    MAX_PENDING_REQUESTS, FEED_PAGE_SIZE, TAG_EXTRACTION_DELAY_MS,
 │                                    JIT_GENERATION_DELAY_MS.
 ├── mocks/
+│   ├── browser.ts                   Configures and exports the MSW ServiceWorker instance.
+│   ├── handlers/
+│   │   ├── index.ts                 Barrel: [...authHandlers, ...feedHandlers, ...userHandlers].
+│   │   ├── auth.ts                  POST /auth/callback → returns MOCK_USER + fake token (800ms).
+│   │   ├── feed.ts                  GET /feed, GET /post/:id, POST /feed/request.
+│   │   └── user.ts                  GET /user/preferences, PUT /user/preferences, PUT /user/profile.
 │   └── data/
 │       ├── index.ts                 Barrel: exports MOCK_POSTS, MOCK_USER, mockExtractTags, TAG_COLORS.
 │       ├── posts.ts                 15 mock posts (5 topics × 3) with Markdown content.
-│       ├── user.ts                  MOCK_AUTH_USER — the default authenticated user.
+│       ├── user.ts                  MOCK_USER — single source of truth for the mock authenticated user.
 │       └── tags.ts                  TAG_COLORS map + mockExtractTags() simulation function.
 ├── router/
 │   └── index.tsx                    createBrowserRouter, RequireAuth, RootRedirect, AppRouter.
+├── services/
+│   └── api.ts                       Central HTTP client (api.get/post/put/delete). MSW intercepts
+│                                    all calls in dev; real API Gateway in production.
 ├── stores/
 │   ├── auth/
-│   │   ├── index.ts                 useAuthStore — user, mockCognitoLogin, logout.
-│   │   └── mock-users.ts            MOCK_AUTH_USER constant.
+│   │   └── index.ts                 useAuthStore — user, token, login(code), logout.
 │   ├── feed/
 │   │   └── index.ts                 useFeedStore — posts[], currentIndex, cursor, isLoading, hasMore.
 │   ├── user/
@@ -370,9 +380,74 @@ export const useMyStore = create<MyState>((set) => ({
 
 ---
 
-## §12 — Mock Data Rules
+## §12 — Mock Data Rules & MSW
 
-**The golden rule: zero real API calls.** Everything comes from `src/mocks/data/`.
+### The HTTP flow
+
+All API calls go through `src/services/api.ts` → `fetch()` → **MSW intercepts in dev** → mock handler returns JSON.
+
+```
+Component / Hook
+     │
+     ▼
+api.get('/feed') ← src/services/api.ts
+     │
+     ▼
+fetch('/feed')   ← browser native fetch
+     │
+     ▼  [MSW ServiceWorker intercepts]
+Handler in src/mocks/handlers/feed.ts
+     │
+     ▼
+HttpResponse.json({ posts: MOCK_POSTS.slice(...) })
+     │
+     ▼
+Component receives { posts, cursor, hasMore }
+```
+
+In production: remove MSW initialisation from `main.tsx`, set `VITE_API_URL`, and all requests go to the real API Gateway.
+
+### Adding a new API endpoint
+
+1. Add the handler in `src/mocks/handlers/{domain}.ts`
+2. Add it to the barrel in `src/mocks/handlers/index.ts`
+3. Call it via `api.get/post/put/delete(...)` in the component/hook
+4. Never import mock data directly in components or hooks — always via `api.ts`
+
+### Adding mock posts
+
+Add to `src/mocks/data/posts.ts`. Follow this shape:
+
+```typescript
+{
+  id: 'post-NNN',           // Unique, sequential
+  userId: 'user-mock-001',  // Always the mock user
+  title: '...',             // Max 60 characters
+  summary: '...',           // Max 120 characters
+  tags: ['AWS'] as Tag[],   // 1–3 tags from AVAILABLE_TAGS
+  gradient: ['#hex1', '#hex2'],  // See §6 gradient convention
+  createdAt: '2026-07-0xTxx:00:00Z',
+  content: `## Heading\n\nMarkdown content with \`code blocks\`...`,
+}
+```
+
+### Mock delays (defined in MSW handlers)
+
+| Endpoint | Delay | Simulates |
+|---|---|---|
+| `POST /auth/callback` | 800ms | Cognito OAuth round-trip |
+| `GET /feed` | 400ms | DynamoDB GSI Query + Lambda |
+| `GET /post/:id` | 200ms | DynamoDB GetItem |
+| `POST /feed/request` | 300ms | SQS SendMessage |
+| `GET /user/preferences` | 200ms | DynamoDB GetItem |
+| `PUT /user/preferences` | 400ms | DynamoDB UpdateItem |
+| `PUT /user/profile` | 2000ms | Gemini API tag extraction |
+
+### `mockExtractTags(description: string): Tag[]`
+
+Keyword-matching function that simulates Gemini's `extractTagsFromDescription`.
+Used by the `PUT /user/profile` MSW handler. Always returns at least 3 tags.
+Source: `src/mocks/data/tags.ts`.
 
 ### Adding posts
 
@@ -621,6 +696,7 @@ Alphabetical within each group. One blank line between groups.
 - `local/no-comments: error` — no `//` or `/* */` comments anywhere.
 - `jsdoc/require-jsdoc: error` — JSDoc required on all exported functions/classes.
 - `jsdoc/require-description: error` — JSDoc must include a description.
+- **`eslint-disable` in any form is prohibited** — fix the code instead (see §25).
 
 ---
 
@@ -751,6 +827,25 @@ const value = compute(); // inline explanation ← no-inline-comments
 function internalHelper(): void { ... }
 ```
 
+### Rule 3 — `eslint-disable` comments are prohibited
+
+`eslint-disable`, `eslint-disable-next-line`, `eslint-disable-line`, and all their
+variants are **strictly forbidden** in every source file.
+
+If ESLint flags a line, the correct action is to **fix the code** until ESLint passes.
+There are no legitimate reasons to suppress lint rules in this codebase.
+
+### What is forbidden
+
+```typescript
+const value = compute(); // inline explanation ← banned
+
+/* eslint-disable no-console */  ← banned
+console.log(debug);
+
+const x = risky() as string; // eslint-disable-next-line @typescript-eslint/no-explicit-any ← banned
+```
+
 ### Practical guide
 
 | Situation | Correct action |
@@ -759,5 +854,5 @@ function internalHelper(): void { ... }
 | Want to explain why a value is used | Give the function/hook a descriptive name |
 | Want to mark a TODO | Open a GitHub issue instead |
 | Need to document an exported function | Add a JSDoc block |
-| Need to suppress a lint rule | Use `eslint-disable-next-line` (not a code comment) |
+| ESLint flags a rule violation | Fix the code — never suppress the rule |
 

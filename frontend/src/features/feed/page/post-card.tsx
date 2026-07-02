@@ -1,4 +1,5 @@
-import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
+import { BookOpen } from 'lucide-react';
 import * as React from 'react';
 
 import { PostDetail } from './post-detail';
@@ -15,34 +16,94 @@ interface PostCardProps {
 /**
  * Full-screen snap-scroll post card.
  *
- * Displays the post title, summary, and tags over a gradient background.
- * Dragging left more than 80px opens the full PostDetail panel.
+ * Opens PostDetail via:
+ *   - Left-swipe on desktop (mouse drag) or mobile (touch).
+ *     Uses native addEventListener with passive:false on pointermove so we can
+ *     call preventDefault() when the gesture is clearly horizontal, blocking the
+ *     snap-scroll from consuming the event.
+ *   - Tapping the "Read" button.
  */
 export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
   const [expanded, setExpanded] = React.useState(false);
-  const x = useMotionValue(0);
+  const bgRef = React.useRef<HTMLDivElement>(null);
 
   const background = `linear-gradient(135deg, ${post.gradient[0]}, ${post.gradient[1]})`;
+
+  React.useEffect(() => {
+    const el = bgRef.current;
+    if (el === null) return;
+
+    let startX = 0;
+    let startY = 0;
+    let active = false;
+    let horizontal = false;
+
+    const onDown = (e: PointerEvent): void => {
+      startX = e.clientX;
+      startY = e.clientY;
+      active = true;
+      horizontal = false;
+    };
+
+    const onMove = (e: PointerEvent): void => {
+      if (!active) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+        horizontal = Math.abs(dx) > Math.abs(dy);
+      }
+
+      if (horizontal) {
+        e.preventDefault();
+      }
+    };
+
+    const onUp = (e: PointerEvent): void => {
+      if (!active) return;
+      active = false;
+      const dx = e.clientX - startX;
+      if (horizontal && dx < -50) {
+        setExpanded(true);
+      }
+      horizontal = false;
+    };
+
+    const onCancel = (): void => {
+      active = false;
+      horizontal = false;
+    };
+
+    el.addEventListener('pointerdown', onDown, { passive: true });
+    el.addEventListener('pointermove', onMove, { passive: false });
+    el.addEventListener('pointerup', onUp, { passive: true });
+    el.addEventListener('pointercancel', onCancel, { passive: true });
+
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onCancel);
+    };
+  }, []);
 
   return (
     <div
       data-index={index}
-      className="snap-card relative flex-shrink-0 overflow-hidden"
+      className={cn(
+        'relative flex-shrink-0 overflow-hidden',
+        expanded ? 'snap-none h-dvh' : 'snap-card',
+      )}
       aria-label={`Post: ${post.title}`}
     >
-      <motion.div
-        style={{ x, background }}
-        drag="x"
-        dragConstraints={{ left: -320, right: 0 }}
-        dragElastic={0.1}
-        onDragEnd={(_, info) => {
-          if (info.offset.x < -80) setExpanded(true);
-        }}
+      <div
+        ref={bgRef}
+        style={{ background }}
         className="absolute inset-0 flex flex-col justify-end"
       >
         <div className="absolute inset-0 card-overlay" />
 
-        <div className="relative flex flex-col gap-3 p-6 pb-8">
+        <div className="relative flex flex-col gap-3 p-6 pb-24">
           <div className="flex flex-wrap gap-2">
             {post.tags.map((tag) => (
               <Badge
@@ -60,9 +121,19 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
 
           <p className="text-sm text-white/80 line-clamp-2">{post.summary}</p>
 
-          <p className="text-xs text-white/40 mt-1">← swipe to read</p>
+          <button
+            type="button"
+            onClick={() => {
+              setExpanded(true);
+            }}
+            className="mt-2 flex items-center gap-2 self-start rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs text-white/80 backdrop-blur-sm transition-colors hover:bg-white/20 active:bg-white/30"
+            aria-label="Read full post"
+          >
+            <BookOpen className="h-3.5 w-3.5" aria-hidden />
+            Read
+          </button>
         </div>
-      </motion.div>
+      </div>
 
       <AnimatePresence>
         {expanded && (
@@ -71,7 +142,7 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 280 }}
-            className="absolute inset-0 overflow-y-auto bg-surface scrollbar-thin"
+            className="absolute inset-0 z-10 overflow-y-auto overscroll-y-contain bg-surface scrollbar-thin"
           >
             <PostDetail
               post={post}

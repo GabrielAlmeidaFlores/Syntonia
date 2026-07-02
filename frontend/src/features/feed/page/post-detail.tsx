@@ -2,6 +2,7 @@ import { ArrowLeft, Share2 } from 'lucide-react';
 import * as React from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
+import remarkGfm from 'remark-gfm';
 import 'highlight.js/styles/github-dark.css';
 
 import { Badge } from '@/components/ui/badge';
@@ -58,7 +59,7 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
         />
 
         <div className="prose prose-sm prose-invert max-w-none">
-          <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
             {post.content ?? post.summary}
           </ReactMarkdown>
         </div>

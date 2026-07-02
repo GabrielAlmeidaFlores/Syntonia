@@ -3,24 +3,59 @@ import * as React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useNavigate, useParams } from 'react-router-dom';
 import rehypeHighlight from 'rehype-highlight';
+import remarkGfm from 'remark-gfm';
 import 'highlight.js/styles/github-dark.css';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
-import { MOCK_POSTS } from '@/mocks/data';
+import { api } from '@/services/api';
+import type { Post } from '@/types';
 
 /**
  * Deep-link single post page at /post/:id.
- * Loads the post from MOCK_POSTS by ID; in production calls GET /post/:id.
+ *
+ * Calls GET /post/:id — MSW intercepts and returns the full post object
+ * (including Markdown content) from MOCK_POSTS. In production the request
+ * goes to the real API Gateway → Lambda → DynamoDB GetItem.
  */
 export default function PostPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const post = MOCK_POSTS.find((p) => p.id === id);
+  const [post, setPost] = React.useState<Post | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [notFound, setNotFound] = React.useState(false);
 
-  if (post === undefined) {
+  React.useEffect(() => {
+    if (id === undefined) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+
+    void api
+      .get<Post>(`/post/${id}`)
+      .then((data) => {
+        setPost(data);
+      })
+      .catch(() => {
+        setNotFound(true);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex h-dvh items-center justify-center bg-surface">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-surface-elevated border-t-accent" />
+      </div>
+    );
+  }
+
+  if (notFound || post === null) {
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-surface px-6">
         <p className="font-semibold text-white">Post not found</p>
@@ -76,7 +111,7 @@ export default function PostPage(): React.JSX.Element {
         />
 
         <div className="prose prose-sm prose-invert max-w-none">
-          <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
             {post.content}
           </ReactMarkdown>
         </div>

@@ -1,22 +1,29 @@
 import * as React from 'react';
 
 import { JIT_GENERATION_DELAY_MS, TRIGGER_THRESHOLD } from '@/lib/constants';
-import { sleep } from '@/lib/utils';
-import { MOCK_POSTS } from '@/mocks/data';
+import { api } from '@/services/api';
 import { useFeedStore } from '@/stores/feed';
 import { useUserStore } from '@/stores/user';
+import type { GenerationResponse } from '@/types';
 
 /**
  * Just-in-Time (JIT) generation hook.
  *
- * Triggers background post generation when fewer than TRIGGER_THRESHOLD posts
- * remain in the buffer. Simulates POST /feed/request → SQS → Gemini → DynamoDB
- * by appending shuffled mock posts after a short delay.
+ * Watches `currentIndex` and triggers background post generation when fewer
+ * than TRIGGER_THRESHOLD posts remain in the buffer.
+ *
+ * Sends POST /feed/request to the mock backend. MSW intercepts and returns 202
+ * ACCEPTED immediately. After the simulated generation delay (JIT_GENERATION_DELAY_MS),
+ * the hook resets the generating flag — the next scroll event will trigger
+ * fetchMore via useFeed to pull the newly "available" posts.
+ *
+ * In production, POST /feed/request enqueues a real SQS message which triggers
+ * workerInternal → Gemini → DynamoDB. The subsequent fetchMore call will then
+ * retrieve the genuinely generated posts.
  */
 export function useJIT(currentIndex: number, totalPosts: number): void {
   const isGenerating = React.useRef(false);
   const { activeTags } = useUserStore();
-  const appendPosts = useFeedStore((s) => s.appendPosts);
   const setLoading = useFeedStore((s) => s.setLoading);
 
   React.useEffect(() => {
@@ -27,27 +34,20 @@ export function useJIT(currentIndex: number, totalPosts: number): void {
     isGenerating.current = true;
     setLoading(true);
 
-    void sleep(JIT_GENERATION_DELAY_MS).then(() => {
-      const relevant = MOCK_POSTS.filter((p) =>
-        p.tags.some((t) => activeTags.includes(t)),
-      );
+    const generate = async (): Promise<void> => {
+      await api.post<GenerationResponse>('/feed/request', { tags: activeTags, quantity: 3 });
 
-      const pool = relevant.length > 0 ? relevant : MOCK_POSTS;
-      const newPosts = [...pool]
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 3)
-        .map((p) => ({
-          ...p,
-          id: `${p.id}-jit-${Date.now().toString()}`,
-          createdAt: new Date().toISOString(),
-        }));
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, JIT_GENERATION_DELAY_MS);
+      });
 
-      appendPosts(newPosts);
       setLoading(false);
 
       setTimeout(() => {
         isGenerating.current = false;
       }, 10_000);
-    });
-  }, [currentIndex, totalPosts, activeTags, appendPosts, setLoading]);
+    };
+
+    void generate();
+  }, [currentIndex, totalPosts, activeTags, setLoading]);
 }

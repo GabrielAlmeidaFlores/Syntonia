@@ -38,7 +38,7 @@ const localPlugin = {
 };
 
 export default tseslint.config(
-  { ignores: ['dist/', 'node_modules/', '*.config.js', '*.config.ts'] },
+  { ignores: ['dist/', 'node_modules/', '*.config.js', '*.config.ts', 'public/'] },
 
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,

@@ -1,21 +1,34 @@
-import * as TabsPrimitive from '@radix-ui/react-tabs';
 import { User } from 'lucide-react';
 import * as React from 'react';
 
 import { DescriptionForm } from './description-form';
 import { TagManager } from './tag-manager';
 
-import { cn } from '@/lib/utils';
+import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
+import { useUserStore } from '@/stores/user';
+import type { UserPreferences } from '@/types';
 
 /**
  * Profile page at /profile.
  *
- * Two-tab layout: Description (edit free-text + trigger AI extraction)
- * and Tags (enable/disable individual AI-extracted tags).
+ * On mount, calls GET /user/preferences to hydrate the Zustand userStore with
+ * the server-side description and activeTags. This ensures the profile is always
+ * in sync with the "backend" even after a page refresh.
+ *
+ * Single scrollable layout: DescriptionForm followed by TagManager stacked vertically.
  */
 export default function ProfilePage(): React.JSX.Element {
   const user = useAuthStore((s) => s.user);
+  const setProfile = useUserStore((s) => s.setProfile);
+
+  React.useEffect(() => {
+    void api.get<UserPreferences>('/user/preferences').then((prefs) => {
+      if (prefs.description !== null) {
+        setProfile(prefs.description, prefs.activeTags);
+      }
+    });
+  }, [setProfile]);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-surface scrollbar-thin">
@@ -31,31 +44,13 @@ export default function ProfilePage(): React.JSX.Element {
         </div>
       </div>
 
-      <TabsPrimitive.Root defaultValue="description" className="flex flex-1 flex-col">
-        <TabsPrimitive.List className="flex border-b border-surface-border px-5">
-          {(['description', 'tags'] as const).map((tab) => (
-            <TabsPrimitive.Trigger
-              key={tab}
-              value={tab}
-              className={cn(
-                'px-4 py-3 text-sm font-medium capitalize transition-colors',
-                'text-gray-500 hover:text-gray-300',
-                'data-[state=active]:border-b-2 data-[state=active]:border-accent data-[state=active]:text-white',
-              )}
-            >
-              {tab}
-            </TabsPrimitive.Trigger>
-          ))}
-        </TabsPrimitive.List>
+      <div className="flex flex-col gap-8 px-5 py-6">
+        <DescriptionForm />
 
-        <TabsPrimitive.Content value="description" className="flex-1 px-5 py-6">
-          <DescriptionForm />
-        </TabsPrimitive.Content>
-
-        <TabsPrimitive.Content value="tags" className="flex-1 px-5 py-6">
+        <div className="border-t border-surface-border pt-6">
           <TagManager />
-        </TabsPrimitive.Content>
-      </TabsPrimitive.Root>
+        </div>
+      </div>
     </div>
   );
 }

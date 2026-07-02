@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { TagSelector } from '@/components/shared/tag-selector';
 import { Button } from '@/components/ui/button';
-import { sleep } from '@/lib/utils';
+import { api } from '@/services/api';
 import { useToastStore } from '@/stores/toast';
 import { useUserStore } from '@/stores/user';
 import type { Tag } from '@/types';
@@ -10,8 +10,10 @@ import type { Tag } from '@/types';
 /**
  * Tag enable/disable manager on the ProfilePage.
  *
- * Shows the user's AI-extracted tags as toggleable chips and persists
- * the active subset via the user store when saved.
+ * Shows the user's AI-extracted tags as toggleable chips. Saving calls
+ * PUT /user/preferences — MSW intercepts and persists the change to the mock
+ * user object, then confirms with 200 OK. The user store is also updated locally
+ * so the change is immediately reflected in JIT generation requests.
  */
 export function TagManager(): React.JSX.Element {
   const { activeTags, setTags } = useUserStore();
@@ -33,10 +35,16 @@ export function TagManager(): React.JSX.Element {
 
   const handleSave = async (): Promise<void> => {
     setSaving(true);
-    await sleep(400);
-    setTags(localTags);
-    setSaving(false);
-    addToast({ type: 'success', message: 'Active tags saved.' });
+
+    try {
+      await api.put('/user/preferences', { activeTags: localTags });
+      setTags(localTags);
+      addToast({ type: 'success', message: 'Active tags saved.' });
+    } catch {
+      addToast({ type: 'error', message: 'Failed to save tags. Please try again.' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   React.useEffect(() => {

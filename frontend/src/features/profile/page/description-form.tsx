@@ -3,20 +3,20 @@ import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { TAG_EXTRACTION_DELAY_MS } from '@/lib/constants';
-import { sleep } from '@/lib/utils';
-import { mockExtractTags } from '@/mocks/data';
+import { api } from '@/services/api';
 import { useToastStore } from '@/stores/toast';
 import { useUserStore } from '@/stores/user';
-import type { Tag } from '@/types';
+import type { Tag, UpdateProfileResponse } from '@/types';
 
 type ExtractionState = 'idle' | 'extracting' | 'done';
 
 /**
  * Description editing form on the ProfilePage.
  *
- * Saving a new description triggers simulated AI tag re-extraction,
- * updating both the description and activeTags in the user store.
+ * Saving a new description calls PUT /user/profile. MSW intercepts the request,
+ * runs mockExtractTags() to simulate Gemini AI tag extraction, and returns the
+ * new activeTags after a 2s delay that mirrors real API latency.
+ * Both the description and extracted tags are then synced to the user store.
  */
 export function DescriptionForm(): React.JSX.Element {
   const { description, setProfile } = useUserStore();
@@ -31,17 +31,24 @@ export function DescriptionForm(): React.JSX.Element {
 
   const handleSave = async (): Promise<void> => {
     setState('extracting');
-    await sleep(TAG_EXTRACTION_DELAY_MS);
 
-    const tags = mockExtractTags(value.trim());
-    setExtractedTags(tags);
-    setProfile(value.trim(), tags);
-    setState('done');
+    try {
+      const response = await api.put<UpdateProfileResponse>('/user/profile', {
+        description: value.trim(),
+      });
 
-    addToast({
-      type: 'success',
-      message: `Profile updated — ${tags.length.toString()} tags extracted.`,
-    });
+      setExtractedTags(response.activeTags);
+      setProfile(response.description, response.activeTags);
+      setState('done');
+
+      addToast({
+        type: 'success',
+        message: `Profile updated — ${String(response.activeTags.length)} tags extracted.`,
+      });
+    } catch {
+      addToast({ type: 'error', message: 'Failed to save profile. Please try again.' });
+      setState('idle');
+    }
   };
 
   return (
@@ -95,7 +102,7 @@ export function DescriptionForm(): React.JSX.Element {
 
       {state === 'done' && extractedTags.length > 0 && (
         <p className="animate-fade-in text-xs text-green-400">
-          ✓ {extractedTags.length} tags extracted and saved to your profile.
+          ✓ {String(extractedTags.length)} tags extracted and saved to your profile.
         </p>
       )}
     </div>
