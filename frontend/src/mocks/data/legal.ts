@@ -1,10 +1,10 @@
-import type { LegalDocument, TermsStatus } from '@/types';
+import type { LegalDocument, TermsStatus } from "@/types";
 
 /** In-memory state for the mock session. */
 export let mockTermsStatus: TermsStatus = {
   needsAcceptance: true,
-  termsVersion: '2.0',
-  privacyVersion: '1.5',
+  termsVersion: "2.0",
+  privacyVersion: "1.5",
 };
 
 /** Simulates the backend updating needsAcceptance after the user accepts. */
@@ -114,11 +114,11 @@ For privacy-related requests, contact privacy@syntonia.app.
  * Returns the mock legal document for the given type and language.
  * In production, the backend returns localised content based on the `lang` query param.
  */
-export function getMockLegalDocument(type: 'terms' | 'privacy'): LegalDocument {
+export function getMockLegalDocument(type: "terms" | "privacy"): LegalDocument {
   return {
     type,
-    version: type === 'terms' ? '2.0' : '1.5',
-    updatedAt: '2026-07-03T00:00:00Z',
-    content: type === 'terms' ? TERMS_CONTENT : PRIVACY_CONTENT,
+    version: type === "terms" ? "2.0" : "1.5",
+    updatedAt: "2026-07-03T00:00:00Z",
+    content: type === "terms" ? TERMS_CONTENT : PRIVACY_CONTENT,
   };
 }

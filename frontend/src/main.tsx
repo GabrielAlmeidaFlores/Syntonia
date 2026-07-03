@@ -1,9 +1,9 @@
-import * as React from 'react';
-import { createRoot } from 'react-dom/client';
+import * as React from "react";
+import { createRoot } from "react-dom/client";
 
-import { App } from '@/app/app';
-import { VITE_MODE } from '@/lib/env';
-import '@/styles/globals.css';
+import { App } from "@/app/app";
+import { VITE_MODE } from "@/lib/env";
+import "@/styles/globals.css";
 
 /**
  * Application entry point.
@@ -14,21 +14,21 @@ import '@/styles/globals.css';
  * loaded and all requests go to the real API Gateway.
  */
 async function enableMocking(): Promise<void> {
-  if (VITE_MODE !== 'development') return;
+  if (VITE_MODE !== "development") return;
 
-  const { worker } = await import('@/mocks/browser');
+  const { worker } = await import("@/mocks/browser");
   await worker.start({
-    onUnhandledRequest: 'warn',
+    onUnhandledRequest: "warn",
     serviceWorker: {
-      url: '/mock-service-worker.js',
+      url: "/mock-service-worker.js",
     },
   });
 }
 
-const rootElement = document.getElementById('root');
+const rootElement = document.getElementById("root");
 
 if (rootElement === null) {
-  throw new Error('Root element #root not found in DOM');
+  throw new Error("Root element #root not found in DOM");
 }
 
 void enableMocking().then(() => {

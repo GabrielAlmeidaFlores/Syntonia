@@ -1,4 +1,4 @@
-import * as React from 'react';
+import * as React from "react";
 
 /**
  * Adds mouse-wheel and keyboard navigation to a CSS snap-scroll container.
@@ -23,21 +23,25 @@ export function useSnapNavigation(
 
     let animationTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const scrollToCard = (direction: 'next' | 'prev'): void => {
+    const scrollToCard = (direction: "next" | "prev"): void => {
       if (isAnimatingRef.current || isLockedRef.current) return;
 
       const cardHeight = el.clientHeight;
       if (cardHeight === 0) return;
 
       const currentCardIndex = Math.round(el.scrollTop / cardHeight);
-      const rawTarget = direction === 'next' ? currentCardIndex + 1 : currentCardIndex - 1;
-      const maxIndex = Math.max(0, Math.round(el.scrollHeight / cardHeight) - 1);
+      const rawTarget =
+        direction === "next" ? currentCardIndex + 1 : currentCardIndex - 1;
+      const maxIndex = Math.max(
+        0,
+        Math.round(el.scrollHeight / cardHeight) - 1,
+      );
       const targetIndex = Math.max(0, Math.min(rawTarget, maxIndex));
 
       if (targetIndex === currentCardIndex) return;
 
       isAnimatingRef.current = true;
-      el.scrollTo({ top: targetIndex * cardHeight, behavior: 'smooth' });
+      el.scrollTo({ top: targetIndex * cardHeight, behavior: "smooth" });
 
       animationTimer = setTimeout(() => {
         isAnimatingRef.current = false;
@@ -45,7 +49,7 @@ export function useSnapNavigation(
     };
 
     const syncLock = (): void => {
-      isLockedRef.current = el.style.overflowY === 'hidden';
+      isLockedRef.current = el.style.overflowY === "hidden";
     };
 
     const onWheel = (e: WheelEvent): void => {
@@ -53,28 +57,28 @@ export function useSnapNavigation(
       if (isLockedRef.current) return;
       if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
       e.preventDefault();
-      if (e.deltaY > 0) scrollToCard('next');
-      else scrollToCard('prev');
+      if (e.deltaY > 0) scrollToCard("next");
+      else scrollToCard("prev");
     };
 
     const onKeyDown = (e: KeyboardEvent): void => {
       syncLock();
       if (isLockedRef.current) return;
-      if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+      if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
         e.preventDefault();
-        scrollToCard('next');
-      } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+        scrollToCard("next");
+      } else if (e.key === "ArrowUp" || e.key === "PageUp") {
         e.preventDefault();
-        scrollToCard('prev');
+        scrollToCard("prev");
       }
     };
 
-    el.addEventListener('wheel', onWheel, { passive: false });
-    el.addEventListener('keydown', onKeyDown);
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("keydown", onKeyDown);
 
     return () => {
-      el.removeEventListener('wheel', onWheel);
-      el.removeEventListener('keydown', onKeyDown);
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("keydown", onKeyDown);
       if (animationTimer !== null) clearTimeout(animationTimer);
       isAnimatingRef.current = false;
       isLockedRef.current = false;

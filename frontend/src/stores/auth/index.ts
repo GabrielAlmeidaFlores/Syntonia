@@ -1,6 +1,6 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
-import type { UserProfile } from '@/types';
+import type { UserProfile } from "@/types";
 
 interface AuthCallbackResponse {
   readonly user: UserProfile;
@@ -26,8 +26,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
 
   login: async (code) => {
-    const { api } = await import('@/services/api');
-    const response = await api.post<AuthCallbackResponse>('/auth/callback', { code });
+    const { api } = await import("@/services/api");
+    const response = await api.post<AuthCallbackResponse>("/auth/callback", {
+      code,
+    });
     set({ user: response.user, token: response.token, isAuthenticated: true });
   },
 

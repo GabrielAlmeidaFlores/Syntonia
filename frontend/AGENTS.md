@@ -23,22 +23,22 @@ Every AI agent working on this codebase must follow this exact sequence before w
 
 ## §2 — Stack
 
-| Technology | Version | Purpose |
-|---|---|---|
-| React | 18.3.x | UI framework |
-| TypeScript | 5.7.x | Language — strict mode, zero `any` |
-| Vite | 6.x | Build tool + dev server |
-| Tailwind CSS | 3.4.x | Utility-first styling |
-| Zustand | 5.x | Global state management |
-| React Router | 6.28.x | Client-side routing |
-| Framer Motion | 11.x | Swipe animations (PostCard, PostDetail) |
-| react-markdown | 9.x | Renders Markdown post content |
-| rehype-highlight | 7.x | Syntax highlighting in code blocks |
-| highlight.js | 11.x | Highlight themes |
-| Radix UI | various | Accessible headless primitives |
-| CVA | 0.7.x | Component variant system |
-| clsx + tailwind-merge | latest | Class name merging (`cn()`) |
-| Lucide React | 0.469.x | Icon set |
+| Technology            | Version | Purpose                                 |
+| --------------------- | ------- | --------------------------------------- |
+| React                 | 18.3.x  | UI framework                            |
+| TypeScript            | 5.7.x   | Language — strict mode, zero `any`      |
+| Vite                  | 6.x     | Build tool + dev server                 |
+| Tailwind CSS          | 3.4.x   | Utility-first styling                   |
+| Zustand               | 5.x     | Global state management                 |
+| React Router          | 6.28.x  | Client-side routing                     |
+| Framer Motion         | 11.x    | Swipe animations (PostCard, PostDetail) |
+| react-markdown        | 9.x     | Renders Markdown post content           |
+| rehype-highlight      | 7.x     | Syntax highlighting in code blocks      |
+| highlight.js          | 11.x    | Highlight themes                        |
+| Radix UI              | various | Accessible headless primitives          |
+| CVA                   | 0.7.x   | Component variant system                |
+| clsx + tailwind-merge | latest  | Class name merging (`cn()`)             |
+| Lucide React          | 0.469.x | Icon set                                |
 
 **Node version:** 22.15.0 (enforced via `engines` in package.json)
 
@@ -65,7 +65,9 @@ src/
 ├── components/
 │   ├── shared/                      Feature-agnostic reusable components.
 │   │   ├── empty-feed-screen/       "No posts yet" — shown when feed is empty.
-│   │   ├── loading-skeleton/        Full-screen PostCard skeleton during loading.
+│   │   ├── feed-initial-loading/    Full-screen loading state for initial feed fetch and JIT generation.
+│   │   │                            Gradient background, animated Sparkles icon, bouncing dots, skeleton rows.
+│   │   ├── spinner/                 Decorative loading spinner using the accent token. Sizes: sm/md/lg.
 │   │   └── tag-selector/            Toggleable tag chips. Reads useTranslation() for aria-labels.
 │   └── ui/                          Design system primitives (CVA + Radix UI).
 │       ├── button/                  Button — variants: primary, outline, ghost, destructive, link.
@@ -82,7 +84,8 @@ src/
 │       ├── terms-acceptance-modal/  TermsAcceptanceModal — full-screen blocking modal (z:99999) shown
 │       │                            when needsAcceptance=true. Cannot be dismissed without accepting.
 │       │                            Fetches both documents, accordion expand, checkbox + confirm button.
-│       └── toast/                   ToastContainer (Framer Motion, portal) + ToastViewport (no-op).
+│       ├── textarea/                Controlled multi-line textarea input (dark theme).
+│       └── toast/                   ToastContainer (Framer Motion, portal).
 ├── features/                        One folder per feature, structured as {feature}/page/.
 │   ├── auth/
 │   │   └── login/page/              MockCognitoPage — calls POST /auth/callback (MSW).
@@ -97,6 +100,10 @@ src/
 │       └── feed/                    SavedFeedPage (index.tsx) — /saved/feed?start=post-id
 ├── hooks/
 │   ├── use-feed.ts                  Calls GET /feed via api.ts; paginates with cursor.
+│   ├── use-horizontal-swipe.ts      Attaches pointer events to a DOM element and fires a callback
+│   │                                when the user swipes left or right past a configurable threshold.
+│   │                                Uses setPointerCapture + passive:false on pointermove to block
+│   │                                vertical snap-scroll only when horizontal intent is confirmed.
 │   ├── use-jit.ts                   Calls POST /feed/request when buffer ≤ TRIGGER_THRESHOLD.
 │   ├── use-saved-posts.ts           Loads GET /posts/saved; exposes save() / unsave() actions.
 │   ├── use-snap-navigation.ts       Intercepts wheel + keyboard events on a snap-scroll container
@@ -181,19 +188,19 @@ src/
 
 ## §4 — Naming Conventions
 
-| Category | Convention | Example |
-|---|---|---|
-| Component files | `kebab-case/index.tsx` | `post-card/index.tsx` |
-| Sub-components | `kebab-case.tsx` alongside `index.tsx` | `post-detail.tsx` |
-| Hook files | `use-kebab-case.ts` | `use-feed.ts` |
-| Store files | `kebab-case/index.ts` | `feed/index.ts` |
-| Mock files | `kebab-case.ts` | `posts.ts` |
-| Public assets | `kebab-case.js` | `mock-service-worker.js` |
-| Constants | `SCREAMING_SNAKE_CASE` | `TRIGGER_THRESHOLD` |
-| Types/Interfaces | `PascalCase` | `Post`, `UserProfile` |
-| Functions | `camelCase` | `mockExtractTags` |
-| React components | `PascalCase` named export | `export function PostCard` |
-| Pages | `default export` + PascalCase | `export default function FeedPage` |
+| Category         | Convention                             | Example                            |
+| ---------------- | -------------------------------------- | ---------------------------------- |
+| Component files  | `kebab-case/index.tsx`                 | `post-card/index.tsx`              |
+| Sub-components   | `kebab-case.tsx` alongside `index.tsx` | `post-detail.tsx`                  |
+| Hook files       | `use-kebab-case.ts`                    | `use-feed.ts`                      |
+| Store files      | `kebab-case/index.ts`                  | `feed/index.ts`                    |
+| Mock files       | `kebab-case.ts`                        | `posts.ts`                         |
+| Public assets    | `kebab-case.js`                        | `mock-service-worker.js`           |
+| Constants        | `SCREAMING_SNAKE_CASE`                 | `TRIGGER_THRESHOLD`                |
+| Types/Interfaces | `PascalCase`                           | `Post`, `UserProfile`              |
+| Functions        | `camelCase`                            | `mockExtractTags`                  |
+| React components | `PascalCase` named export              | `export function PostCard`         |
+| Pages            | `default export` + PascalCase          | `export default function FeedPage` |
 
 **File structure rule:** Each UI component lives in its own folder with `index.tsx`. Sub-components for a feature page live alongside the page's `index.tsx`.
 
@@ -244,6 +251,7 @@ All colors are driven by **CSS variables** defined in `globals.css`. Tailwind re
 #### Surface tokens (backgrounds, borders)
 
 **Dark (`:root` default) → Light (`html.light`):**
+
 ```
 surface.DEFAULT     #030712 → #f8fafc   — app background
 surface.card        #111827 → #ffffff   — card surfaces
@@ -266,30 +274,31 @@ content.subtle      gray-500/600 → slate-400  — timestamps, counters, very s
 ```
 
 **Tailwind config syntax (supports opacity modifiers like `text-content-primary/80`):**
+
 ```ts
 content: { primary: 'rgb(var(--color-content-primary) / <alpha-value>)', ... }
 ```
 
 #### Usage rules — the most important part
 
-| Text context | Use | Never use |
-|---|---|---|
-| Heading / label on `surface` background | `text-content-primary` | `text-white` |
-| Secondary label on `surface` | `text-content-secondary` | `text-gray-300` |
-| Hint / subtitle on `surface` | `text-content-muted` | `text-gray-400`, `text-gray-500` |
-| Timestamp / counter on `surface` | `text-content-subtle` | `text-gray-600`, `text-gray-700` |
-| **Text on always-dark colored background** (accent btn, gradient card) | `text-white` | content tokens |
+| Text context                                                           | Use                      | Never use                        |
+| ---------------------------------------------------------------------- | ------------------------ | -------------------------------- |
+| Heading / label on `surface` background                                | `text-content-primary`   | `text-white`                     |
+| Secondary label on `surface`                                           | `text-content-secondary` | `text-gray-300`                  |
+| Hint / subtitle on `surface`                                           | `text-content-muted`     | `text-gray-400`, `text-gray-500` |
+| Timestamp / counter on `surface`                                       | `text-content-subtle`    | `text-gray-600`, `text-gray-700` |
+| **Text on always-dark colored background** (accent btn, gradient card) | `text-white`             | content tokens                   |
 
 **The rule in one sentence:** Use `text-content-*` when the background is theme-adaptive (`surface.*`). Use `text-white` when the background is always dark (post gradient, `bg-accent`, `bg-red-700`, `bg-black/40`).
 
 ```tsx
-className="text-content-primary"          // ✓ heading on surface
-className="text-content-muted"            // ✓ hint text on surface
-className="bg-accent text-white"          // ✓ button on accent bg (always dark)
-className="text-white"                    // ✓ text on post gradient (always dark)
+className = "text-content-primary"; // ✓ heading on surface
+className = "text-content-muted"; // ✓ hint text on surface
+className = "bg-accent text-white"; // ✓ button on accent bg (always dark)
+className = "text-white"; // ✓ text on post gradient (always dark)
 
-className="text-white"                    // ✗ heading on surface — breaks in light mode
-className="text-gray-400"                 // ✗ hint on surface — no theme adaptation
+className = "text-white"; // ✗ heading on surface — breaks in light mode
+className = "text-gray-400"; // ✗ hint on surface — no theme adaptation
 ```
 
 **Never add CSS overrides to `globals.css` to fix broken text colors.** The semantic tokens are the correct solution — use the right token and the color adapts for free.
@@ -297,17 +306,19 @@ className="text-gray-400"                 // ✗ hint on surface — no theme ad
 #### CSS variable definitions (in `globals.css`)
 
 ```css
-:root {                                      /* dark default */
-  --color-content-primary:   255 255 255;    /* white */
-  --color-content-secondary: 209 213 219;    /* gray-300 */
-  --color-content-muted:     156 163 175;    /* gray-400 */
-  --color-content-subtle:    107 114 128;    /* gray-500 */
+:root {
+  /* dark default */
+  --color-content-primary: 255 255 255; /* white */
+  --color-content-secondary: 209 213 219; /* gray-300 */
+  --color-content-muted: 156 163 175; /* gray-400 */
+  --color-content-subtle: 107 114 128; /* gray-500 */
 }
-html.light {                                 /* light override */
-  --color-content-primary:   15 23 42;       /* slate-900 */
-  --color-content-secondary: 71 85 105;      /* slate-600 */
-  --color-content-muted:     100 116 139;    /* slate-500 */
-  --color-content-subtle:    148 163 184;    /* slate-400 */
+html.light {
+  /* light override */
+  --color-content-primary: 15 23 42; /* slate-900 */
+  --color-content-secondary: 71 85 105; /* slate-600 */
+  --color-content-muted: 100 116 139; /* slate-500 */
+  --color-content-subtle: 148 163 184; /* slate-400 */
 }
 ```
 
@@ -334,16 +345,16 @@ const background = `linear-gradient(135deg, ${post.gradient[0]}, ${post.gradient
 
 **Gradient convention by tag topic:**
 
-| Topic | Gradient |
-|---|---|
-| AWS / Serverless | `['#FF6B35', '#F7931E']` |
-| TypeScript | `['#3178C6', '#235A97']` |
-| Docker | `['#0DB7ED', '#384D54']` |
-| Kubernetes | `['#326CE5', '#1A3A8F']` |
-| Security | `['#E74C3C', '#922B21']` |
-| Redis | `['#D82C20', '#8B1A10']` |
-| PostgreSQL | `['#336791', '#1A3A5C']` |
-| Terraform | `['#7B42BC', '#4A1A8C']` |
+| Topic                  | Gradient                 |
+| ---------------------- | ------------------------ |
+| AWS / Serverless       | `['#FF6B35', '#F7931E']` |
+| TypeScript             | `['#3178C6', '#235A97']` |
+| Docker                 | `['#0DB7ED', '#384D54']` |
+| Kubernetes             | `['#326CE5', '#1A3A8F']` |
+| Security               | `['#E74C3C', '#922B21']` |
+| Redis                  | `['#D82C20', '#8B1A10']` |
+| PostgreSQL             | `['#336791', '#1A3A5C']` |
+| Terraform              | `['#7B42BC', '#4A1A8C']` |
 | Architecture / General | `['#2ECC71', '#1A7A44']` |
 
 ---
@@ -353,27 +364,35 @@ const background = `linear-gradient(135deg, ${post.gradient[0]}, ${post.gradient
 All design-system components follow this structure:
 
 ```tsx
-import { type VariantProps, cva } from 'class-variance-authority';
-import * as React from 'react';
-import { cn } from '@/lib/utils';
+import { type VariantProps, cva } from "class-variance-authority";
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
-const componentVariants = cva(
-  'base classes',
-  {
-    variants: {
-      variant: { default: '...', accent: '...' },
-      size:    { default: '...', sm: '...' },
-    },
-    defaultVariants: { variant: 'default', size: 'default' },
+const componentVariants = cva("base classes", {
+  variants: {
+    variant: { default: "...", accent: "..." },
+    size: { default: "...", sm: "..." },
   },
-);
+  defaultVariants: { variant: "default", size: "default" },
+});
 
 interface ComponentProps
-  extends React.HTMLAttributes<HTMLElement>,
+  extends
+    React.HTMLAttributes<HTMLElement>,
     VariantProps<typeof componentVariants> {}
 
-function Component({ className, variant, size, ...props }: ComponentProps): React.JSX.Element {
-  return <element className={cn(componentVariants({ variant, size, className }))} {...props} />;
+function Component({
+  className,
+  variant,
+  size,
+  ...props
+}: ComponentProps): React.JSX.Element {
+  return (
+    <element
+      className={cn(componentVariants({ variant, size, className }))}
+      {...props}
+    />
+  );
 }
 
 export { Component, componentVariants };
@@ -381,6 +400,7 @@ export type { ComponentProps };
 ```
 
 **Rules:**
+
 - Use `cn()` for all class merging — never string concatenation.
 - Export the `variants` function alongside the component for external use.
 - `interface` over `type` for object shapes (ESLint rule).
@@ -390,11 +410,12 @@ export type { ComponentProps };
 
 ## §8 — Shared Components Reference
 
-| Component | Props | Description |
-|---|---|---|
-| `EmptyFeedScreen` | `onReload: () => void` | Shown when feed is empty. Links to /profile, has reload button. |
-| `LoadingSkeleton` | none | Full-height shimmer card shown at the end of the feed while JIT runs. |
-| `TagSelector` | `tags`, `activeTags`, `onToggle`, `className?` | Toggleable tag chips. Renders only the provided `tags` — never `AVAILABLE_TAGS` directly. |
+| Component            | Props                                          | Description                                                                               |
+| -------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `EmptyFeedScreen`    | `onReload: () => void`                         | Shown when feed is empty. Links to /profile, has reload button.                           |
+| `FeedInitialLoading` | none                                           | Full-screen loading state for initial feed fetch and JIT generation.                      |
+| `Spinner`            | `size?: 'sm'\|'md'\|'lg'`, `className?`        | Decorative loading spinner. Aria-hidden — context communicates loading state.             |
+| `TagSelector`        | `tags`, `activeTags`, `onToggle`, `className?` | Toggleable tag chips. Renders only the provided `tags` — never `AVAILABLE_TAGS` directly. |
 
 **Toast** is not in the table above because it is used via `useToastStore`, not imported directly. See §28 for the full toast pattern.
 
@@ -413,6 +434,7 @@ export type { ComponentProps };
 ### No-layout pages
 
 Pages that render without `FeedLayout`:
+
 - `/auth/login` (MockCognitoPage)
 - `/onboarding` (OnboardingPage)
 - `/post/:id` (PostPage — full-screen, own sticky header)
@@ -438,11 +460,11 @@ The feed uses CSS snap, not JavaScript scroll control. Heights are controlled by
 
 **Height must be set on the container at usage site:**
 
-| Usage | Height | Why |
-|---|---|---|
+| Usage                               | Height             | Why                                                   |
+| ----------------------------------- | ------------------ | ----------------------------------------------------- |
 | `FeedContainer` (inside FeedLayout) | `snap-feed h-full` | Parent `main` is `flex-1` = `dvh - 64px` (nav height) |
-| `SavedFeedPage` (standalone) | `snap-feed h-dvh` | No nav — fills full viewport |
-| Each `PostCard` | `snap-card h-full` | Fills 100% of its snap container |
+| `SavedFeedPage` (standalone)        | `snap-feed h-dvh`  | No nav — fills full viewport                          |
+| Each `PostCard`                     | `snap-card h-full` | Fills 100% of its snap container                      |
 
 **Snap container scroll lock:** When a `PostDetail` is open, `useFeedStore.isPostExpanded` is `true`. Both `FeedContainer` and `SavedFeedPage` observe this and set `el.style.overflowY = 'hidden'` via a DOM ref — bypassing CSS cascade so `overflow-y: scroll` cannot win.
 
@@ -462,6 +484,7 @@ The feed uses CSS snap, not JavaScript scroll control. Heights are controlled by
 ```
 
 **`RootRedirect` logic:**
+
 1. Not authenticated → `/auth/login`
 2. Authenticated, `description === ''` → `/onboarding`
 3. Authenticated, has description → `/feed`
@@ -479,7 +502,7 @@ The feed uses CSS snap, not JavaScript scroll control. Heights are controlled by
 All stores follow this pattern:
 
 ```typescript
-import { create } from 'zustand';
+import { create } from "zustand";
 
 interface MyState {
   // State (readonly)
@@ -489,12 +512,13 @@ interface MyState {
 }
 
 export const useMyStore = create<MyState>((set) => ({
-  value: '',
+  value: "",
   setValue: (value) => set({ value }),
 }));
 ```
 
 **Rules:**
+
 - State fields are `readonly` in the interface.
 - Actions receive primitive values — no complex objects in `set()` unless necessary.
 - **Always use `(s) => s.field` selectors** in components to avoid unnecessary re-renders.
@@ -503,14 +527,14 @@ export const useMyStore = create<MyState>((set) => ({
 
 ### Stores summary
 
-| Store | Key state | Persisted? | localStorage key |
-|---|---|---|---|
-| `useAuthStore` | `user`, `isAuthenticated` | No | — |
-| `useFeedStore` | `posts[]`, `currentIndex`, `cursor`, `isLoading`, `isPostExpanded` | No | — |
-| `useSavedStore` | `savedIds` (Set), `posts[]`, `isSaved()` | Yes | `syntonia-saved` |
-| `usePreferencesStore` | `theme`, `language` | Yes | `syntonia-preferences` |
-| `useUserStore` | `description`, `extractedTags`, `activeTags` | Yes | `syntonia-user-prefs` |
-| `useToastStore` | `toasts[]` | No | — |
+| Store                 | Key state                                                          | Persisted? | localStorage key       |
+| --------------------- | ------------------------------------------------------------------ | ---------- | ---------------------- |
+| `useAuthStore`        | `user`, `isAuthenticated`                                          | No         | —                      |
+| `useFeedStore`        | `posts[]`, `currentIndex`, `cursor`, `isLoading`, `isPostExpanded` | No         | —                      |
+| `useSavedStore`       | `savedIds` (Set), `posts[]`, `isSaved()`                           | Yes        | `syntonia-saved`       |
+| `usePreferencesStore` | `theme`, `language`                                                | Yes        | `syntonia-preferences` |
+| `useUserStore`        | `description`, `extractedTags`, `activeTags`                       | Yes        | `syntonia-user-prefs`  |
+| `useToastStore`       | `toasts[]`                                                         | No         | —                      |
 
 ---
 
@@ -545,12 +569,12 @@ In production: remove MSW initialisation from `main.tsx`, set `VITE_API_URL`, an
 
 **Every action that calls the API must show a toast for feedback** — both on success and on error. Use `useToastStore` directly in the component that performs the action. See §28 for the full toast pattern.
 
-| Action | Success toast | Error toast |
-|---|---|---|
-| Save post | `t.saved.toastSaved` | `t.saved.toastSaveError` |
-| Unsave post | `t.saved.toastUnsaved` | `t.saved.toastUnsaveError` |
-| Update profile description | `t.descriptionForm.toastSuccess(n)` | `t.descriptionForm.toastError` |
-| Toggle tag | `t.tagManager.toastActivated/Deactivated(tag)` | `t.tagManager.toastError` |
+| Action                     | Success toast                                  | Error toast                    |
+| -------------------------- | ---------------------------------------------- | ------------------------------ |
+| Save post                  | `t.saved.toastSaved`                           | `t.saved.toastSaveError`       |
+| Unsave post                | `t.saved.toastUnsaved`                         | `t.saved.toastUnsaveError`     |
+| Update profile description | `t.descriptionForm.toastSuccess(n)`            | `t.descriptionForm.toastError` |
+| Toggle tag                 | `t.tagManager.toastActivated/Deactivated(tag)` | `t.tagManager.toastError`      |
 
 All toast strings are in `src/lib/i18n.ts` and must be translated for every supported language.
 
@@ -580,18 +604,18 @@ Add to `src/mocks/data/posts.ts`. Follow this shape:
 
 ### Mock delays (defined in MSW handlers)
 
-| Endpoint | Delay | Simulates |
-|---|---|---|
-| `POST /auth/callback` | 800ms | Cognito OAuth round-trip |
-| `GET /feed` | 400ms | DynamoDB GSI Query + Lambda |
-| `GET /post/:id` | 200ms | DynamoDB GetItem |
-| `POST /feed/request` | 300ms | SQS SendMessage |
-| `GET /user/preferences` | 200ms | DynamoDB GetItem |
-| `PUT /user/preferences` | 400ms | DynamoDB UpdateItem |
-| `PUT /user/profile` | 2000ms | Gemini API tag extraction |
-| `POST /post/:id/save` | 300ms | DynamoDB UpdateItem (remove TTL, set savedAt) |
-| `DELETE /post/:id/save` | 300ms | DynamoDB UpdateItem (restore TTL, clear savedAt) |
-| `GET /posts/saved` | 400ms | DynamoDB GSI Query (userId-savedAt-index) |
+| Endpoint                | Delay  | Simulates                                        |
+| ----------------------- | ------ | ------------------------------------------------ |
+| `POST /auth/callback`   | 800ms  | Cognito OAuth round-trip                         |
+| `GET /feed`             | 400ms  | DynamoDB GSI Query + Lambda                      |
+| `GET /post/:id`         | 200ms  | DynamoDB GetItem                                 |
+| `POST /feed/request`    | 300ms  | SQS SendMessage                                  |
+| `GET /user/preferences` | 200ms  | DynamoDB GetItem                                 |
+| `PUT /user/preferences` | 400ms  | DynamoDB UpdateItem                              |
+| `PUT /user/profile`     | 2000ms | Gemini API tag extraction                        |
+| `POST /post/:id/save`   | 300ms  | DynamoDB UpdateItem (remove TTL, set savedAt)    |
+| `DELETE /post/:id/save` | 300ms  | DynamoDB UpdateItem (restore TTL, clear savedAt) |
+| `GET /posts/saved`      | 400ms  | DynamoDB GSI Query (userId-savedAt-index)        |
 
 ### `mockExtractTags(description: string): Tag[]`
 
@@ -599,40 +623,17 @@ Keyword-matching function that simulates Gemini's `extractTagsFromDescription`.
 Used by the `PUT /user/profile` MSW handler. Always returns at least 3 tags.
 Source: `src/mocks/data/tags.ts`.
 
-### Adding posts
-
-Add to `src/mocks/data/posts.ts`. Follow this shape:
-
-```typescript
-{
-  id: 'post-NNN',           // Unique, sequential
-  userId: 'user-mock-001',  // Always the mock user
-  title: '...',             // Max 60 characters
-  summary: '...',           // Max 120 characters
-  tags: ['AWS'] as Tag[],   // 1–3 tags from AVAILABLE_TAGS
-  gradient: ['#hex1', '#hex2'],  // See §6 gradient convention
-  createdAt: '2026-07-0xTxx:00:00Z',
-  content: `## Heading\n\nMarkdown content with \`code blocks\`...`,
-}
-```
-
 ### Mock delays
 
 Always simulate realistic latency using `sleep()` from `@/lib/utils`:
 
-| Operation | Delay | Constant |
-|---|---|---|
-| Initial feed load | 400ms | (inline in `useFeed`) |
-| JIT generation | 1500ms | `JIT_GENERATION_DELAY_MS` |
-| Tag extraction | 2000ms | `TAG_EXTRACTION_DELAY_MS` |
-| Tag save | 400ms | (inline in `useTagManager`) |
-| Mock Cognito login | 800ms | (inline in `MockCognitoPage`) |
-
-### `mockExtractTags(description: string): Tag[]`
-
-Keyword-matching function that simulates Gemini's `extractTagsFromDescription`.
-Returns a subset of `AVAILABLE_TAGS`. Always returns at least 3 tags.
-Source: `src/mocks/data/tags.ts`.
+| Operation          | Delay  | Constant                      |
+| ------------------ | ------ | ----------------------------- |
+| Initial feed load  | 400ms  | (inline in `useFeed`)         |
+| JIT generation     | 1500ms | `JIT_GENERATION_DELAY_MS`     |
+| Tag extraction     | 2000ms | `TAG_EXTRACTION_DELAY_MS`     |
+| Tag save           | 400ms  | (inline in `TagManager`)      |
+| Mock Cognito login | 800ms  | (inline in `MockCognitoPage`) |
 
 ---
 
@@ -648,7 +649,7 @@ FeedPage
        ├── PostCard (div.snap-card h-full) data-index="0"
        ├── PostCard (div.snap-card h-full) data-index="1"
        ├── PostCard (div.snap-card h-full) data-index="2"
-       └── LoadingSkeleton (div.snap-card h-full)  ← shown when isLoading
+       └── FeedInitialLoading (div.snap-card h-full)  ← shown when isLoading
 ```
 
 ### currentIndex tracking
@@ -676,14 +677,20 @@ if postsRemaining <= TRIGGER_THRESHOLD (2) && !isGenerating:
 4. To close: tap the **"Back" button** or swipe **right > 80px** on the PostDetail panel (Framer Motion `drag="x"` with `dragDirectionLock`).
 5. `close()` → `setExpanded(false)` + `useFeedStore.setPostExpanded(false)` (unlocks snap container).
 
-**Pointer event pattern for swipe detection (used on the gradient `bgRef` div):**
+**Swipe detection uses `useHorizontalSwipe` (extracted hook):**
+
 ```tsx
-el.addEventListener('pointerdown', onDown, { passive: true });
-el.addEventListener('pointermove', onMove, { passive: false }); // passive:false to preventDefault
-el.addEventListener('pointerup', onUp, { passive: true });
-el.addEventListener('pointercancel', onCancel, { passive: true });
+useHorizontalSwipe(bgRef, { direction: "left", onSwipe: open });
+useHorizontalSwipe(detailRef, {
+  direction: "right",
+  enabled: expanded,
+  onSwipe: close,
+});
 ```
-`pointermove` calls `e.preventDefault()` only when the gesture is clearly **horizontal** (`Math.abs(dx) > Math.abs(dy)`), blocking vertical snap-scroll only during horizontal drags.
+
+The hook attaches pointer events with `setPointerCapture` + `passive: false` on `pointermove`.
+`e.preventDefault()` is called only when horizontal intent is confirmed, so vertical snap-scroll
+is never interrupted during primarily vertical gestures.
 
 ---
 
@@ -692,13 +699,13 @@ el.addEventListener('pointercancel', onCancel, { passive: true });
 `PostDetail` and `PostPage` both render Markdown using:
 
 ```tsx
-import ReactMarkdown from 'react-markdown';
-import rehypeHighlight from 'rehype-highlight';
-import 'highlight.js/styles/github-dark.css';
+import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github-dark.css";
 
 <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
   {post.content ?? post.summary}
-</ReactMarkdown>
+</ReactMarkdown>;
 ```
 
 The `prose-invert` Tailwind class combined with custom overrides in `globals.css` styles the rendered Markdown for the dark theme.
@@ -724,11 +731,11 @@ Never hardcode tag strings in components — always import from `@/lib/constants
 
 ### Tag display rules
 
-| Context | Component | Tags shown |
-|---|---|---|
-| PostCard gradient card | inline `Badge` | Post's own tags (from `post.tags`) |
-| OnboardingPage review | `ExtractedTags` | AI-extracted tags for confirmation |
-| ProfilePage / Profile tab | `TagSelector` | `extractedTags` (all) with `activeTags` highlighted |
+| Context                   | Component       | Tags shown                                          |
+| ------------------------- | --------------- | --------------------------------------------------- |
+| PostCard gradient card    | inline `Badge`  | Post's own tags (from `post.tags`)                  |
+| OnboardingPage review     | `ExtractedTags` | AI-extracted tags for confirmation                  |
+| ProfilePage / Profile tab | `TagSelector`   | `extractedTags` (all) with `activeTags` highlighted |
 
 ---
 
@@ -746,14 +753,14 @@ Never hardcode tag strings in components — always import from `@/lib/constants
 
 ### Onboarding vs Profile
 
-| Feature | OnboardingPage | ProfilePage |
-|---|---|---|
-| Route | `/onboarding` | `/profile` |
-| First-time only | Yes | No |
-| Has layout (bottom nav) | No | Yes |
-| Description field | Yes | Yes (`DescriptionForm`) |
-| Tag review | Yes (inline `ExtractedTags`) | Yes (`TagManager` in Profile tab) |
-| Settings (theme + language) | No | Yes (Settings tab) |
+| Feature                     | OnboardingPage               | ProfilePage                       |
+| --------------------------- | ---------------------------- | --------------------------------- |
+| Route                       | `/onboarding`                | `/profile`                        |
+| First-time only             | Yes                          | No                                |
+| Has layout (bottom nav)     | No                           | Yes                               |
+| Description field           | Yes                          | Yes (`DescriptionForm`)           |
+| Tag review                  | Yes (inline `ExtractedTags`) | Yes (`TagManager` in Profile tab) |
+| Settings (theme + language) | No                           | Yes (Settings tab)                |
 
 ---
 
@@ -785,7 +792,12 @@ The mock user has a pre-set description and active tags so the feed works immedi
 Wraps all authenticated routes. Reads `useAuthStore.isAuthenticated`. On `false`:
 
 ```tsx
-return <Navigate to={`/auth/login?returnTo=${encodeURIComponent(location.pathname)}`} replace />;
+return (
+  <Navigate
+    to={`/auth/login?returnTo=${encodeURIComponent(location.pathname)}`}
+    replace
+  />
+);
 ```
 
 ---
@@ -794,19 +806,19 @@ return <Navigate to={`/auth/login?returnTo=${encodeURIComponent(location.pathnam
 
 ### Animation inventory — what exists
 
-| Context | Mechanism | Animation |
-|---|---|---|
-| Route change (Feed/Saved/Profile) | Framer Motion `AnimatePresence mode="wait"` in `FeedLayout` | Crossfade 140ms |
-| Bottom nav active indicator | Framer Motion `layoutId="nav-active"` spring | Pill slides between tabs |
-| ProfilePage tab switch | Framer Motion `AnimatePresence` + direction variants | Slide 20px horizontal, 200ms |
-| SavedGrid card entrance | Framer Motion stagger (`gridContainerVariants`) | Scale 0.9→1, stagger 45ms |
-| PostDetail open/close | `AnimatePresence` + `motion.div` spring | Slide from right, spring |
-| PostPage entrance | `motion.div` | Slide 30px from right, 280ms |
-| Login / Onboarding entrance | `motion.div` | Fade + y:16→0, 300ms |
-| EmptyFeedScreen entrance | `motion.div` | Fade + y:16→0, 300ms |
-| Toast enter | Framer Motion `AnimatePresence mode="popLayout"` | Slide from right with overshoot |
-| Toast exit | Framer Motion exit variants | Slide right + fade 300ms |
-| Toast layout shift | Framer Motion `layout` prop | Spring — others animate up smoothly |
+| Context                           | Mechanism                                                   | Animation                           |
+| --------------------------------- | ----------------------------------------------------------- | ----------------------------------- |
+| Route change (Feed/Saved/Profile) | Framer Motion `AnimatePresence mode="wait"` in `FeedLayout` | Crossfade 140ms                     |
+| Bottom nav active indicator       | Framer Motion `layoutId="nav-active"` spring                | Pill slides between tabs            |
+| ProfilePage tab switch            | Framer Motion `AnimatePresence` + direction variants        | Slide 20px horizontal, 200ms        |
+| SavedGrid card entrance           | Framer Motion stagger (`gridContainerVariants`)             | Scale 0.9→1, stagger 45ms           |
+| PostDetail open/close             | `AnimatePresence` + `motion.div` spring                     | Slide from right, spring            |
+| PostPage entrance                 | `motion.div`                                                | Slide 30px from right, 280ms        |
+| Login / Onboarding entrance       | `motion.div`                                                | Fade + y:16→0, 300ms                |
+| EmptyFeedScreen entrance          | `motion.div`                                                | Fade + y:16→0, 300ms                |
+| Toast enter                       | Framer Motion `AnimatePresence mode="popLayout"`            | Slide from right with overshoot     |
+| Toast exit                        | Framer Motion exit variants                                 | Slide right + fade 300ms            |
+| Toast layout shift                | Framer Motion `layout` prop                                 | Spring — others animate up smoothly |
 
 ### When to use Framer Motion
 
@@ -854,11 +866,11 @@ const handleTabChange = (tab: Tab): void => {
     initial="initial"
     animate="animate"
     exit="exit"
-    transition={{ duration: 0.2, ease: 'easeInOut' }}
+    transition={{ duration: 0.2, ease: "easeInOut" }}
   >
     {/* content */}
   </motion.div>
-</AnimatePresence>
+</AnimatePresence>;
 ```
 
 ### Stagger list pattern (SavedGrid)
@@ -870,14 +882,21 @@ const containerVariants = {
 };
 const itemVariants = {
   hidden: { opacity: 0, scale: 0.9, y: 8 },
-  visible: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.22, ease: 'easeOut' } },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { duration: 0.22, ease: "easeOut" },
+  },
 };
 
 <motion.ul variants={containerVariants} initial="hidden" animate="visible">
-  {items.map(item => (
-    <motion.li key={item.id} variants={itemVariants}>...</motion.li>
+  {items.map((item) => (
+    <motion.li key={item.id} variants={itemVariants}>
+      ...
+    </motion.li>
   ))}
-</motion.ul>
+</motion.ul>;
 ```
 
 ### Toast animation — special rules
@@ -1090,13 +1109,13 @@ const x = risky() as string; // eslint-disable-next-line @typescript-eslint/no-e
 
 ### Practical guide
 
-| Situation | Correct action |
-|---|---|
-| Want to explain what a variable holds | Give it a descriptive name |
-| Want to explain why a value is used | Give the function/hook a descriptive name |
-| Want to mark a TODO | Open a GitHub issue instead |
-| Need to document an exported function | Add a JSDoc block |
-| ESLint flags a rule violation | Fix the code — never suppress the rule |
+| Situation                             | Correct action                            |
+| ------------------------------------- | ----------------------------------------- |
+| Want to explain what a variable holds | Give it a descriptive name                |
+| Want to explain why a value is used   | Give the function/hook a descriptive name |
+| Want to mark a TODO                   | Open a GitHub issue instead               |
+| Need to document an exported function | Add a JSDoc block                         |
+| ESLint flags a rule violation         | Fix the code — never suppress the rule    |
 
 ---
 
@@ -1131,6 +1150,7 @@ surface.DEFAULT = rgb(var(--color-surface) / <alpha-value>)
 ### Adding a new theme
 
 Currently only `dark` and `light` are supported. To add a new theme (e.g. `amoled`):
+
 1. Add `'amoled'` to the `Theme` union in `stores/preferences/index.ts`.
 2. Add `html.amoled { --color-surface: 0 0 0; ... }` to `globals.css`.
 3. Add an option card in `settings-panel.tsx` translations (`i18n.ts`) and UI.
@@ -1170,12 +1190,13 @@ export function MyComponent(): React.JSX.Element {
 Dynamic strings are typed as functions. TypeScript enforces the signature across all languages:
 
 ```typescript
-charCount: (n: number) => string
-count: (active: number, total: number) => string
-toastActivated: (tag: string) => string
+charCount: (n: number) => string;
+count: (active: number, total: number) => string;
+toastActivated: (tag: string) => string;
 ```
 
 Usage:
+
 ```tsx
 <p>{t.descriptionForm.charCount(value.length)}</p>
 <p>{t.tagManager.count(activeTags.length, extractedTags.length)}</p>
@@ -1185,7 +1206,7 @@ Usage:
 
 1. Add the language code to `Language` type in `stores/preferences/index.ts`:
    ```typescript
-   export type Language = 'en' | 'pt-BR' | 'es';
+   export type Language = "en" | "pt-BR" | "es";
    ```
 2. Add a new key to the `translations` object in `src/lib/i18n.ts`:
    ```typescript
@@ -1207,13 +1228,17 @@ Usage:
 - Mock/debug strings (e.g. `POST /auth/callback → MSW → mock user session`) — developer-facing only.
 - Post titles and content — generated by Gemini (language controlled via Gemini prompt, future feature).
 
+### `common` namespace
+
+Shared strings reused across multiple unrelated components (e.g. `t.common.close` for every modal close button). Always prefer a `common.*` key over duplicating a string in two sections or hardcoding English.
+
 ---
 
 ## §28 — Toast Notification Pattern
 
 ### Architecture
 
-Toasts are triggered via `useToastStore.addToast()` from any component or hook. `ToastContainer` + `ToastViewport` are rendered in `app.tsx` and position toasts in the **top-right corner** (`z-[100]`).
+Toasts are triggered via `useToastStore.addToast()` from any component or hook. `ToastContainer` is rendered in `app.tsx` and positions toasts in the **top-right corner** (`z-[100]`).
 
 ```
 Component calls addToast({ type, message })
@@ -1256,12 +1281,12 @@ export function MyComponent(): React.JSX.Element {
 
 ### Types
 
-| Type | Icon | Bar color | When to use |
-|---|---|---|---|
-| `success` | ✓ CheckCircle | green-500 | Action completed successfully |
-| `error` | ✗ XCircle | red-500 | Action failed — always show on `.catch()` |
-| `warning` | ⚠ TriangleAlert | amber-400 | Non-critical issue, user should know |
-| `info` | ℹ Info | blue-500 | Neutral information |
+| Type      | Icon            | Bar color | When to use                               |
+| --------- | --------------- | --------- | ----------------------------------------- |
+| `success` | ✓ CheckCircle   | green-500 | Action completed successfully             |
+| `error`   | ✗ XCircle       | red-500   | Action failed — always show on `.catch()` |
+| `warning` | ⚠ TriangleAlert | amber-400 | Non-critical issue, user should know      |
+| `info`    | ℹ Info          | blue-500  | Neutral information                       |
 
 ### Rules
 
@@ -1281,19 +1306,24 @@ const [open, setOpen] = React.useState(true);
 
 React.useEffect(() => {
   if (open) return;
-  const timer = setTimeout(() => { removeToast(id); }, EXIT_DURATION_MS);
-  return () => { clearTimeout(timer); };
+  const timer = setTimeout(() => {
+    removeToast(id);
+  }, EXIT_DURATION_MS);
+  return () => {
+    clearTimeout(timer);
+  };
 }, [open, removeToast, id]);
 
 <ToastPrimitive.Root
   open={open}
-  onOpenChange={setOpen}  // Radix sets to false after `duration` ms OR on Close click
+  onOpenChange={setOpen} // Radix sets to false after `duration` ms OR on Close click
   duration={duration}
   className="... data-[state=open]:animate-toast-in data-[state=closed]:animate-toast-out"
 >
-  <ToastPrimitive.Close>  {/* NO onClick — Radix handles it via onOpenChange */}
+  <ToastPrimitive.Close>
+    {" "}
+    {/* NO onClick — Radix handles it via onOpenChange */}
     <X />
   </ToastPrimitive.Close>
-</ToastPrimitive.Root>
+</ToastPrimitive.Root>;
 ```
-

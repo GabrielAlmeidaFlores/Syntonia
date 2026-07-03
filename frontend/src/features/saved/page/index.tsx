@@ -1,16 +1,16 @@
-import { AnimatePresence, motion } from 'framer-motion';
-import { Bookmark } from 'lucide-react';
-import * as React from 'react';
-import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from "framer-motion";
+import { Bookmark } from "lucide-react";
+import * as React from "react";
+import { createPortal } from "react-dom";
 
-import { SavedPostCard } from './saved-post-card';
+import { SavedPostCard } from "./saved-post-card";
 
-import { Skeleton } from '@/components/ui/skeleton';
-import { PostDetail } from '@/features/feed/page/post-detail';
-import { useSavedPosts } from '@/hooks/use-saved-posts';
-import { useTranslation } from '@/hooks/use-translation';
-import { useSavedStore } from '@/stores/saved';
-import type { Post } from '@/types';
+import { Skeleton } from "@/components/ui/skeleton";
+import { PostDetail } from "@/features/feed/page/post-detail";
+import { useSavedPosts } from "@/hooks/use-saved-posts";
+import { useTranslation } from "@/hooks/use-translation";
+import { useSavedStore } from "@/stores/saved";
+import type { Post } from "@/types";
 
 /** Stagger variants for the saved grid. */
 const gridContainerVariants = {
@@ -20,7 +20,12 @@ const gridContainerVariants = {
 
 const gridItemVariants = {
   hidden: { opacity: 0, scale: 0.9, y: 8 },
-  visible: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.22, ease: 'easeOut' } },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { duration: 0.22, ease: "easeOut" },
+  },
 };
 
 interface ExpandedOverlayProps {
@@ -38,7 +43,10 @@ interface ExpandedOverlayProps {
  *
  * Right-to-left swipe (dx < -50, clearly more horizontal than vertical) closes.
  */
-function ExpandedOverlay({ post, onClose }: ExpandedOverlayProps): React.JSX.Element {
+function ExpandedOverlay({
+  post,
+  onClose,
+}: ExpandedOverlayProps): React.JSX.Element {
   const overlayRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -91,16 +99,16 @@ function ExpandedOverlay({ post, onClose }: ExpandedOverlayProps): React.JSX.Ele
       directionLocked = false;
     };
 
-    document.addEventListener('pointerdown', onDown, { passive: true });
-    document.addEventListener('pointermove', onMove, { passive: false });
-    document.addEventListener('pointerup', onUp, { passive: true });
-    document.addEventListener('pointercancel', onCancel, { passive: true });
+    document.addEventListener("pointerdown", onDown, { passive: true });
+    document.addEventListener("pointermove", onMove, { passive: false });
+    document.addEventListener("pointerup", onUp, { passive: true });
+    document.addEventListener("pointercancel", onCancel, { passive: true });
 
     return () => {
-      document.removeEventListener('pointerdown', onDown);
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      document.removeEventListener('pointercancel', onCancel);
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onCancel);
     };
   }, [onClose]);
 
@@ -109,10 +117,10 @@ function ExpandedOverlay({ post, onClose }: ExpandedOverlayProps): React.JSX.Ele
       ref={overlayRef}
       className="fixed inset-0 bg-surface"
       style={{ zIndex: 9999 }}
-      initial={{ x: '100%' }}
+      initial={{ x: "100%" }}
       animate={{ x: 0 }}
-      exit={{ x: '100%' }}
-      transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+      exit={{ x: "100%" }}
+      transition={{ type: "spring", damping: 28, stiffness: 280 }}
     >
       <div className="h-full overflow-y-auto overscroll-y-contain scrollbar-thin">
         <PostDetail post={post} onClose={onClose} />
@@ -145,7 +153,9 @@ export default function SavedGridPage(): React.JSX.Element {
   if (isLoading) {
     return (
       <div className="h-full overflow-y-auto px-4 py-5">
-        <h1 className="mb-4 text-lg font-bold text-content-primary">{t.saved.title}</h1>
+        <h1 className="mb-4 text-lg font-bold text-content-primary">
+          {t.saved.title}
+        </h1>
         <div className="grid grid-cols-2 gap-3">
           {Array.from({ length: 6 }, (_, i) => (
             <Skeleton key={i} className="aspect-[3/4] rounded-2xl" />
@@ -161,10 +171,12 @@ export default function SavedGridPage(): React.JSX.Element {
         className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.28, ease: 'easeOut' }}
+        transition={{ duration: 0.28, ease: "easeOut" }}
       >
         <Bookmark className="h-10 w-10 text-content-subtle" aria-hidden />
-        <p className="text-base font-semibold text-content-primary">{t.saved.emptyHeading}</p>
+        <p className="text-base font-semibold text-content-primary">
+          {t.saved.emptyHeading}
+        </p>
         <p className="text-sm text-content-muted">{t.saved.emptyDescription}</p>
       </motion.div>
     );
@@ -177,7 +189,7 @@ export default function SavedGridPage(): React.JSX.Element {
           className="mb-4 text-lg font-bold text-content-primary"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
         >
           {t.saved.titleWithCount(posts.length)}
         </motion.h1>
@@ -199,17 +211,19 @@ export default function SavedGridPage(): React.JSX.Element {
                 exit={{
                   opacity: 0,
                   scale: 0.82,
-                  transition: { duration: 0.18, ease: 'easeIn' },
+                  transition: { duration: 0.18, ease: "easeIn" },
                 }}
                 transition={{
-                  layout: { type: 'spring', damping: 26, stiffness: 300 },
+                  layout: { type: "spring", damping: 26, stiffness: 300 },
                   scale: { duration: 0.12 },
                 }}
                 role="presentation"
               >
                 <SavedPostCard
                   post={post}
-                  onCardClick={() => { handleExpand(post); }}
+                  onCardClick={() => {
+                    handleExpand(post);
+                  }}
                 />
               </motion.div>
             ))}
@@ -219,10 +233,7 @@ export default function SavedGridPage(): React.JSX.Element {
 
       <AnimatePresence>
         {expandedPost !== null && (
-          <ExpandedOverlay
-            post={expandedPost}
-            onClose={handleClose}
-          />
+          <ExpandedOverlay post={expandedPost} onClose={handleClose} />
         )}
       </AnimatePresence>
     </>

@@ -13,4 +13,4 @@ export type {
   UpdateProfileResponse,
   UserPreferences,
   UserProfile,
-} from './domain';
+} from "./domain";

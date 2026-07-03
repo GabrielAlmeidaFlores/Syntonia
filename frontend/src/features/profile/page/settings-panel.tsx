@@ -1,10 +1,10 @@
-import { Globe, Moon, Sun } from 'lucide-react';
-import * as React from 'react';
+import { Globe, Moon, Sun } from "lucide-react";
+import * as React from "react";
 
-import { useTranslation } from '@/hooks/use-translation';
-import { cn } from '@/lib/utils';
-import { usePreferencesStore } from '@/stores/preferences';
-import type { Language, Theme } from '@/stores/preferences';
+import { useTranslation } from "@/hooks/use-translation";
+import { cn } from "@/lib/utils";
+import { usePreferencesStore } from "@/stores/preferences";
+import type { Language, Theme } from "@/stores/preferences";
 
 type IconComponent = React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
@@ -31,38 +31,55 @@ interface LanguageOption {
 }
 
 /** Single selectable option card for theme or language selection. */
-function OptionCard({ label, description, icon: Icon, selected, onClick }: OptionCardProps): React.JSX.Element {
+function OptionCard({
+  label,
+  description,
+  icon: Icon,
+  selected,
+  onClick,
+}: OptionCardProps): React.JSX.Element {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={selected}
       className={cn(
-        'flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-all duration-150',
+        "flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-all duration-150",
         selected
-          ? 'border-accent bg-accent-muted shadow-accent-glow-sm'
-          : 'border-surface-border bg-surface-card hover:border-accent/50 hover:bg-surface-elevated',
+          ? "border-accent bg-accent-muted shadow-accent-glow-sm"
+          : "border-surface-border bg-surface-card hover:border-accent/50 hover:bg-surface-elevated",
       )}
     >
       <div
         className={cn(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
-          selected ? 'bg-accent/20' : 'bg-surface-elevated',
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+          selected ? "bg-accent/20" : "bg-surface-elevated",
         )}
       >
         <Icon
-          className={cn('h-4 w-4', selected ? 'text-accent-light' : 'text-content-muted')}
+          className={cn(
+            "h-4 w-4",
+            selected ? "text-accent-light" : "text-content-muted",
+          )}
           aria-hidden
         />
       </div>
       <div className="flex flex-col gap-0.5">
-        <span className={cn('text-sm font-medium', selected ? 'text-accent-light' : 'text-content-primary')}>
+        <span
+          className={cn(
+            "text-sm font-medium",
+            selected ? "text-accent-light" : "text-content-primary",
+          )}
+        >
           {label}
         </span>
         <span className="text-xs text-content-subtle">{description}</span>
       </div>
       {selected && (
-        <div className="ml-auto h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden />
+        <div
+          className="ml-auto h-2 w-2 shrink-0 rounded-full bg-accent"
+          aria-hidden
+        />
       )}
     </button>
   );
@@ -82,20 +99,42 @@ export function SettingsPanel(): React.JSX.Element {
   const t = useTranslation();
 
   const themeOptions: ThemeOption[] = [
-    { value: 'dark', label: t.settings.darkLabel, description: t.settings.darkDescription, icon: Moon as IconComponent },
-    { value: 'light', label: t.settings.lightLabel, description: t.settings.lightDescription, icon: Sun as IconComponent },
+    {
+      value: "dark",
+      label: t.settings.darkLabel,
+      description: t.settings.darkDescription,
+      icon: Moon as IconComponent,
+    },
+    {
+      value: "light",
+      label: t.settings.lightLabel,
+      description: t.settings.lightDescription,
+      icon: Sun as IconComponent,
+    },
   ];
 
   const languageOptions: LanguageOption[] = [
-    { value: 'en', label: 'English', description: 'Interface and content in English', icon: Globe as IconComponent },
-    { value: 'pt-BR', label: 'Português (BR)', description: 'Interface e conteúdo em português', icon: Globe as IconComponent },
+    {
+      value: "en",
+      label: "English",
+      description: "Interface and content in English",
+      icon: Globe as IconComponent,
+    },
+    {
+      value: "pt-BR",
+      label: "Português (BR)",
+      description: "Interface e conteúdo em português",
+      icon: Globe as IconComponent,
+    },
   ];
 
   return (
     <div className="flex flex-col gap-8">
       <section className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">
-          <h2 className="text-sm font-semibold text-content-primary">{t.settings.themeLabel}</h2>
+          <h2 className="text-sm font-semibold text-content-primary">
+            {t.settings.themeLabel}
+          </h2>
           <p className="text-xs text-content-subtle">{t.settings.themeHint}</p>
         </div>
         <div className="flex flex-col gap-2">
@@ -116,8 +155,12 @@ export function SettingsPanel(): React.JSX.Element {
 
       <section className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">
-          <h2 className="text-sm font-semibold text-content-primary">{t.settings.languageLabel}</h2>
-          <p className="text-xs text-content-subtle">{t.settings.languageHint}</p>
+          <h2 className="text-sm font-semibold text-content-primary">
+            {t.settings.languageLabel}
+          </h2>
+          <p className="text-xs text-content-subtle">
+            {t.settings.languageHint}
+          </p>
         </div>
         <div className="flex flex-col gap-2">
           {languageOptions.map((opt) => (

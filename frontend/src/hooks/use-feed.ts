@@ -1,9 +1,9 @@
-import * as React from 'react';
+import * as React from "react";
 
-import { FEED_PAGE_SIZE } from '@/lib/constants';
-import { api } from '@/services/api';
-import { useFeedStore } from '@/stores/feed';
-import type { FeedResponse, Post } from '@/types';
+import { FEED_PAGE_SIZE } from "@/lib/constants";
+import { api } from "@/services/api";
+import { useFeedStore } from "@/stores/feed";
+import type { FeedResponse, Post } from "@/types";
 
 /**
  * Fetches and paginates the authenticated user's post feed via GET /feed.
@@ -21,8 +21,16 @@ export function useFeed(): {
   isLoading: boolean;
   fetchMore: () => void;
 } {
-  const { posts, cursor, isLoading, hasMore, setPosts, appendPosts, setCursor, setLoading } =
-    useFeedStore();
+  const {
+    posts,
+    cursor,
+    isLoading,
+    hasMore,
+    setPosts,
+    appendPosts,
+    setCursor,
+    setLoading,
+  } = useFeedStore();
 
   const fetchMore = React.useCallback((): void => {
     if (isLoading || !hasMore) return;
@@ -30,18 +38,31 @@ export function useFeed(): {
     setLoading(true);
 
     const params = new URLSearchParams({ limit: String(FEED_PAGE_SIZE) });
-    if (cursor !== null) params.append('cursor', cursor);
+    if (cursor !== null) params.append("cursor", cursor);
 
-    void api.get<FeedResponse>(`/feed?${params.toString()}`).then((data) => {
-      if (posts.length === 0) {
-        setPosts(data.posts);
-      } else {
-        appendPosts(data.posts);
-      }
-      setCursor(data.cursor);
-      setLoading(false);
-    });
-  }, [isLoading, hasMore, cursor, posts.length, setPosts, appendPosts, setCursor, setLoading]);
+    void api
+      .get<FeedResponse>(`/feed?${params.toString()}`)
+      .then((data) => {
+        if (posts.length === 0) {
+          setPosts(data.posts);
+        } else {
+          appendPosts(data.posts);
+        }
+        setCursor(data.cursor);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [
+    isLoading,
+    hasMore,
+    cursor,
+    posts.length,
+    setPosts,
+    appendPosts,
+    setCursor,
+    setLoading,
+  ]);
 
   React.useEffect(() => {
     if (posts.length === 0) fetchMore();

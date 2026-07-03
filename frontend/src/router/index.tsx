@@ -1,27 +1,32 @@
-import * as React from 'react';
+import * as React from "react";
 import {
   createBrowserRouter,
   Navigate,
   RouterProvider,
   useLocation,
-} from 'react-router-dom';
+} from "react-router-dom";
 
-import { FeedLayout } from '@/app/layouts';
-import { useAuthStore } from '@/stores/auth';
-import { useUserStore } from '@/stores/user';
+import { FeedLayout } from "@/app/layouts";
+import { Spinner } from "@/components/shared/spinner";
+import { useAuthStore } from "@/stores/auth";
+import { useUserStore } from "@/stores/user";
 
-const MockCognitoPage = React.lazy(async () => import('@/features/auth/login/page'));
-const OnboardingPage = React.lazy(async () => import('@/features/onboarding/page'));
-const FeedPage = React.lazy(async () => import('@/features/feed/page'));
-const ProfilePage = React.lazy(async () => import('@/features/profile/page'));
-const PostPage = React.lazy(async () => import('@/features/post/page'));
-const SavedGridPage = React.lazy(async () => import('@/features/saved/page'));
-const SavedFeedPage = React.lazy(async () => import('@/features/saved/feed'));
+const MockCognitoPage = React.lazy(
+  async () => import("@/features/auth/login/page"),
+);
+const OnboardingPage = React.lazy(
+  async () => import("@/features/onboarding/page"),
+);
+const FeedPage = React.lazy(async () => import("@/features/feed/page"));
+const ProfilePage = React.lazy(async () => import("@/features/profile/page"));
+const PostPage = React.lazy(async () => import("@/features/post/page"));
+const SavedGridPage = React.lazy(async () => import("@/features/saved/page"));
+const SavedFeedPage = React.lazy(async () => import("@/features/saved/feed"));
 
 function SuspenseFallback(): React.JSX.Element {
   return (
     <div className="flex h-dvh items-center justify-center bg-surface">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-surface-elevated border-t-accent" />
+      <Spinner size="lg" />
     </div>
   );
 }
@@ -70,10 +75,10 @@ function RootRedirect(): React.JSX.Element {
 }
 
 const router = createBrowserRouter([
-  { path: '/', element: <RootRedirect /> },
-  { path: '/auth/login', element: withSuspense(MockCognitoPage) },
+  { path: "/", element: <RootRedirect /> },
+  { path: "/auth/login", element: withSuspense(MockCognitoPage) },
   {
-    path: '/onboarding',
+    path: "/onboarding",
     element: <RequireAuth>{withSuspense(OnboardingPage)}</RequireAuth>,
   },
   {
@@ -83,17 +88,17 @@ const router = createBrowserRouter([
       </RequireAuth>
     ),
     children: [
-      { path: '/feed', element: withSuspense(FeedPage) },
-      { path: '/saved', element: withSuspense(SavedGridPage) },
-      { path: '/profile', element: withSuspense(ProfilePage) },
+      { path: "/feed", element: withSuspense(FeedPage) },
+      { path: "/saved", element: withSuspense(SavedGridPage) },
+      { path: "/profile", element: withSuspense(ProfilePage) },
     ],
   },
   {
-    path: '/post/:id',
+    path: "/post/:id",
     element: <RequireAuth>{withSuspense(PostPage)}</RequireAuth>,
   },
   {
-    path: '/saved/feed',
+    path: "/saved/feed",
     element: <RequireAuth>{withSuspense(SavedFeedPage)}</RequireAuth>,
   },
 ]);
@@ -102,4 +107,3 @@ const router = createBrowserRouter([
 export function AppRouter(): React.JSX.Element {
   return <RouterProvider router={router} />;
 }
-

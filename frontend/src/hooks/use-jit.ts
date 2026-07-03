@@ -1,10 +1,10 @@
-import * as React from 'react';
+import * as React from "react";
 
-import { JIT_GENERATION_DELAY_MS, TRIGGER_THRESHOLD } from '@/lib/constants';
-import { api } from '@/services/api';
-import { useFeedStore } from '@/stores/feed';
-import { useUserStore } from '@/stores/user';
-import type { GenerationResponse } from '@/types';
+import { JIT_GENERATION_DELAY_MS, TRIGGER_THRESHOLD } from "@/lib/constants";
+import { api } from "@/services/api";
+import { useFeedStore } from "@/stores/feed";
+import { useUserStore } from "@/stores/user";
+import type { GenerationResponse } from "@/types";
 
 /**
  * Just-in-Time (JIT) generation hook.
@@ -23,29 +23,38 @@ import type { GenerationResponse } from '@/types';
  */
 export function useJIT(currentIndex: number, totalPosts: number): void {
   const isGenerating = React.useRef(false);
-  const { activeTags } = useUserStore();
+  const activeTags = useUserStore((s) => s.activeTags);
   const setLoading = useFeedStore((s) => s.setLoading);
 
   React.useEffect(() => {
     const postsRemaining = totalPosts - currentIndex;
 
-    if (postsRemaining > TRIGGER_THRESHOLD || isGenerating.current || totalPosts === 0) return;
+    if (
+      postsRemaining > TRIGGER_THRESHOLD ||
+      isGenerating.current ||
+      totalPosts === 0
+    )
+      return;
 
     isGenerating.current = true;
     setLoading(true);
 
     const generate = async (): Promise<void> => {
-      await api.post<GenerationResponse>('/feed/request', { tags: activeTags, quantity: 3 });
+      try {
+        await api.post<GenerationResponse>("/feed/request", {
+          tags: activeTags,
+          quantity: 3,
+        });
 
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, JIT_GENERATION_DELAY_MS);
-      });
-
-      setLoading(false);
-
-      setTimeout(() => {
-        isGenerating.current = false;
-      }, 10_000);
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, JIT_GENERATION_DELAY_MS);
+        });
+      } finally {
+        setLoading(false);
+        setTimeout(() => {
+          isGenerating.current = false;
+        }, 10_000);
+      }
     };
 
     void generate();

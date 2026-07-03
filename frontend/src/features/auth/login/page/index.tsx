@@ -1,12 +1,12 @@
-import { motion } from 'framer-motion';
-import { Sparkles } from 'lucide-react';
-import * as React from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { motion } from "framer-motion";
+import { Sparkles } from "lucide-react";
+import * as React from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { Button } from '@/components/ui/button';
-import { useTranslation } from '@/hooks/use-translation';
-import { useAuthStore } from '@/stores/auth';
-import { useUserStore } from '@/stores/user';
+import { Button } from "@/components/ui/button";
+import { useTranslation } from "@/hooks/use-translation";
+import { useAuthStore } from "@/stores/auth";
+import { useUserStore } from "@/stores/user";
 
 /**
  * Mock Cognito login page.
@@ -24,14 +24,14 @@ export default function MockCognitoPage(): React.JSX.Element {
   const navigate = useNavigate();
   const t = useTranslation();
 
-  const returnTo = searchParams.get('returnTo') ?? '/feed';
+  const returnTo = searchParams.get("returnTo") ?? "/feed";
 
   const handleLogin = async (): Promise<void> => {
     setLoading(true);
     setError(null);
 
     try {
-      await login('mock-cognito-code');
+      await login("mock-cognito-code");
 
       const { user } = useAuthStore.getState();
       if (user?.description !== null && user?.description !== undefined) {
@@ -50,14 +50,16 @@ export default function MockCognitoPage(): React.JSX.Element {
       className="flex h-dvh flex-col items-center justify-center gap-8 bg-surface px-6"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
     >
       <div className="flex flex-col items-center gap-3">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-muted">
           <Sparkles className="h-8 w-8 text-accent-light" aria-hidden />
         </div>
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-content-primary">{t.auth.appTitle}</h1>
+          <h1 className="text-2xl font-bold text-content-primary">
+            {t.auth.appTitle}
+          </h1>
           <p className="text-sm text-content-muted">{t.auth.appSubtitle}</p>
         </div>
       </div>
@@ -67,8 +69,12 @@ export default function MockCognitoPage(): React.JSX.Element {
           <p className="mb-1 text-xs uppercase tracking-widest text-content-subtle">
             {t.auth.mockLabel}
           </p>
-          <h2 className="text-lg font-semibold text-content-primary">{t.auth.signinHeading}</h2>
-          <p className="mt-1 text-sm text-content-muted">{t.auth.signinDescription}</p>
+          <h2 className="text-lg font-semibold text-content-primary">
+            {t.auth.signinHeading}
+          </h2>
+          <p className="mt-1 text-sm text-content-muted">
+            {t.auth.signinDescription}
+          </p>
         </div>
 
         {error !== null && (

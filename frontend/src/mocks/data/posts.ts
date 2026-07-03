@@ -1,14 +1,15 @@
-import type { Tag } from '@/types';
+import type { Tag } from "@/types";
 
 export const MOCK_POSTS = [
   {
-    id: 'post-001',
-    userId: 'user-mock-001',
-    title: 'Lambda Cold Start: Real Strategies',
-    summary: 'Eliminate cold starts in Node.js functions with Provisioned Concurrency and SnapStart.',
-    tags: ['AWS', 'Serverless', 'Performance'] as Tag[],
-    gradient: ['#FF6B35', '#F7931E'] as [string, string],
-    createdAt: '2026-07-01T10:00:00Z',
+    id: "post-001",
+    userId: "user-mock-001",
+    title: "Lambda Cold Start: Real Strategies",
+    summary:
+      "Eliminate cold starts in Node.js functions with Provisioned Concurrency and SnapStart.",
+    tags: ["AWS", "Serverless", "Performance"] as Tag[],
+    gradient: ["#FF6B35", "#F7931E"] as [string, string],
+    createdAt: "2026-07-01T10:00:00Z",
     content: `## The Cold Start Problem
 
 When a Lambda function hasn't been invoked recently, AWS must initialise a new execution environment — downloading your code, starting the runtime and executing your init code. This is a cold start, and it adds anywhere from 200ms to 2s of extra latency.
@@ -53,13 +54,14 @@ fields @timestamp, @duration, @initDuration
 `,
   },
   {
-    id: 'post-002',
-    userId: 'user-mock-001',
-    title: 'SQS Dead Letter Queues in Practice',
-    summary: 'Design resilient Lambda consumers with DLQs, visibility timeouts and ReportBatchItemFailures.',
-    tags: ['AWS', 'Serverless', 'Architecture'] as Tag[],
-    gradient: ['#F7931E', '#FFCD3C'] as [string, string],
-    createdAt: '2026-07-01T11:00:00Z',
+    id: "post-002",
+    userId: "user-mock-001",
+    title: "SQS Dead Letter Queues in Practice",
+    summary:
+      "Design resilient Lambda consumers with DLQs, visibility timeouts and ReportBatchItemFailures.",
+    tags: ["AWS", "Serverless", "Architecture"] as Tag[],
+    gradient: ["#F7931E", "#FFCD3C"] as [string, string],
+    createdAt: "2026-07-01T11:00:00Z",
     content: `## Why Messages End Up in the DLQ
 
 A message moves to the Dead Letter Queue after maxReceiveCount failed delivery attempts.
@@ -106,13 +108,14 @@ DLQMessageAlarm:
 `,
   },
   {
-    id: 'post-003',
-    userId: 'user-mock-001',
-    title: 'DynamoDB Single-Table Design Deep Dive',
-    summary: 'Model complex relationships in a single DynamoDB table using composite keys and GSIs.',
-    tags: ['AWS', 'DynamoDB', 'Architecture'] as Tag[],
-    gradient: ['#FF6B35', '#C0392B'] as [string, string],
-    createdAt: '2026-07-01T12:00:00Z',
+    id: "post-003",
+    userId: "user-mock-001",
+    title: "DynamoDB Single-Table Design Deep Dive",
+    summary:
+      "Model complex relationships in a single DynamoDB table using composite keys and GSIs.",
+    tags: ["AWS", "DynamoDB", "Architecture"] as Tag[],
+    gradient: ["#FF6B35", "#C0392B"] as [string, string],
+    createdAt: "2026-07-01T12:00:00Z",
     content: `## The Mindset Shift
 
 In DynamoDB you design tables around access patterns, not entities.
@@ -144,13 +147,14 @@ For variable workloads, PAY_PER_REQUEST is almost always cheaper than provisione
 `,
   },
   {
-    id: 'post-004',
-    userId: 'user-mock-001',
-    title: 'TypeScript Discriminated Unions in APIs',
-    summary: 'Use discriminated unions to model API responses with exhaustive type safety at compile time.',
-    tags: ['TypeScript', 'Architecture'] as Tag[],
-    gradient: ['#3178C6', '#235A97'] as [string, string],
-    createdAt: '2026-07-01T13:00:00Z',
+    id: "post-004",
+    userId: "user-mock-001",
+    title: "TypeScript Discriminated Unions in APIs",
+    summary:
+      "Use discriminated unions to model API responses with exhaustive type safety at compile time.",
+    tags: ["TypeScript", "Architecture"] as Tag[],
+    gradient: ["#3178C6", "#235A97"] as [string, string],
+    createdAt: "2026-07-01T13:00:00Z",
     content: `## Discriminated Unions
 
 Add a discriminant — a literal type field that uniquely identifies each variant:
@@ -185,13 +189,14 @@ The exhaustiveness check — combined with switch-exhaustiveness-check ESLint ru
 `,
   },
   {
-    id: 'post-005',
-    userId: 'user-mock-001',
-    title: 'Template Literal Types for Type-Safe Routes',
-    summary: 'Encode route patterns as TypeScript types to get compile-time validation of navigation.',
-    tags: ['TypeScript', 'React'] as Tag[],
-    gradient: ['#235A97', '#0F3460'] as [string, string],
-    createdAt: '2026-07-01T14:00:00Z',
+    id: "post-005",
+    userId: "user-mock-001",
+    title: "Template Literal Types for Type-Safe Routes",
+    summary:
+      "Encode route patterns as TypeScript types to get compile-time validation of navigation.",
+    tags: ["TypeScript", "React"] as Tag[],
+    gradient: ["#235A97", "#0F3460"] as [string, string],
+    createdAt: "2026-07-01T14:00:00Z",
     content: `## Routes as Types
 
 \`\`\`typescript
@@ -221,13 +226,14 @@ navigate('/post/:id', { id: 'post-123' });
 `,
   },
   {
-    id: 'post-006',
-    userId: 'user-mock-001',
-    title: 'Branded Types: Preventing ID Mixups',
-    summary: 'Use branded (nominal) types to make TypeScript treat structurally identical strings as distinct.',
-    tags: ['TypeScript', 'Security'] as Tag[],
-    gradient: ['#3178C6', '#1a5490'] as [string, string],
-    createdAt: '2026-07-01T15:00:00Z',
+    id: "post-006",
+    userId: "user-mock-001",
+    title: "Branded Types: Preventing ID Mixups",
+    summary:
+      "Use branded (nominal) types to make TypeScript treat structurally identical strings as distinct.",
+    tags: ["TypeScript", "Security"] as Tag[],
+    gradient: ["#3178C6", "#1a5490"] as [string, string],
+    createdAt: "2026-07-01T15:00:00Z",
     content: `## Branded Types
 
 A brand is a phantom property that exists only at the type level — zero runtime cost:
@@ -250,13 +256,14 @@ Branded types are especially valuable when multiple IDs flow through the same fu
 `,
   },
   {
-    id: 'post-007',
-    userId: 'user-mock-001',
-    title: 'Multi-Stage Docker Builds for Node.js',
-    summary: 'Reduce production image size by 80% using multi-stage builds and layer caching strategies.',
-    tags: ['Docker', 'Node.js', 'Performance'] as Tag[],
-    gradient: ['#0DB7ED', '#384D54'] as [string, string],
-    createdAt: '2026-07-01T16:00:00Z',
+    id: "post-007",
+    userId: "user-mock-001",
+    title: "Multi-Stage Docker Builds for Node.js",
+    summary:
+      "Reduce production image size by 80% using multi-stage builds and layer caching strategies.",
+    tags: ["Docker", "Node.js", "Performance"] as Tag[],
+    gradient: ["#0DB7ED", "#384D54"] as [string, string],
+    createdAt: "2026-07-01T16:00:00Z",
     content: `## Multi-Stage Build
 
 \`\`\`dockerfile
@@ -286,13 +293,14 @@ Always copy files that change least frequently first — package manifests befor
 `,
   },
   {
-    id: 'post-008',
-    userId: 'user-mock-001',
-    title: 'Kubernetes Liveness vs Readiness Probes',
-    summary: 'Understand the critical difference between liveness and readiness to prevent cascading failures.',
-    tags: ['Kubernetes', 'Architecture'] as Tag[],
-    gradient: ['#326CE5', '#1A3A8F'] as [string, string],
-    createdAt: '2026-07-01T17:00:00Z',
+    id: "post-008",
+    userId: "user-mock-001",
+    title: "Kubernetes Liveness vs Readiness Probes",
+    summary:
+      "Understand the critical difference between liveness and readiness to prevent cascading failures.",
+    tags: ["Kubernetes", "Architecture"] as Tag[],
+    gradient: ["#326CE5", "#1A3A8F"] as [string, string],
+    createdAt: "2026-07-01T17:00:00Z",
     content: `## Liveness Probe
 
 Failure causes the container to be killed and restarted. Use only for deadlock detection.
@@ -340,13 +348,14 @@ Never check external dependencies in the liveness probe.
 `,
   },
   {
-    id: 'post-009',
-    userId: 'user-mock-001',
-    title: 'Kubernetes Resource Requests and Limits',
-    summary: 'Set CPU and memory requests/limits correctly to avoid OOMKilled pods and noisy-neighbour issues.',
-    tags: ['Kubernetes', 'Performance'] as Tag[],
-    gradient: ['#1A3A8F', '#0D1F4E'] as [string, string],
-    createdAt: '2026-07-01T18:00:00Z',
+    id: "post-009",
+    userId: "user-mock-001",
+    title: "Kubernetes Resource Requests and Limits",
+    summary:
+      "Set CPU and memory requests/limits correctly to avoid OOMKilled pods and noisy-neighbour issues.",
+    tags: ["Kubernetes", "Performance"] as Tag[],
+    gradient: ["#1A3A8F", "#0D1F4E"] as [string, string],
+    createdAt: "2026-07-01T18:00:00Z",
     content: `## Requests vs Limits
 
 \`\`\`yaml
@@ -384,13 +393,14 @@ spec:
 `,
   },
   {
-    id: 'post-010',
-    userId: 'user-mock-001',
-    title: 'GitHub Actions: Optimising Pipeline Speed',
-    summary: 'Cut CI runtime by 60% using job matrices, dependency caching and conditional step execution.',
-    tags: ['CI/CD', 'Performance'] as Tag[],
-    gradient: ['#24292F', '#57606A'] as [string, string],
-    createdAt: '2026-07-01T19:00:00Z',
+    id: "post-010",
+    userId: "user-mock-001",
+    title: "GitHub Actions: Optimising Pipeline Speed",
+    summary:
+      "Cut CI runtime by 60% using job matrices, dependency caching and conditional step execution.",
+    tags: ["CI/CD", "Performance"] as Tag[],
+    gradient: ["#24292F", "#57606A"] as [string, string],
+    createdAt: "2026-07-01T19:00:00Z",
     content: `## Cache Node Modules
 
 \`\`\`yaml
@@ -434,13 +444,14 @@ on:
 `,
   },
   {
-    id: 'post-011',
-    userId: 'user-mock-001',
-    title: 'Redis Caching Patterns for APIs',
-    summary: 'Implement cache-aside, write-through and cache invalidation strategies in Node.js APIs.',
-    tags: ['Redis', 'Performance', 'Node.js'] as Tag[],
-    gradient: ['#D82C20', '#8B1A10'] as [string, string],
-    createdAt: '2026-07-01T20:00:00Z',
+    id: "post-011",
+    userId: "user-mock-001",
+    title: "Redis Caching Patterns for APIs",
+    summary:
+      "Implement cache-aside, write-through and cache invalidation strategies in Node.js APIs.",
+    tags: ["Redis", "Performance", "Node.js"] as Tag[],
+    gradient: ["#D82C20", "#8B1A10"] as [string, string],
+    createdAt: "2026-07-01T20:00:00Z",
     content: `## Cache-Aside
 
 \`\`\`typescript
@@ -472,13 +483,14 @@ Use a distributed lock pattern with Redis SET NX EX to prevent multiple processe
 `,
   },
   {
-    id: 'post-012',
-    userId: 'user-mock-001',
-    title: 'PostgreSQL Query Optimisation: Index Deep Dive',
-    summary: 'Understand partial indexes, composite indexes and EXPLAIN ANALYZE to eliminate slow queries.',
-    tags: ['PostgreSQL', 'Performance'] as Tag[],
-    gradient: ['#336791', '#1A3A5C'] as [string, string],
-    createdAt: '2026-07-01T21:00:00Z',
+    id: "post-012",
+    userId: "user-mock-001",
+    title: "PostgreSQL Query Optimisation: Index Deep Dive",
+    summary:
+      "Understand partial indexes, composite indexes and EXPLAIN ANALYZE to eliminate slow queries.",
+    tags: ["PostgreSQL", "Performance"] as Tag[],
+    gradient: ["#336791", "#1A3A5C"] as [string, string],
+    createdAt: "2026-07-01T21:00:00Z",
     content: `## Reading EXPLAIN ANALYZE
 
 \`\`\`sql
@@ -508,13 +520,14 @@ A partial index is smaller and faster because it excludes rows that are never qu
 `,
   },
   {
-    id: 'post-013',
-    userId: 'user-mock-001',
-    title: 'JWT Security: What Most Tutorials Get Wrong',
-    summary: 'Understand algorithm confusion attacks, key ID spoofing and proper JWT validation in Node.js.',
-    tags: ['Security', 'Node.js'] as Tag[],
-    gradient: ['#E74C3C', '#922B21'] as [string, string],
-    createdAt: '2026-07-02T09:00:00Z',
+    id: "post-013",
+    userId: "user-mock-001",
+    title: "JWT Security: What Most Tutorials Get Wrong",
+    summary:
+      "Understand algorithm confusion attacks, key ID spoofing and proper JWT validation in Node.js.",
+    tags: ["Security", "Node.js"] as Tag[],
+    gradient: ["#E74C3C", "#922B21"] as [string, string],
+    createdAt: "2026-07-02T09:00:00Z",
     content: `## Algorithm Confusion Attack
 
 Many JWT libraries accept the algorithm from the token header. An attacker can change RS256 to HS256 and sign with the public key.
@@ -540,13 +553,14 @@ Access tokens: 1 hour. Refresh tokens: 30 days. Never use refresh tokens to call
 `,
   },
   {
-    id: 'post-014',
-    userId: 'user-mock-001',
-    title: 'Terraform State Management at Scale',
-    summary: 'Remote state, state locking, workspace strategies and secrets management with Terraform.',
-    tags: ['Terraform', 'Architecture', 'Security'] as Tag[],
-    gradient: ['#7B42BC', '#4A1A8C'] as [string, string],
-    createdAt: '2026-07-02T10:00:00Z',
+    id: "post-014",
+    userId: "user-mock-001",
+    title: "Terraform State Management at Scale",
+    summary:
+      "Remote state, state locking, workspace strategies and secrets management with Terraform.",
+    tags: ["Terraform", "Architecture", "Security"] as Tag[],
+    gradient: ["#7B42BC", "#4A1A8C"] as [string, string],
+    createdAt: "2026-07-02T10:00:00Z",
     content: `## Remote State
 
 \`\`\`hcl
@@ -580,13 +594,14 @@ data "aws_ssm_parameter" "gemini_api_key" {
 `,
   },
   {
-    id: 'post-015',
-    userId: 'user-mock-001',
-    title: 'Event-Driven Architecture: Patterns and Pitfalls',
-    summary: 'Saga, outbox pattern, and idempotency strategies for reliable event-driven microservices.',
-    tags: ['Architecture', 'AWS', 'Serverless'] as Tag[],
-    gradient: ['#2ECC71', '#1A7A44'] as [string, string],
-    createdAt: '2026-07-02T11:00:00Z',
+    id: "post-015",
+    userId: "user-mock-001",
+    title: "Event-Driven Architecture: Patterns and Pitfalls",
+    summary:
+      "Saga, outbox pattern, and idempotency strategies for reliable event-driven microservices.",
+    tags: ["Architecture", "AWS", "Serverless"] as Tag[],
+    gradient: ["#2ECC71", "#1A7A44"] as [string, string],
+    createdAt: "2026-07-02T11:00:00Z",
     content: `## The Outbox Pattern
 
 Write the event to the database in the same transaction as the business data:

@@ -1,20 +1,20 @@
-import { ArrowLeft, Bookmark, BookmarkCheck, Share2 } from 'lucide-react';
-import * as React from 'react';
-import ReactMarkdown from 'react-markdown';
-import rehypeHighlight from 'rehype-highlight';
-import remarkGfm from 'remark-gfm';
-import 'highlight.js/styles/github-dark.css';
+import { ArrowLeft, Bookmark, BookmarkCheck, Share2 } from "lucide-react";
+import * as React from "react";
+import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
+import remarkGfm from "remark-gfm";
+import "highlight.js/styles/github-dark.css";
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { ConfirmModal } from '@/components/ui/confirm-modal';
-import { ShareModal } from '@/components/ui/share-modal';
-import { useTranslation } from '@/hooks/use-translation';
-import { formatRelativeTime } from '@/lib/utils';
-import { api } from '@/services/api';
-import { useSavedStore } from '@/stores/saved';
-import { useToastStore } from '@/stores/toast';
-import type { Post, SavePostResponse, UnsavePostResponse } from '@/types';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { ShareModal } from "@/components/ui/share-modal";
+import { useTranslation } from "@/hooks/use-translation";
+import { formatRelativeTime } from "@/lib/utils";
+import { api } from "@/services/api";
+import { useSavedStore } from "@/stores/saved";
+import { useToastStore } from "@/stores/toast";
+import type { Post, SavePostResponse, UnsavePostResponse } from "@/types";
 
 interface PostDetailProps {
   readonly post: Post;
@@ -26,7 +26,10 @@ interface PostDetailProps {
  * Renders the post's Markdown content with syntax-highlighted code blocks.
  * Includes a save/unsave bookmark toggle that calls POST|DELETE /post/:id/save.
  */
-export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Element {
+export function PostDetail({
+  post,
+  onClose,
+}: PostDetailProps): React.JSX.Element {
   const isSaved = useSavedStore((s) => s.isSaved(post.id));
   const storeSave = useSavedStore((s) => s.save);
   const storeUnsave = useSavedStore((s) => s.unsave);
@@ -44,10 +47,10 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
       .delete<UnsavePostResponse>(`/post/${post.id}/save`)
       .then(() => {
         storeUnsave(post.id);
-        addToast({ type: 'success', message: t.saved.toastUnsaved });
+        addToast({ type: "success", message: t.saved.toastUnsaved });
       })
       .catch(() => {
-        addToast({ type: 'error', message: t.saved.toastUnsaveError });
+        addToast({ type: "error", message: t.saved.toastUnsaveError });
       })
       .finally(() => {
         setToggling(false);
@@ -65,10 +68,10 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
       .post<SavePostResponse>(`/post/${post.id}/save`, {})
       .then((res) => {
         storeSave(post, res.savedAt);
-        addToast({ type: 'success', message: t.saved.toastSaved });
+        addToast({ type: "success", message: t.saved.toastSaved });
       })
       .catch(() => {
-        addToast({ type: 'error', message: t.saved.toastSaveError });
+        addToast({ type: "error", message: t.saved.toastSaveError });
       })
       .finally(() => {
         setToggling(false);
@@ -94,17 +97,29 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
             size="sm"
             onClick={handleToggleSave}
             disabled={toggling}
-            aria-label={isSaved ? t.postDetail.ariaUnsave : t.postDetail.ariaSave}
+            aria-label={
+              isSaved ? t.postDetail.ariaUnsave : t.postDetail.ariaSave
+            }
             aria-pressed={isSaved}
           >
             {isSaved ? (
-              <BookmarkCheck className="h-4 w-4 text-accent-light" aria-hidden />
+              <BookmarkCheck
+                className="h-4 w-4 text-accent-light"
+                aria-hidden
+              />
             ) : (
               <Bookmark className="h-4 w-4" aria-hidden />
             )}
           </Button>
 
-          <Button variant="ghost" size="sm" aria-label={t.postDetail.ariaShare} onClick={() => { setShowShare(true); }}>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={t.postDetail.ariaShare}
+            onClick={() => {
+              setShowShare(true);
+            }}
+          >
             <Share2 className="h-4 w-4" aria-hidden />
           </Button>
         </div>
@@ -119,9 +134,13 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
           ))}
         </div>
 
-        <h1 className="mb-2 text-2xl font-bold leading-tight text-content-primary">{post.title}</h1>
+        <h1 className="mb-2 text-2xl font-bold leading-tight text-content-primary">
+          {post.title}
+        </h1>
         <p className="mb-4 text-sm text-content-muted">{post.summary}</p>
-        <p className="mb-6 text-xs text-content-subtle">{formatRelativeTime(post.createdAt)}</p>
+        <p className="mb-6 text-xs text-content-subtle">
+          {formatRelativeTime(post.createdAt)}
+        </p>
 
         <div
           className="mb-6 h-0.5 w-16 rounded-full"
@@ -131,7 +150,10 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
         />
 
         <div className="prose prose-sm prose-invert max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeHighlight]}
+          >
             {post.content ?? post.summary}
           </ReactMarkdown>
         </div>
@@ -145,7 +167,9 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
         cancelLabel={t.confirmModal.cancel}
         confirmVariant="destructive"
         onConfirm={doUnsave}
-        onCancel={() => { setShowUnsaveConfirm(false); }}
+        onCancel={() => {
+          setShowUnsaveConfirm(false);
+        }}
       />
 
       <ShareModal
@@ -155,9 +179,10 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
         linkLabel={t.postDetail.shareLink}
         copyLabel={t.postDetail.shareCopy}
         copiedLabel={t.postDetail.shareCopied}
-        onClose={() => { setShowShare(false); }}
+        onClose={() => {
+          setShowShare(false);
+        }}
       />
     </div>
   );
 }
-

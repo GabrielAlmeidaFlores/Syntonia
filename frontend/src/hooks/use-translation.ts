@@ -1,5 +1,5 @@
-import { translations } from '@/lib/i18n';
-import { usePreferencesStore } from '@/stores/preferences';
+import { translations } from "@/lib/i18n";
+import { usePreferencesStore } from "@/stores/preferences";
 
 /**
  * Returns the translations object for the currently selected language.

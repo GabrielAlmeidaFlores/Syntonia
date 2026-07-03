@@ -1,18 +1,18 @@
-import { motion } from 'framer-motion';
-import { Sparkles } from 'lucide-react';
-import * as React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { motion } from "framer-motion";
+import { Sparkles } from "lucide-react";
+import * as React from "react";
+import { useNavigate } from "react-router-dom";
 
-import { ExtractedTags } from './extracted-tags';
+import { ExtractedTags } from "./extracted-tags";
 
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { useTranslation } from '@/hooks/use-translation';
-import { api } from '@/services/api';
-import { useUserStore } from '@/stores/user';
-import type { Tag, UpdateProfileResponse } from '@/types';
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { useTranslation } from "@/hooks/use-translation";
+import { api } from "@/services/api";
+import { useUserStore } from "@/stores/user";
+import type { Tag, UpdateProfileResponse } from "@/types";
 
-type Step = 'input' | 'extracting' | 'review';
+type Step = "input" | "extracting" | "review";
 
 /**
  * Post-signup onboarding page at /onboarding.
@@ -29,8 +29,8 @@ export default function OnboardingPage(): React.JSX.Element {
   const setProfile = useUserStore((s) => s.setProfile);
   const t = useTranslation();
 
-  const [step, setStep] = React.useState<Step>('input');
-  const [description, setDescription] = React.useState('');
+  const [step, setStep] = React.useState<Step>("input");
+  const [description, setDescription] = React.useState("");
   const [extractedTags, setExtractedTags] = React.useState<Tag[]>([]);
   const [localActiveTags, setLocalActiveTags] = React.useState<Tag[]>([]);
   const [isConfirming, setIsConfirming] = React.useState(false);
@@ -39,20 +39,20 @@ export default function OnboardingPage(): React.JSX.Element {
   const canExtract = description.trim().length >= 20;
 
   const handleExtract = async (): Promise<void> => {
-    setStep('extracting');
+    setStep("extracting");
     setError(null);
 
     try {
-      const response = await api.put<UpdateProfileResponse>('/user/profile', {
+      const response = await api.put<UpdateProfileResponse>("/user/profile", {
         description: description.trim(),
       });
 
       setExtractedTags(response.activeTags);
       setLocalActiveTags(response.activeTags);
-      setStep('review');
+      setStep("review");
     } catch {
       setError(t.onboarding.extractError);
-      setStep('input');
+      setStep("input");
     }
   };
 
@@ -68,9 +68,9 @@ export default function OnboardingPage(): React.JSX.Element {
     setIsConfirming(true);
 
     try {
-      await api.put('/user/preferences', { activeTags: localActiveTags });
+      await api.put("/user/preferences", { activeTags: localActiveTags });
       setProfile(description.trim(), localActiveTags);
-      navigate('/feed', { replace: true });
+      navigate("/feed", { replace: true });
     } catch {
       setError(t.onboarding.saveError);
       setIsConfirming(false);
@@ -82,19 +82,26 @@ export default function OnboardingPage(): React.JSX.Element {
       className="flex min-h-dvh flex-col bg-surface px-6 py-10"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
     >
       <div className="mx-auto flex w-full max-w-md flex-col gap-8">
         <div className="flex flex-col gap-2">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-muted">
             <Sparkles className="h-6 w-6 text-accent-light" aria-hidden />
           </div>
-          <h1 className="text-2xl font-bold text-content-primary">{t.onboarding.heading}</h1>
-          <p className="text-sm text-content-muted">{t.onboarding.description}</p>
+          <h1 className="text-2xl font-bold text-content-primary">
+            {t.onboarding.heading}
+          </h1>
+          <p className="text-sm text-content-muted">
+            {t.onboarding.description}
+          </p>
         </div>
 
         <div className="flex flex-col gap-3">
-          <label htmlFor="description" className="text-sm font-medium text-content-secondary">
+          <label
+            htmlFor="description"
+            className="text-sm font-medium text-content-secondary"
+          >
             {t.onboarding.descriptionLabel}
           </label>
           <Textarea
@@ -104,17 +111,21 @@ export default function OnboardingPage(): React.JSX.Element {
             onChange={(e) => {
               setDescription(e.target.value);
             }}
-            disabled={step !== 'input'}
+            disabled={step !== "input"}
             rows={5}
           />
-          <p className="text-xs text-content-subtle">{t.onboarding.charHint(description.length)}</p>
+          <p className="text-xs text-content-subtle">
+            {t.onboarding.charHint(description.length)}
+          </p>
         </div>
 
         {error !== null && (
-          <p className="rounded-lg bg-red-950 px-3 py-2 text-sm text-red-400">{error}</p>
+          <p className="rounded-lg bg-red-950 px-3 py-2 text-sm text-red-400">
+            {error}
+          </p>
         )}
 
-        {step === 'input' && (
+        {step === "input" && (
           <Button
             variant="primary"
             disabled={!canExtract}
@@ -128,14 +139,16 @@ export default function OnboardingPage(): React.JSX.Element {
           </Button>
         )}
 
-        {step === 'extracting' && (
+        {step === "extracting" && (
           <div className="flex flex-col items-center gap-3 py-4">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-surface-elevated border-t-accent" />
-            <p className="animate-pulse text-sm text-content-muted">{t.onboarding.analysing}</p>
+            <p className="animate-pulse text-sm text-content-muted">
+              {t.onboarding.analysing}
+            </p>
           </div>
         )}
 
-        {step === 'review' && (
+        {step === "review" && (
           <ExtractedTags
             tags={extractedTags}
             activeTags={localActiveTags}

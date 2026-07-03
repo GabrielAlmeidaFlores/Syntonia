@@ -1,1 +1,1 @@
-export { FeedLayout } from './feed-layout';
+export { FeedLayout } from "./feed-layout";

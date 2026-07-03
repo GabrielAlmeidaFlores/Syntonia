@@ -1,10 +1,10 @@
-import { motion } from 'framer-motion';
-import { BookOpen, Bookmark, User } from 'lucide-react';
-import * as React from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { motion } from "framer-motion";
+import { BookOpen, Bookmark, User } from "lucide-react";
+import * as React from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 
-import { useTranslation } from '@/hooks/use-translation';
-import { cn } from '@/lib/utils';
+import { useTranslation } from "@/hooks/use-translation";
+import { cn } from "@/lib/utils";
 
 /**
  * Authenticated layout for the main app.
@@ -21,9 +21,9 @@ export function FeedLayout(): React.JSX.Element {
   const location = useLocation();
 
   const BOTTOM_NAV = [
-    { label: t.nav.feed, href: '/feed', icon: BookOpen, exact: true },
-    { label: t.nav.saved, href: '/saved', icon: Bookmark, exact: true },
-    { label: t.nav.profile, href: '/profile', icon: User, exact: false },
+    { label: t.nav.feed, href: "/feed", icon: BookOpen, exact: true },
+    { label: t.nav.saved, href: "/saved", icon: Bookmark, exact: true },
+    { label: t.nav.profile, href: "/profile", icon: User, exact: false },
   ] as const;
 
   return (
@@ -34,10 +34,10 @@ export function FeedLayout(): React.JSX.Element {
           initial={{ opacity: 0, y: 60, scale: 0.94 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{
-            type: 'spring',
+            type: "spring",
             damping: 22,
             stiffness: 200,
-            opacity: { duration: 0.18, ease: 'easeOut' },
+            opacity: { duration: 0.18, ease: "easeOut" },
           }}
           className="h-full"
         >
@@ -63,21 +63,27 @@ export function FeedLayout(): React.JSX.Element {
                     <motion.div
                       layoutId="nav-active"
                       className="absolute inset-0 rounded-xl bg-accent-muted"
-                      transition={{ type: 'spring', damping: 30, stiffness: 380 }}
+                      transition={{
+                        type: "spring",
+                        damping: 30,
+                        stiffness: 380,
+                      }}
                     />
                   )}
                   <item.icon
                     className={cn(
-                      'relative h-5 w-5 transition-colors duration-200',
-                      isActive ? 'text-accent-light' : 'text-content-subtle',
+                      "relative h-5 w-5 transition-colors duration-200",
+                      isActive ? "text-accent-light" : "text-content-subtle",
                     )}
                     aria-hidden
                   />
                 </div>
                 <span
                   className={cn(
-                    'text-xs transition-colors duration-200',
-                    isActive ? 'font-semibold text-accent-light' : 'font-medium text-content-subtle',
+                    "text-xs transition-colors duration-200",
+                    isActive
+                      ? "font-semibold text-accent-light"
+                      : "font-medium text-content-subtle",
                   )}
                 >
                   {item.label}

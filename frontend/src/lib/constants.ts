@@ -1,29 +1,29 @@
-import type { Tag } from '@/types';
+import type { Tag } from "@/types";
 
 export const AVAILABLE_TAGS: Tag[] = [
-  'AWS',
-  'React',
-  'TypeScript',
-  'Node.js',
-  'Python',
-  'Docker',
-  'Kubernetes',
-  'Linux',
-  'DynamoDB',
-  'PostgreSQL',
-  'Redis',
-  'GraphQL',
-  'Rust',
-  'Go',
-  'CI/CD',
-  'Terraform',
-  'Serverless',
-  'Security',
-  'Performance',
-  'Architecture',
+  "AWS",
+  "React",
+  "TypeScript",
+  "Node.js",
+  "Python",
+  "Docker",
+  "Kubernetes",
+  "Linux",
+  "DynamoDB",
+  "PostgreSQL",
+  "Redis",
+  "GraphQL",
+  "Rust",
+  "Go",
+  "CI/CD",
+  "Terraform",
+  "Serverless",
+  "Security",
+  "Performance",
+  "Architecture",
 ];
 
-export const DEFAULT_TAGS: Tag[] = ['AWS', 'TypeScript', 'React'];
+export const DEFAULT_TAGS: Tag[] = ["AWS", "TypeScript", "React"];
 
 export const TRIGGER_THRESHOLD = 2;
 

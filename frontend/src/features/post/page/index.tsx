@@ -1,18 +1,19 @@
-import { motion } from 'framer-motion';
-import { ArrowLeft } from 'lucide-react';
-import * as React from 'react';
-import ReactMarkdown from 'react-markdown';
-import { useNavigate, useParams } from 'react-router-dom';
-import rehypeHighlight from 'rehype-highlight';
-import remarkGfm from 'remark-gfm';
-import 'highlight.js/styles/github-dark.css';
+import { motion } from "framer-motion";
+import { ArrowLeft } from "lucide-react";
+import * as React from "react";
+import ReactMarkdown from "react-markdown";
+import { useNavigate, useParams } from "react-router-dom";
+import rehypeHighlight from "rehype-highlight";
+import remarkGfm from "remark-gfm";
+import "highlight.js/styles/github-dark.css";
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { useTranslation } from '@/hooks/use-translation';
-import { formatRelativeTime } from '@/lib/utils';
-import { api } from '@/services/api';
-import type { Post } from '@/types';
+import { Spinner } from "@/components/shared/spinner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useTranslation } from "@/hooks/use-translation";
+import { formatRelativeTime } from "@/lib/utils";
+import { api } from "@/services/api";
+import type { Post } from "@/types";
 
 /**
  * Deep-link single post page at /post/:id.
@@ -53,7 +54,7 @@ export default function PostPage(): React.JSX.Element {
   if (loading) {
     return (
       <div className="flex h-dvh items-center justify-center bg-surface">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-surface-elevated border-t-accent" />
+        <Spinner size="lg" />
       </div>
     );
   }
@@ -65,7 +66,7 @@ export default function PostPage(): React.JSX.Element {
         <Button
           variant="ghost"
           onClick={() => {
-            navigate('/feed');
+            navigate("/feed");
           }}
         >
           {t.post.backToFeed}
@@ -79,7 +80,7 @@ export default function PostPage(): React.JSX.Element {
       className="flex min-h-dvh flex-col bg-surface"
       initial={{ opacity: 0, x: 30 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.28, ease: 'easeOut' }}
+      transition={{ duration: 0.28, ease: "easeOut" }}
     >
       <div className="sticky top-0 z-10 flex items-center border-b border-surface-border bg-surface/80 px-4 py-3 backdrop-blur-md">
         <button
@@ -97,7 +98,9 @@ export default function PostPage(): React.JSX.Element {
 
       <div
         className="h-1 w-full"
-        style={{ background: `linear-gradient(to right, ${post.gradient[0]}, ${post.gradient[1]})` }}
+        style={{
+          background: `linear-gradient(to right, ${post.gradient[0]}, ${post.gradient[1]})`,
+        }}
       />
 
       <article className="mx-auto w-full max-w-2xl flex-1 px-5 py-6">
@@ -109,17 +112,26 @@ export default function PostPage(): React.JSX.Element {
           ))}
         </div>
 
-        <h1 className="mb-2 text-2xl font-bold leading-tight text-content-primary">{post.title}</h1>
+        <h1 className="mb-2 text-2xl font-bold leading-tight text-content-primary">
+          {post.title}
+        </h1>
         <p className="mb-2 text-sm text-content-muted">{post.summary}</p>
-        <p className="mb-6 text-xs text-content-subtle">{formatRelativeTime(post.createdAt)}</p>
+        <p className="mb-6 text-xs text-content-subtle">
+          {formatRelativeTime(post.createdAt)}
+        </p>
 
         <div
           className="mb-6 h-0.5 w-16 rounded-full"
-          style={{ background: `linear-gradient(to right, ${post.gradient[0]}, ${post.gradient[1]})` }}
+          style={{
+            background: `linear-gradient(to right, ${post.gradient[0]}, ${post.gradient[1]})`,
+          }}
         />
 
         <div className="prose prose-sm prose-invert max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeHighlight]}
+          >
             {post.content}
           </ReactMarkdown>
         </div>

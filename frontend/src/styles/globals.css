@@ -6,37 +6,37 @@
   :root {
     --radius: 0.5rem;
 
-    --color-surface:          3 7 18;
-    --color-surface-card:     17 24 39;
+    --color-surface: 3 7 18;
+    --color-surface-card: 17 24 39;
     --color-surface-elevated: 31 41 55;
-    --color-surface-border:   55 65 81;
-    --color-accent:           79 70 229;
-    --color-accent-hover:     67 56 202;
-    --color-accent-light:     224 231 255;
-    --color-accent-muted:     49 46 129;
-    --color-outer-bg:         6 7 20;
+    --color-surface-border: 55 65 81;
+    --color-accent: 79 70 229;
+    --color-accent-hover: 67 56 202;
+    --color-accent-light: 224 231 255;
+    --color-accent-muted: 49 46 129;
+    --color-outer-bg: 6 7 20;
 
-    --color-content-primary:   255 255 255;
+    --color-content-primary: 255 255 255;
     --color-content-secondary: 209 213 219;
-    --color-content-muted:     156 163 175;
-    --color-content-subtle:    107 114 128;
+    --color-content-muted: 156 163 175;
+    --color-content-subtle: 107 114 128;
   }
 
   html.light {
-    --color-surface:          248 250 252;
-    --color-surface-card:     255 255 255;
+    --color-surface: 248 250 252;
+    --color-surface-card: 255 255 255;
     --color-surface-elevated: 241 245 249;
-    --color-surface-border:   226 232 240;
-    --color-accent:           79 70 229;
-    --color-accent-hover:     67 56 202;
-    --color-accent-light:     55 48 163;
-    --color-accent-muted:     224 231 255;
-    --color-outer-bg:         203 213 225;
+    --color-surface-border: 226 232 240;
+    --color-accent: 79 70 229;
+    --color-accent-hover: 67 56 202;
+    --color-accent-light: 55 48 163;
+    --color-accent-muted: 224 231 255;
+    --color-outer-bg: 203 213 225;
 
-    --color-content-primary:   15 23 42;
+    --color-content-primary: 15 23 42;
     --color-content-secondary: 71 85 105;
-    --color-content-muted:     100 116 139;
-    --color-content-subtle:    148 163 184;
+    --color-content-muted: 100 116 139;
+    --color-content-subtle: 148 163 184;
   }
 
   * {

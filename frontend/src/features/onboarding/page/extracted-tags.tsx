@@ -1,11 +1,11 @@
-import { Check, Sparkles } from 'lucide-react';
-import * as React from 'react';
+import { Check, Sparkles } from "lucide-react";
+import * as React from "react";
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { useTranslation } from '@/hooks/use-translation';
-import { cn } from '@/lib/utils';
-import type { Tag } from '@/types';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useTranslation } from "@/hooks/use-translation";
+import { cn } from "@/lib/utils";
+import type { Tag } from "@/types";
 
 interface ExtractedTagsProps {
   readonly tags: Tag[];
@@ -33,9 +33,13 @@ export function ExtractedTags({
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <Check className="h-4 w-4 text-green-400" aria-hidden />
-          <p className="text-sm font-medium text-green-400">{t.extractedTags.status}</p>
+          <p className="text-sm font-medium text-green-400">
+            {t.extractedTags.status}
+          </p>
         </div>
-        <p className="text-sm text-content-muted">{t.extractedTags.description}</p>
+        <p className="text-sm text-content-muted">
+          {t.extractedTags.description}
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -49,14 +53,18 @@ export function ExtractedTags({
                 onToggle(tag);
               }}
               aria-pressed={isActive}
-              aria-label={isActive ? t.extractedTags.ariaDisable(tag) : t.extractedTags.ariaEnable(tag)}
+              aria-label={
+                isActive
+                  ? t.extractedTags.ariaDisable(tag)
+                  : t.extractedTags.ariaEnable(tag)
+              }
             >
               <Badge
                 className={cn(
-                  'cursor-pointer transition-all',
+                  "cursor-pointer transition-all",
                   isActive
-                    ? 'border-accent bg-accent-muted text-accent-light'
-                    : 'border-surface-border bg-transparent text-content-subtle',
+                    ? "border-accent bg-accent-muted text-accent-light"
+                    : "border-surface-border bg-transparent text-content-subtle",
                 )}
               >
                 {tag}

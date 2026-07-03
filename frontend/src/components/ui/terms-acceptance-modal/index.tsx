@@ -1,16 +1,17 @@
-import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, ChevronUp, Scale } from 'lucide-react';
-import * as React from 'react';
-import { createPortal } from 'react-dom';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { AnimatePresence, motion } from "framer-motion";
+import { ChevronDown, ChevronUp, Scale } from "lucide-react";
+import * as React from "react";
+import { createPortal } from "react-dom";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
-import { Button } from '@/components/ui/button';
-import { useTranslation } from '@/hooks/use-translation';
-import { api } from '@/services/api';
-import { useTermsStore } from '@/stores/terms';
-import { useToastStore } from '@/stores/toast';
-import type { AcceptTermsResponse, LegalDocument } from '@/types';
+import { Spinner } from "@/components/shared/spinner";
+import { Button } from "@/components/ui/button";
+import { useTranslation } from "@/hooks/use-translation";
+import { api } from "@/services/api";
+import { useTermsStore } from "@/stores/terms";
+import { useToastStore } from "@/stores/toast";
+import type { AcceptTermsResponse, LegalDocument } from "@/types";
 
 /**
  * Full-screen blocking modal shown when the backend reports that the user
@@ -32,7 +33,9 @@ export function TermsAcceptanceModal(): React.JSX.Element {
   const t = useTranslation();
 
   const [termsDoc, setTermsDoc] = React.useState<LegalDocument | null>(null);
-  const [privacyDoc, setPrivacyDoc] = React.useState<LegalDocument | null>(null);
+  const [privacyDoc, setPrivacyDoc] = React.useState<LegalDocument | null>(
+    null,
+  );
   const [loadingDocs, setLoadingDocs] = React.useState(false);
   const [termsExpanded, setTermsExpanded] = React.useState(true);
   const [privacyExpanded, setPrivacyExpanded] = React.useState(true);
@@ -43,29 +46,42 @@ export function TermsAcceptanceModal(): React.JSX.Element {
     if (!needsAcceptance) return;
     setLoadingDocs(true);
     void Promise.all([
-      api.get<LegalDocument>('/legal/terms'),
-      api.get<LegalDocument>('/legal/privacy'),
+      api.get<LegalDocument>("/legal/terms"),
+      api.get<LegalDocument>("/legal/privacy"),
     ])
       .then(([terms, privacy]) => {
         setTermsDoc(terms);
         setPrivacyDoc(privacy);
       })
-      .finally(() => { setLoadingDocs(false); });
+      .finally(() => {
+        setLoadingDocs(false);
+      });
   }, [needsAcceptance]);
 
   const handleAccept = React.useCallback((): void => {
     if (!accepted || submitting) return;
     setSubmitting(true);
     void api
-      .post<AcceptTermsResponse>('/legal/accept', { termsVersion, privacyVersion })
+      .post<AcceptTermsResponse>("/legal/accept", {
+        termsVersion,
+        privacyVersion,
+      })
       .then(() => {
         clearAcceptance();
       })
       .catch(() => {
-        addToast({ type: 'error', message: 'Failed to save acceptance. Please try again.' });
+        addToast({ type: "error", message: t.legal.acceptError });
         setSubmitting(false);
       });
-  }, [accepted, submitting, termsVersion, privacyVersion, clearAcceptance, addToast]);
+  }, [
+    accepted,
+    submitting,
+    termsVersion,
+    privacyVersion,
+    clearAcceptance,
+    addToast,
+    t,
+  ]);
 
   return createPortal(
     <AnimatePresence>
@@ -79,61 +95,73 @@ export function TermsAcceptanceModal(): React.JSX.Element {
           transition={{ duration: 0.3 }}
         >
           <div className="flex h-full w-full max-w-[560px] flex-col bg-surface">
-          <div className="flex-1 overflow-y-auto overscroll-contain scrollbar-thin">
-            <div className="flex flex-col items-center gap-3 border-b border-surface-border px-6 py-8 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-muted">
-                <Scale className="h-7 w-7 text-accent-light" aria-hidden />
+            <div className="flex-1 overflow-y-auto overscroll-contain scrollbar-thin">
+              <div className="flex flex-col items-center gap-3 border-b border-surface-border px-6 py-8 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-muted">
+                  <Scale className="h-7 w-7 text-accent-light" aria-hidden />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-content-primary">
+                    {t.legal.acceptTitle}
+                  </h1>
+                  <p className="mt-1 text-sm text-content-muted">
+                    {t.legal.acceptSubtitle}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-content-primary">{t.legal.acceptTitle}</h1>
-                <p className="mt-1 text-sm text-content-muted">{t.legal.acceptSubtitle}</p>
+
+              <div className="px-6 py-4">
+                {loadingDocs ? (
+                  <div className="flex items-center justify-center py-20">
+                    <Spinner size="md" />
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <DocAccordion
+                      title={t.legal.termsTitle}
+                      doc={termsDoc}
+                      expanded={termsExpanded}
+                      onToggle={() => {
+                        setTermsExpanded((v) => !v);
+                      }}
+                    />
+                    <DocAccordion
+                      title={t.legal.privacyTitle}
+                      doc={privacyDoc}
+                      expanded={privacyExpanded}
+                      onToggle={() => {
+                        setPrivacyExpanded((v) => !v);
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="px-6 py-4">
-            {loadingDocs ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-surface-elevated border-t-accent" />
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                <DocAccordion
-                  title={t.legal.termsTitle}
-                  doc={termsDoc}
-                  expanded={termsExpanded}
-                  onToggle={() => { setTermsExpanded((v) => !v); }}
+            <div className="shrink-0 border-t border-surface-border px-6 pb-10 pt-5">
+              <label className="mb-5 flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={accepted}
+                  onChange={(e) => {
+                    setAccepted(e.target.checked);
+                  }}
+                  className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-accent"
                 />
-                <DocAccordion
-                  title={t.legal.privacyTitle}
-                  doc={privacyDoc}
-                  expanded={privacyExpanded}
-                  onToggle={() => { setPrivacyExpanded((v) => !v); }}
-                />
-              </div>
-            )}
+                <span className="text-sm text-content-secondary">
+                  {t.legal.acceptCheckbox}
+                </span>
+              </label>
+
+              <Button
+                variant="primary"
+                className="w-full"
+                disabled={!accepted || submitting || loadingDocs}
+                onClick={handleAccept}
+              >
+                {submitting ? t.legal.acceptLoading : t.legal.acceptButton}
+              </Button>
             </div>
-          </div>
-
-          <div className="shrink-0 border-t border-surface-border px-6 pb-10 pt-5">
-            <label className="mb-5 flex cursor-pointer items-start gap-3">
-              <input
-                type="checkbox"
-                checked={accepted}
-                onChange={(e) => { setAccepted(e.target.checked); }}
-                className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-accent"
-              />
-              <span className="text-sm text-content-secondary">{t.legal.acceptCheckbox}</span>
-            </label>
-
-            <Button
-              variant="primary"
-              className="w-full"
-              disabled={!accepted || submitting || loadingDocs}
-              onClick={handleAccept}
-            >
-              {submitting ? t.legal.acceptLoading : t.legal.acceptButton}
-            </Button>
-          </div>
           </div>
         </motion.div>
       )}
@@ -150,35 +178,51 @@ interface DocAccordionProps {
 }
 
 /** Collapsible accordion showing one legal document inside the acceptance modal. */
-function DocAccordion({ title, doc, expanded, onToggle }: DocAccordionProps): React.JSX.Element {
+function DocAccordion({
+  title,
+  doc,
+  expanded,
+  onToggle,
+}: DocAccordionProps): React.JSX.Element {
   return (
-    <div className="rounded-xl border border-surface-border bg-surface-card overflow-hidden">
+    <div className="overflow-hidden rounded-xl border border-surface-border bg-surface-card">
       <button
         type="button"
         onClick={onToggle}
         className="flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors hover:bg-surface-elevated"
         aria-expanded={expanded}
       >
-        <span className="text-sm font-medium text-content-primary">{title}</span>
-        {expanded
-          ? <ChevronUp className="h-4 w-4 shrink-0 text-content-muted" aria-hidden />
-          : <ChevronDown className="h-4 w-4 shrink-0 text-content-muted" aria-hidden />
-        }
+        <span className="text-sm font-medium text-content-primary">
+          {title}
+        </span>
+        {expanded ? (
+          <ChevronUp
+            className="h-4 w-4 shrink-0 text-content-muted"
+            aria-hidden
+          />
+        ) : (
+          <ChevronDown
+            className="h-4 w-4 shrink-0 text-content-muted"
+            aria-hidden
+          />
+        )}
       </button>
 
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
+            animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeInOut' }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
             className="overflow-hidden"
           >
             <div className="border-t border-surface-border px-4 py-4">
               {doc !== null ? (
                 <div className="prose prose-sm prose-invert max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{doc.content}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {doc.content}
+                  </ReactMarkdown>
                 </div>
               ) : (
                 <p className="text-sm text-content-muted">Loading…</p>

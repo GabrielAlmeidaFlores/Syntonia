@@ -1,10 +1,10 @@
-import * as React from 'react';
+import * as React from "react";
 
-import { FeedContainer } from './feed-container';
+import { FeedContainer } from "./feed-container";
 
-import { useFeed } from '@/hooks/use-feed';
-import { useJIT } from '@/hooks/use-jit';
-import { useFeedStore } from '@/stores/feed';
+import { useFeed } from "@/hooks/use-feed";
+import { useJIT } from "@/hooks/use-jit";
+import { useFeedStore } from "@/stores/feed";
 
 /**
  * Main feed page at /feed.

@@ -1,6 +1,6 @@
-import { delay, http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from "msw";
 
-import { MOCK_USER } from '../data/user';
+import { MOCK_USER } from "../data/user";
 
 interface AuthCallbackBody {
   readonly code: string;
@@ -21,12 +21,15 @@ interface AuthCallbackResponse {
  * The 800ms delay mimics a real Cognito round-trip.
  */
 export const authHandlers = [
-  http.post<never, AuthCallbackBody, AuthCallbackResponse>('/auth/callback', async () => {
-    await delay(800);
+  http.post<never, AuthCallbackBody, AuthCallbackResponse>(
+    "/auth/callback",
+    async () => {
+      await delay(800);
 
-    return HttpResponse.json({
-      user: MOCK_USER,
-      token: 'mock-jwt-token-syntonia-dev',
-    });
-  }),
+      return HttpResponse.json({
+        user: MOCK_USER,
+        token: "mock-jwt-token-syntonia-dev",
+      });
+    },
+  ),
 ];

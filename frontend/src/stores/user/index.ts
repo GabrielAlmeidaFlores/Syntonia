@@ -1,7 +1,7 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
-import type { Tag } from '@/types';
+import type { Tag } from "@/types";
 
 interface UserState {
   readonly description: string;
@@ -20,7 +20,7 @@ interface UserState {
 export const useUserStore = create<UserState>()(
   persist(
     (set, get) => ({
-      description: '',
+      description: "",
       extractedTags: [],
       activeTags: [],
       setDescription: (description) => set({ description }),
@@ -30,12 +30,14 @@ export const useUserStore = create<UserState>()(
         const isActive = current.includes(tag);
         if (isActive && current.length <= 1) return;
         set({
-          activeTags: isActive ? current.filter((t) => t !== tag) : [...current, tag],
+          activeTags: isActive
+            ? current.filter((t) => t !== tag)
+            : [...current, tag],
         });
       },
       setProfile: (description, tags) =>
         set({ description, extractedTags: tags, activeTags: tags }),
     }),
-    { name: 'syntonia-user-prefs' },
+    { name: "syntonia-user-prefs" },
   ),
 );

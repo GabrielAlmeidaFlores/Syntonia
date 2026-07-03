@@ -1,6 +1,6 @@
-import { setupWorker } from 'msw/browser';
+import { setupWorker } from "msw/browser";
 
-import { handlers } from './handlers';
+import { handlers } from "./handlers";
 
 /**
  * MSW ServiceWorker instance for the browser.

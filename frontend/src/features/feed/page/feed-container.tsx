@@ -1,13 +1,13 @@
-import { AnimatePresence, motion } from 'framer-motion';
-import * as React from 'react';
+import { AnimatePresence, motion } from "framer-motion";
+import * as React from "react";
 
-import { PostCard } from './post-card';
+import { PostCard } from "./post-card";
 
-import { EmptyFeedScreen } from '@/components/shared/empty-feed-screen';
-import { FeedInitialLoading } from '@/components/shared/feed-initial-loading';
-import { useSnapNavigation } from '@/hooks/use-snap-navigation';
-import { useFeedStore } from '@/stores/feed';
-import type { Post } from '@/types';
+import { EmptyFeedScreen } from "@/components/shared/empty-feed-screen";
+import { FeedInitialLoading } from "@/components/shared/feed-initial-loading";
+import { useSnapNavigation } from "@/hooks/use-snap-navigation";
+import { useFeedStore } from "@/stores/feed";
+import type { Post } from "@/types";
 
 /** Minimum ms the initial loading screen stays visible so the animation plays fully. */
 const MIN_LOADING_MS = 1400;
@@ -51,8 +51,12 @@ export function FeedContainer({
     if (posts.length === 0) return;
     const elapsed = Date.now() - mountTimeRef.current;
     const remaining = Math.max(0, MIN_LOADING_MS - elapsed);
-    const timer = setTimeout(() => { setShowLoading(false); }, remaining);
-    return () => { clearTimeout(timer); };
+    const timer = setTimeout(() => {
+      setShowLoading(false);
+    }, remaining);
+    return () => {
+      clearTimeout(timer);
+    };
   }, [posts.length]);
 
   useSnapNavigation(containerRef);
@@ -66,7 +70,7 @@ export function FeedContainer({
   React.useEffect(() => {
     const el = containerRef.current;
     if (el === null) return;
-    el.style.overflowY = isPostExpanded ? 'hidden' : '';
+    el.style.overflowY = isPostExpanded ? "hidden" : "";
   }, [isPostExpanded]);
 
   React.useEffect(() => {
@@ -74,7 +78,7 @@ export function FeedContainer({
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            const idx = Number(entry.target.getAttribute('data-index'));
+            const idx = Number(entry.target.getAttribute("data-index"));
             setCurrentIndex(idx);
           }
         }
@@ -82,7 +86,7 @@ export function FeedContainer({
       { threshold: 0.7 },
     );
 
-    const cards = containerRef.current?.querySelectorAll('[data-index]') ?? [];
+    const cards = containerRef.current?.querySelectorAll("[data-index]") ?? [];
     for (const card of cards) observer.observe(card);
 
     return () => {
@@ -107,7 +111,7 @@ export function FeedContainer({
             className="absolute inset-0 z-10"
             initial={{ opacity: 1 }}
             exit={{ opacity: 0, scale: 1.02 }}
-            transition={{ duration: 0.4, ease: 'easeInOut' }}
+            transition={{ duration: 0.4, ease: "easeInOut" }}
           >
             <FeedInitialLoading />
           </motion.div>

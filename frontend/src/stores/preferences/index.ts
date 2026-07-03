@@ -1,11 +1,11 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 /** Visual theme applied to the application. */
-export type Theme = 'dark' | 'light';
+export type Theme = "dark" | "light";
 
 /** UI language used for content labels. */
-export type Language = 'en' | 'pt-BR';
+export type Language = "en" | "pt-BR";
 
 interface PreferencesState {
   readonly theme: Theme;
@@ -19,8 +19,10 @@ interface PreferencesState {
  * Falls back to 'dark' if the API is unavailable (e.g. SSR).
  */
 function detectSystemTheme(): Theme {
-  if (typeof window === 'undefined') return 'dark';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  if (typeof window === "undefined") return "dark";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
 }
 
 /**
@@ -32,10 +34,10 @@ export const usePreferencesStore = create<PreferencesState>()(
   persist(
     (set) => ({
       theme: detectSystemTheme(),
-      language: 'en',
+      language: "en",
       setTheme: (theme) => set({ theme }),
       setLanguage: (language) => set({ language }),
     }),
-    { name: 'syntonia-preferences' },
+    { name: "syntonia-preferences" },
   ),
 );

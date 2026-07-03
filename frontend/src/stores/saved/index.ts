@@ -1,8 +1,8 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
-import { MOCK_SAVED_AT } from '@/mocks/data/saved';
-import type { Post } from '@/types';
+import { MOCK_SAVED_AT } from "@/mocks/data/saved";
+import type { Post } from "@/types";
 
 interface SavedState {
   /** Set of post IDs that the user has saved — persisted to localStorage. */
@@ -41,7 +41,10 @@ export const useSavedStore = create<SavedState>()(
           next.add(post.id);
           return {
             savedIds: next,
-            posts: [{ ...post, savedAt }, ...state.posts.filter((p) => p.id !== post.id)],
+            posts: [
+              { ...post, savedAt },
+              ...state.posts.filter((p) => p.id !== post.id),
+            ],
           };
         }),
 
@@ -67,7 +70,7 @@ export const useSavedStore = create<SavedState>()(
       isSaved: (postId) => get().savedIds.has(postId),
     }),
     {
-      name: 'syntonia-saved',
+      name: "syntonia-saved",
       partialize: (state) => ({ savedIds: [...state.savedIds] }),
       merge: (persisted, current) => {
         const raw = persisted as { savedIds?: string[] };

@@ -1,8 +1,8 @@
-import { motion } from 'framer-motion';
-import { Sparkles } from 'lucide-react';
-import * as React from 'react';
+import { motion } from "framer-motion";
+import { Sparkles } from "lucide-react";
+import * as React from "react";
 
-import { useTranslation } from '@/hooks/use-translation';
+import { useTranslation } from "@/hooks/use-translation";
 
 interface SkeletonRow {
   readonly id: string;
@@ -14,9 +14,23 @@ interface SkeletonRow {
 }
 
 const SKELETON_ROWS: SkeletonRow[] = [
-  { id: 'row-a', tag1: 'w-14', tag2: 'w-20', tag3: 'w-16', title: 'w-3/4', delay: 0 },
-  { id: 'row-b', tag1: 'w-16', tag2: 'w-12', title: 'w-2/3', delay: 0.05 },
-  { id: 'row-c', tag1: 'w-20', tag2: 'w-14', tag3: 'w-16', title: 'w-4/5', delay: 0.1 },
+  {
+    id: "row-a",
+    tag1: "w-14",
+    tag2: "w-20",
+    tag3: "w-16",
+    title: "w-3/4",
+    delay: 0,
+  },
+  { id: "row-b", tag1: "w-16", tag2: "w-12", title: "w-2/3", delay: 0.05 },
+  {
+    id: "row-c",
+    tag1: "w-20",
+    tag2: "w-14",
+    tag3: "w-16",
+    title: "w-4/5",
+    delay: 0.1,
+  },
 ];
 
 /**
@@ -35,9 +49,10 @@ export function FeedInitialLoading(): React.JSX.Element {
       <div
         className="absolute inset-0 opacity-20"
         style={{
-          backgroundImage: 'linear-gradient(135deg, transparent 25%, rgba(79,70,229,0.2) 50%, transparent 75%)',
-          backgroundSize: '200% 200%',
-          animation: 'shimmer 2.4s linear infinite',
+          backgroundImage:
+            "linear-gradient(135deg, transparent 25%, rgba(79,70,229,0.2) 50%, transparent 75%)",
+          backgroundSize: "200% 200%",
+          animation: "shimmer 2.4s linear infinite",
         }}
       />
 
@@ -45,7 +60,7 @@ export function FeedInitialLoading(): React.JSX.Element {
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', damping: 18, stiffness: 200 }}
+          transition={{ type: "spring", damping: 18, stiffness: 200 }}
           className="flex h-20 w-20 items-center justify-center rounded-3xl bg-accent/20 backdrop-blur-sm ring-1 ring-accent/30"
         >
           <Sparkles className="h-10 w-10 text-accent-light" aria-hidden />
@@ -57,7 +72,9 @@ export function FeedInitialLoading(): React.JSX.Element {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15, duration: 0.3 }}
         >
-          <p className="text-sm font-medium text-content-muted">{t.feedLoading.heading}</p>
+          <p className="text-sm font-medium text-content-muted">
+            {t.feedLoading.heading}
+          </p>
 
           <div className="flex items-center gap-1.5 mt-1">
             {[0, 150, 300].map((delay) => (
@@ -81,14 +98,24 @@ export function FeedInitialLoading(): React.JSX.Element {
             transition={{ delay: 0.2 + row.delay, duration: 0.25 }}
           >
             <div className="flex gap-2">
-              <div className={`h-5 ${row.tag1} rounded-full bg-white/10 animate-pulse`} />
-              <div className={`h-5 ${row.tag2} rounded-full bg-white/10 animate-pulse`} />
+              <div
+                className={`h-5 ${row.tag1} rounded-full bg-white/10 animate-pulse`}
+              />
+              <div
+                className={`h-5 ${row.tag2} rounded-full bg-white/10 animate-pulse`}
+              />
               {row.tag3 !== undefined && (
-                <div className={`h-5 ${row.tag3} rounded-full bg-white/10 animate-pulse`} />
+                <div
+                  className={`h-5 ${row.tag3} rounded-full bg-white/10 animate-pulse`}
+                />
               )}
             </div>
-            <div className={`h-6 ${row.title} rounded-lg bg-white/10 animate-pulse`} />
-            <div className="h-3 w-full rounded bg-white/8 animate-pulse" />
+            <div
+              className={`h-6 ${row.title} rounded-lg bg-white/10 animate-pulse`}
+            />
+            <div
+              className={`h-3 w-full rounded bg-white/[0.08] animate-pulse`}
+            />
           </motion.div>
         ))}
       </div>

@@ -1,8 +1,8 @@
-import { AnimatePresence, motion } from 'framer-motion';
-import * as React from 'react';
-import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from "framer-motion";
+import * as React from "react";
+import { createPortal } from "react-dom";
 
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 
 interface ConfirmModalProps {
   readonly open: boolean;
@@ -13,7 +13,7 @@ interface ConfirmModalProps {
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
   /** Visual variant of the confirm button. Defaults to 'destructive'. */
-  readonly confirmVariant?: 'destructive' | 'primary';
+  readonly confirmVariant?: "destructive" | "primary";
 }
 
 /**
@@ -31,15 +31,17 @@ export function ConfirmModal({
   cancelLabel,
   onConfirm,
   onCancel,
-  confirmVariant = 'destructive',
+  confirmVariant = "destructive",
 }: ConfirmModalProps): React.JSX.Element {
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onCancel();
+      if (e.key === "Escape") onCancel();
     };
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('keydown', onKey); };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open, onCancel]);
 
   return createPortal(
@@ -48,7 +50,11 @@ export function ConfirmModal({
         <>
           <motion.div
             className="fixed inset-0"
-            style={{ zIndex: 10000, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+            style={{
+              zIndex: 10000,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              backdropFilter: "blur(4px)",
+            }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -60,10 +66,10 @@ export function ConfirmModal({
           <motion.div
             className="fixed inset-x-0 bottom-0"
             style={{ zIndex: 10001 }}
-            initial={{ y: '100%' }}
+            initial={{ y: "100%" }}
             animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 28, stiffness: 320 }}
           >
             <div
               role="dialog"
@@ -72,7 +78,10 @@ export function ConfirmModal({
               aria-describedby="confirm-message"
               className="mx-auto w-full max-w-[560px] rounded-t-2xl border-t border-surface-border bg-surface-card px-5 pb-10 pt-4"
             >
-              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-surface-border" aria-hidden />
+              <div
+                className="mx-auto mb-4 h-1 w-10 rounded-full bg-surface-border"
+                aria-hidden
+              />
 
               <h2
                 id="confirm-title"
@@ -96,11 +105,7 @@ export function ConfirmModal({
                 >
                   {confirmLabel}
                 </Button>
-                <Button
-                  variant="ghost"
-                  className="w-full"
-                  onClick={onCancel}
-                >
+                <Button variant="ghost" className="w-full" onClick={onCancel}>
                   {cancelLabel}
                 </Button>
               </div>

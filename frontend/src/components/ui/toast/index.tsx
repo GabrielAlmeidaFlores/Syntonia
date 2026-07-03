@@ -1,9 +1,9 @@
-import { AnimatePresence, motion } from 'framer-motion';
-import { CheckCircle, Info, TriangleAlert, X, XCircle } from 'lucide-react';
-import * as React from 'react';
+import { AnimatePresence, motion } from "framer-motion";
+import { CheckCircle, Info, TriangleAlert, X, XCircle } from "lucide-react";
+import * as React from "react";
 
-import { cn } from '@/lib/utils';
-import { useToastStore, type ToastType } from '@/stores/toast';
+import { cn } from "@/lib/utils";
+import { useToastStore, type ToastType } from "@/stores/toast";
 
 /** Duration of the exit animation in ms. */
 const EXIT_MS = 300;
@@ -16,24 +16,34 @@ interface AccentConfig {
 /** Returns the accent bar color and icon for each toast type. */
 function toastAccent(type: ToastType): AccentConfig {
   switch (type) {
-    case 'success':
+    case "success":
       return {
-        bar: 'bg-green-500',
-        icon: <CheckCircle className="h-4 w-4 shrink-0 text-green-500" aria-hidden />,
+        bar: "bg-green-500",
+        icon: (
+          <CheckCircle
+            className="h-4 w-4 shrink-0 text-green-500"
+            aria-hidden
+          />
+        ),
       };
-    case 'error':
+    case "error":
       return {
-        bar: 'bg-red-500',
+        bar: "bg-red-500",
         icon: <XCircle className="h-4 w-4 shrink-0 text-red-500" aria-hidden />,
       };
-    case 'warning':
+    case "warning":
       return {
-        bar: 'bg-amber-400',
-        icon: <TriangleAlert className="h-4 w-4 shrink-0 text-amber-400" aria-hidden />,
+        bar: "bg-amber-400",
+        icon: (
+          <TriangleAlert
+            className="h-4 w-4 shrink-0 text-amber-400"
+            aria-hidden
+          />
+        ),
       };
-    case 'info':
+    case "info":
       return {
-        bar: 'bg-blue-500',
+        bar: "bg-blue-500",
         icon: <Info className="h-4 w-4 shrink-0 text-blue-500" aria-hidden />,
       };
   }
@@ -54,8 +64,12 @@ function ToastItem({
   const { bar, icon } = toastAccent(type);
 
   React.useEffect(() => {
-    const timer = setTimeout(() => { removeToast(id); }, duration);
-    return () => { clearTimeout(timer); };
+    const timer = setTimeout(() => {
+      removeToast(id);
+    }, duration);
+    return () => {
+      clearTimeout(timer);
+    };
   }, [id, duration, removeToast]);
 
   return (
@@ -65,28 +79,35 @@ function ToastItem({
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={{ opacity: 0, x: 80, scale: 0.94 }}
       transition={{
-        layout: { type: 'spring', damping: 26, stiffness: 320 },
-        opacity: { duration: EXIT_MS / 1000, ease: 'easeInOut' },
-        x: { type: 'spring', damping: 24, stiffness: 280 },
+        layout: { type: "spring", damping: 26, stiffness: 320 },
+        opacity: { duration: EXIT_MS / 1000, ease: "easeInOut" },
+        x: { type: "spring", damping: 24, stiffness: 280 },
         scale: { duration: EXIT_MS / 1000 },
       }}
       role="status"
       aria-live="polite"
       className={cn(
-        'relative flex w-full items-start gap-3 overflow-hidden rounded-xl',
-        'border border-surface-border bg-surface-card px-4 py-3.5',
-        'shadow-[0_8px_32px_-4px_rgba(0,0,0,0.25)]',
+        "relative flex w-full items-start gap-3 overflow-hidden rounded-xl",
+        "border border-surface-border bg-surface-card px-4 py-3.5",
+        "shadow-[0_8px_32px_-4px_rgba(0,0,0,0.25)]",
       )}
     >
-      <div className={cn('absolute left-0 top-0 h-full w-1 rounded-l-xl', bar)} aria-hidden />
+      <div
+        className={cn("absolute left-0 top-0 h-full w-1 rounded-l-xl", bar)}
+        aria-hidden
+      />
 
       <div className="ml-1 mt-0.5">{icon}</div>
 
-      <p className="flex-1 text-sm leading-snug text-content-primary">{message}</p>
+      <p className="flex-1 text-sm leading-snug text-content-primary">
+        {message}
+      </p>
 
       <button
         type="button"
-        onClick={() => { removeToast(id); }}
+        onClick={() => {
+          removeToast(id);
+        }}
         className="mt-0.5 shrink-0 rounded p-0.5 text-content-muted transition-colors hover:text-content-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
         aria-label="Dismiss notification"
       >
@@ -118,12 +139,4 @@ export function ToastContainer(): React.JSX.Element {
       </AnimatePresence>
     </div>
   );
-}
-
-/**
- * No-op — kept for backwards compatibility with app.tsx.
- * The viewport is now embedded in ToastContainer.
- */
-export function ToastViewport(): null {
-  return null;
 }

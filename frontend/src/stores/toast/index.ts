@@ -1,6 +1,6 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
-export type ToastType = 'success' | 'error' | 'info' | 'warning';
+export type ToastType = "success" | "error" | "info" | "warning";
 
 export interface ToastMessage {
   readonly id: string;
@@ -11,7 +11,7 @@ export interface ToastMessage {
 
 interface ToastState {
   readonly toasts: ToastMessage[];
-  readonly addToast: (toast: Omit<ToastMessage, 'id'>) => void;
+  readonly addToast: (toast: Omit<ToastMessage, "id">) => void;
   readonly removeToast: (id: string) => void;
 }
 

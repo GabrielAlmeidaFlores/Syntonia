@@ -1,11 +1,10 @@
-import { delay, http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from "msw";
 
+import { mockExtractTags } from "../data/tags";
+import { MOCK_USER } from "../data/user";
 
-import { mockExtractTags } from '../data/tags';
-import { MOCK_USER } from '../data/user';
-
-import { AVAILABLE_TAGS } from '@/lib/constants';
-import type { Tag, UpdateProfileResponse, UserPreferences } from '@/types';
+import { AVAILABLE_TAGS } from "@/lib/constants";
+import type { Tag, UpdateProfileResponse, UserPreferences } from "@/types";
 
 interface UpdatePreferencesBody {
   readonly activeTags: Tag[];
@@ -24,7 +23,7 @@ interface UpdateProfileBody {
  * The 200ms delay simulates a DynamoDB GetItem on SintoniaUsers.
  */
 const getPreferencesHandler = http.get<never, never, UserPreferences>(
-  '/user/preferences',
+  "/user/preferences",
   async () => {
     await delay(200);
 
@@ -46,7 +45,7 @@ const getPreferencesHandler = http.get<never, never, UserPreferences>(
  * The 400ms delay simulates a DynamoDB UpdateItem on SintoniaUsers.
  */
 const putPreferencesHandler = http.put<never, UpdatePreferencesBody>(
-  '/user/preferences',
+  "/user/preferences",
   async ({ request }) => {
     await delay(400);
 
@@ -71,22 +70,27 @@ const putPreferencesHandler = http.put<never, UpdatePreferencesBody>(
  *
  * The 2000ms delay simulates the synchronous Gemini API call (real latency).
  */
-const putProfileHandler = http.put<never, UpdateProfileBody, UpdateProfileResponse>(
-  '/user/profile',
-  async ({ request }) => {
-    await delay(2000);
+const putProfileHandler = http.put<
+  never,
+  UpdateProfileBody,
+  UpdateProfileResponse
+>("/user/profile", async ({ request }) => {
+  await delay(2000);
 
-    const { description } = await request.json();
-    const extractedTags = mockExtractTags(description);
+  const { description } = await request.json();
+  const extractedTags = mockExtractTags(description);
 
-    MOCK_USER.activeTags.splice(0, MOCK_USER.activeTags.length, ...extractedTags);
+  MOCK_USER.activeTags.splice(0, MOCK_USER.activeTags.length, ...extractedTags);
 
-    return HttpResponse.json({
-      description,
-      activeTags: extractedTags,
-      updatedAt: new Date().toISOString(),
-    });
-  },
-);
+  return HttpResponse.json({
+    description,
+    activeTags: extractedTags,
+    updatedAt: new Date().toISOString(),
+  });
+});
 
-export const userHandlers = [getPreferencesHandler, putPreferencesHandler, putProfileHandler];
+export const userHandlers = [
+  getPreferencesHandler,
+  putPreferencesHandler,
+  putProfileHandler,
+];

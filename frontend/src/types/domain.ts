@@ -1,24 +1,24 @@
 export type Tag =
-  | 'AWS'
-  | 'React'
-  | 'TypeScript'
-  | 'Node.js'
-  | 'Python'
-  | 'Docker'
-  | 'Kubernetes'
-  | 'Linux'
-  | 'DynamoDB'
-  | 'PostgreSQL'
-  | 'Redis'
-  | 'GraphQL'
-  | 'Rust'
-  | 'Go'
-  | 'CI/CD'
-  | 'Terraform'
-  | 'Serverless'
-  | 'Security'
-  | 'Performance'
-  | 'Architecture';
+  | "AWS"
+  | "React"
+  | "TypeScript"
+  | "Node.js"
+  | "Python"
+  | "Docker"
+  | "Kubernetes"
+  | "Linux"
+  | "DynamoDB"
+  | "PostgreSQL"
+  | "Redis"
+  | "GraphQL"
+  | "Rust"
+  | "Go"
+  | "CI/CD"
+  | "Terraform"
+  | "Serverless"
+  | "Security"
+  | "Performance"
+  | "Architecture";
 
 /** A single AI-generated post in the user's feed. */
 export interface Post {
@@ -69,7 +69,7 @@ export interface FeedResponse {
 /** Response from POST /feed/request. */
 export interface GenerationResponse {
   readonly requestIds: string[];
-  readonly status: 'PENDING';
+  readonly status: "PENDING";
   readonly message: string;
 }
 
@@ -97,7 +97,7 @@ export interface TermsStatus {
 
 /** Response from GET /legal/terms or GET /legal/privacy. */
 export interface LegalDocument {
-  readonly type: 'terms' | 'privacy';
+  readonly type: "terms" | "privacy";
   readonly version: string;
   readonly updatedAt: string;
   readonly content: string;

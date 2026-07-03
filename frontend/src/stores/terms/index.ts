@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
 interface TermsState {
   /** Whether the user must accept new terms before using the app. */
@@ -9,7 +9,11 @@ interface TermsState {
   readonly privacyVersion: string;
   /** True while GET /legal/terms-status is in flight. */
   readonly isChecking: boolean;
-  readonly setStatus: (needsAcceptance: boolean, termsVersion: string, privacyVersion: string) => void;
+  readonly setStatus: (
+    needsAcceptance: boolean,
+    termsVersion: string,
+    privacyVersion: string,
+  ) => void;
   readonly setChecking: (checking: boolean) => void;
   readonly clearAcceptance: () => void;
 }
@@ -21,8 +25,8 @@ interface TermsState {
  */
 export const useTermsStore = create<TermsState>((set) => ({
   needsAcceptance: false,
-  termsVersion: '',
-  privacyVersion: '',
+  termsVersion: "",
+  privacyVersion: "",
   isChecking: false,
 
   setStatus: (needsAcceptance, termsVersion, privacyVersion) =>
@@ -30,6 +34,5 @@ export const useTermsStore = create<TermsState>((set) => ({
 
   setChecking: (isChecking) => set({ isChecking }),
 
-  clearAcceptance: () =>
-    set({ needsAcceptance: false }),
+  clearAcceptance: () => set({ needsAcceptance: false }),
 }));

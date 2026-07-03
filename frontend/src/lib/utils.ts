@@ -1,6 +1,6 @@
-import type { ClassValue } from 'clsx';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import type { ClassValue } from "clsx";
+import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 /** Merges Tailwind class names, resolving conflicts via tailwind-merge. */
 export function cn(...inputs: ClassValue[]): string {
@@ -9,10 +9,10 @@ export function cn(...inputs: ClassValue[]): string {
 
 /** Formats an ISO 8601 date string as a short human-readable date. */
 export function formatDate(dateString: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
+  return new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
   }).format(new Date(dateString));
 }
 
@@ -25,7 +25,7 @@ export function formatRelativeTime(dateString: string): string {
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffMinutes < 1) return 'just now';
+  if (diffMinutes < 1) return "just now";
   if (diffMinutes < 60) return `${String(diffMinutes)}m ago`;
   if (diffHours < 24) return `${String(diffHours)}h ago`;
   if (diffDays < 7) return `${String(diffDays)}d ago`;

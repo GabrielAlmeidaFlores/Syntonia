@@ -1,9 +1,9 @@
-import * as React from 'react';
+import * as React from "react";
 
-import { Badge } from '@/components/ui/badge';
-import { useTranslation } from '@/hooks/use-translation';
-import { cn } from '@/lib/utils';
-import type { Tag } from '@/types';
+import { Badge } from "@/components/ui/badge";
+import { useTranslation } from "@/hooks/use-translation";
+import { cn } from "@/lib/utils";
+import type { Tag } from "@/types";
 
 interface TagSelectorProps {
   readonly tags: Tag[];
@@ -26,7 +26,7 @@ export function TagSelector({
   const t = useTranslation();
 
   return (
-    <div className={cn('flex flex-wrap gap-2', className)}>
+    <div className={cn("flex flex-wrap gap-2", className)}>
       {tags.map((tag) => {
         const isActive = activeTags.includes(tag);
         return (
@@ -37,9 +37,13 @@ export function TagSelector({
               onToggle(tag);
             }}
             aria-pressed={isActive}
-            aria-label={isActive ? t.tagSelector.ariaDisable(tag) : t.tagSelector.ariaEnable(tag)}
+            aria-label={
+              isActive
+                ? t.tagSelector.ariaDisable(tag)
+                : t.tagSelector.ariaEnable(tag)
+            }
           >
-            <Badge variant={isActive ? 'tag-active' : 'tag'}>{tag}</Badge>
+            <Badge variant={isActive ? "tag-active" : "tag"}>{tag}</Badge>
           </button>
         );
       })}
