@@ -5,6 +5,7 @@ import * as React from 'react';
 import { PostDetail } from './post-detail';
 
 import { Badge } from '@/components/ui/badge';
+import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
 import { useFeedStore } from '@/stores/feed';
 import type { Post } from '@/types';
@@ -17,20 +18,25 @@ interface PostCardProps {
 /**
  * Full-screen snap-scroll post card.
  *
- * Opens PostDetail via:
- *   - Left-swipe on desktop (mouse drag) or mobile (touch).
- *     Uses native addEventListener with passive:false on pointermove so we can
- *     call preventDefault() when the gesture is clearly horizontal, blocking the
- *     snap-scroll from consuming the event.
- *   - Tapping the "Read" button.
+ * Navigation:
+ *   - Swipe LEFT on the gradient card → opens PostDetail.
+ *   - Tap "Read" button → opens PostDetail.
+ *   - Swipe LEFT inside PostDetail → closes PostDetail (same direction, continues forward).
+ *   - Tap "Back" button inside PostDetail → closes PostDetail.
+ *
+ * Both open and close gestures use native pointer events with passive:false on
+ * pointermove so we can call preventDefault() when horizontal motion is confirmed,
+ * preventing the snap-scroll from competing with the swipe.
  *
  * While PostDetail is open, `isPostExpanded` is set in useFeedStore so the
- * snap container can lock its own scroll (preventing accidental swipe-to-next-card).
+ * snap container locks its own scroll.
  */
 export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
   const [expanded, setExpanded] = React.useState(false);
   const bgRef = React.useRef<HTMLDivElement>(null);
+  const detailRef = React.useRef<HTMLDivElement>(null);
   const setPostExpanded = useFeedStore((s) => s.setPostExpanded);
+  const t = useTranslation();
 
   const open = React.useCallback((): void => {
     setExpanded(true);
@@ -51,12 +57,15 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
     let startX = 0;
     let startY = 0;
     let active = false;
+    let directionLocked = false;
     let horizontal = false;
 
     const onDown = (e: PointerEvent): void => {
+      el.setPointerCapture(e.pointerId);
       startX = e.clientX;
       startY = e.clientY;
       active = true;
+      directionLocked = false;
       horizontal = false;
     };
 
@@ -65,8 +74,15 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
-      if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+      if (!directionLocked && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+        directionLocked = true;
         horizontal = Math.abs(dx) > Math.abs(dy);
+
+        if (!horizontal) {
+          el.releasePointerCapture(e.pointerId);
+          active = false;
+          return;
+        }
       }
 
       if (horizontal) {
@@ -77,6 +93,7 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
     const onUp = (e: PointerEvent): void => {
       if (!active) return;
       active = false;
+      directionLocked = false;
       const dx = e.clientX - startX;
       if (horizontal && dx < -50) {
         open();
@@ -86,6 +103,7 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
 
     const onCancel = (): void => {
       active = false;
+      directionLocked = false;
       horizontal = false;
     };
 
@@ -102,11 +120,81 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
     };
   }, [open]);
 
+  React.useEffect(() => {
+    const el = detailRef.current;
+    if (el === null || !expanded) return;
+
+    let startX = 0;
+    let startY = 0;
+    let active = false;
+    let directionLocked = false;
+    let horizontal = false;
+
+    const onDown = (e: PointerEvent): void => {
+      el.setPointerCapture(e.pointerId);
+      startX = e.clientX;
+      startY = e.clientY;
+      active = true;
+      directionLocked = false;
+      horizontal = false;
+    };
+
+    const onMove = (e: PointerEvent): void => {
+      if (!active) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      if (!directionLocked && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+        directionLocked = true;
+        horizontal = Math.abs(dx) > Math.abs(dy);
+
+        if (!horizontal) {
+          el.releasePointerCapture(e.pointerId);
+          active = false;
+          return;
+        }
+      }
+
+      if (horizontal) {
+        e.preventDefault();
+      }
+    };
+
+    const onUp = (e: PointerEvent): void => {
+      if (!active) return;
+      active = false;
+      directionLocked = false;
+      const dx = e.clientX - startX;
+      if (horizontal && dx > 50) {
+        close();
+      }
+      horizontal = false;
+    };
+
+    const onCancel = (): void => {
+      active = false;
+      directionLocked = false;
+      horizontal = false;
+    };
+
+    el.addEventListener('pointerdown', onDown, { passive: true });
+    el.addEventListener('pointermove', onMove, { passive: false });
+    el.addEventListener('pointerup', onUp, { passive: true });
+    el.addEventListener('pointercancel', onCancel, { passive: true });
+
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onCancel);
+    };
+  }, [expanded, close]);
+
   return (
     <div
       data-index={index}
       className="snap-card relative h-full flex-shrink-0 overflow-hidden"
-      aria-label={`Post: ${post.title}`}
+      aria-label={t.feed.ariaPost(post.title)}
     >
       <div
         ref={bgRef}
@@ -137,10 +225,10 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
             type="button"
             onClick={open}
             className="mt-2 flex items-center gap-2 self-start rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs text-white/80 backdrop-blur-sm transition-colors hover:bg-white/20 active:bg-white/30"
-            aria-label="Read full post"
+            aria-label={t.feed.ariaReadFull}
           >
             <BookOpen className="h-3.5 w-3.5" aria-hidden />
-            Read
+            {t.feed.readButton}
           </button>
         </div>
       </div>
@@ -148,6 +236,7 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
       <AnimatePresence>
         {expanded && (
           <motion.div
+            ref={detailRef}
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}

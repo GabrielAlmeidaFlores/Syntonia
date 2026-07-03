@@ -4,6 +4,7 @@ import { PostCard } from './post-card';
 
 import { EmptyFeedScreen } from '@/components/shared/empty-feed-screen';
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton';
+import { useSnapNavigation } from '@/hooks/use-snap-navigation';
 import { useFeedStore } from '@/stores/feed';
 import type { Post } from '@/types';
 
@@ -22,6 +23,9 @@ interface FeedContainerProps {
  * When `isPostExpanded` is true (a PostDetail is open), `overflowY` is set
  * directly via the DOM ref to lock the snap container — bypassing CSS cascade
  * so `snap-feed`'s `overflow-y: scroll` cannot override the lock.
+ *
+ * `useSnapNavigation` intercepts mouse wheel and keyboard events to provide
+ * reliable card-to-card navigation on desktop.
  */
 export function FeedContainer({
   posts,
@@ -30,7 +34,16 @@ export function FeedContainer({
 }: FeedContainerProps): React.JSX.Element {
   const setCurrentIndex = useFeedStore((s) => s.setCurrentIndex);
   const isPostExpanded = useFeedStore((s) => s.isPostExpanded);
+  const setPostExpanded = useFeedStore((s) => s.setPostExpanded);
   const containerRef = React.useRef<HTMLDivElement>(null);
+
+  useSnapNavigation(containerRef);
+
+  React.useEffect(() => {
+    return () => {
+      setPostExpanded(false);
+    };
+  }, [setPostExpanded]);
 
   React.useEffect(() => {
     const el = containerRef.current;
@@ -68,7 +81,11 @@ export function FeedContainer({
   }
 
   return (
-    <div ref={containerRef} className="snap-feed h-full">
+    <div
+      ref={containerRef}
+      tabIndex={0}
+      className="snap-feed h-full outline-none"
+    >
       {posts.map((post, idx) => (
         <PostCard key={post.id} post={post} index={idx} />
       ))}

@@ -3,6 +3,8 @@ import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { PostCard } from '@/features/feed/page/post-card';
+import { useSnapNavigation } from '@/hooks/use-snap-navigation';
+import { useTranslation } from '@/hooks/use-translation';
 import { useFeedStore } from '@/stores/feed';
 import { useSavedStore } from '@/stores/saved';
 
@@ -23,9 +25,19 @@ export default function SavedFeedPage(): React.JSX.Element {
   const [searchParams] = useSearchParams();
   const posts = useSavedStore((s) => s.posts);
   const isPostExpanded = useFeedStore((s) => s.isPostExpanded);
+  const setPostExpanded = useFeedStore((s) => s.setPostExpanded);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const t = useTranslation();
+
+  useSnapNavigation(containerRef);
 
   const startId = searchParams.get('start');
+
+  React.useEffect(() => {
+    return () => {
+      setPostExpanded(false);
+    };
+  }, [setPostExpanded]);
 
   React.useEffect(() => {
     const el = containerRef.current;
@@ -47,16 +59,16 @@ export default function SavedFeedPage(): React.JSX.Element {
   if (posts.length === 0) {
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-surface px-6">
-        <p className="text-sm text-gray-400">No saved posts</p>
+        <p className="text-sm text-content-muted">{t.saved.noSavedPosts}</p>
         <button
           type="button"
           onClick={() => {
             navigate('/saved');
           }}
           className="text-sm text-accent-light underline"
-          aria-label="Go back to saved grid"
+          aria-label={t.saved.ariaBack}
         >
-          Back to saved
+          {t.saved.backButton}
         </button>
       </div>
     );
@@ -70,13 +82,13 @@ export default function SavedFeedPage(): React.JSX.Element {
           navigate('/saved');
         }}
         className="absolute left-4 top-4 z-20 flex items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-xs text-white/80 backdrop-blur-sm transition-colors hover:bg-black/60"
-        aria-label="Back to saved grid"
+        aria-label={t.saved.ariaBack}
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-        Saved
+        {t.saved.backButton}
       </button>
 
-      <div ref={containerRef} className="snap-feed h-dvh">
+      <div ref={containerRef} tabIndex={0} className="snap-feed h-dvh outline-none">
         {posts.map((post, i) => (
           <PostCard key={post.id} post={post} index={i} />
         ))}

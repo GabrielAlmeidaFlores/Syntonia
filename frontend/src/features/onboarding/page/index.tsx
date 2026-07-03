@@ -6,6 +6,7 @@ import { ExtractedTags } from './extracted-tags';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { useTranslation } from '@/hooks/use-translation';
 import { api } from '@/services/api';
 import { useUserStore } from '@/stores/user';
 import type { Tag, UpdateProfileResponse } from '@/types';
@@ -24,7 +25,8 @@ type Step = 'input' | 'extracting' | 'review';
  */
 export default function OnboardingPage(): React.JSX.Element {
   const navigate = useNavigate();
-  const { setProfile } = useUserStore();
+  const setProfile = useUserStore((s) => s.setProfile);
+  const t = useTranslation();
 
   const [step, setStep] = React.useState<Step>('input');
   const [description, setDescription] = React.useState('');
@@ -48,7 +50,7 @@ export default function OnboardingPage(): React.JSX.Element {
       setLocalActiveTags(response.activeTags);
       setStep('review');
     } catch {
-      setError('Failed to extract tags. Please try again.');
+      setError(t.onboarding.extractError);
       setStep('input');
     }
   };
@@ -57,7 +59,7 @@ export default function OnboardingPage(): React.JSX.Element {
     setLocalActiveTags((prev) => {
       const isActive = prev.includes(tag);
       if (isActive && prev.length <= 1) return prev;
-      return isActive ? prev.filter((t) => t !== tag) : [...prev, tag];
+      return isActive ? prev.filter((t2) => t2 !== tag) : [...prev, tag];
     });
   };
 
@@ -69,7 +71,7 @@ export default function OnboardingPage(): React.JSX.Element {
       setProfile(description.trim(), localActiveTags);
       navigate('/feed', { replace: true });
     } catch {
-      setError('Failed to save preferences. Please try again.');
+      setError(t.onboarding.saveError);
       setIsConfirming(false);
     }
   };
@@ -81,20 +83,17 @@ export default function OnboardingPage(): React.JSX.Element {
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-muted">
             <Sparkles className="h-6 w-6 text-accent-light" aria-hidden />
           </div>
-          <h1 className="text-2xl font-bold text-white">Set up your profile</h1>
-          <p className="text-sm text-gray-400">
-            Describe your background and what you want to learn. Syntonia's AI will extract your
-            areas of interest and personalise your feed.
-          </p>
+          <h1 className="text-2xl font-bold text-content-primary">{t.onboarding.heading}</h1>
+          <p className="text-sm text-content-muted">{t.onboarding.description}</p>
         </div>
 
         <div className="flex flex-col gap-3">
-          <label htmlFor="description" className="text-sm font-medium text-gray-300">
-            Your profile description
+          <label htmlFor="description" className="text-sm font-medium text-content-secondary">
+            {t.onboarding.descriptionLabel}
           </label>
           <Textarea
             id="description"
-            placeholder="e.g. Senior backend developer working with AWS Lambda and TypeScript. Building serverless APIs and learning Kubernetes."
+            placeholder={t.onboarding.placeholder}
             value={description}
             onChange={(e) => {
               setDescription(e.target.value);
@@ -102,9 +101,7 @@ export default function OnboardingPage(): React.JSX.Element {
             disabled={step !== 'input'}
             rows={5}
           />
-          <p className="text-xs text-gray-500">
-            Minimum 20 characters · {description.length} / 500
-          </p>
+          <p className="text-xs text-content-subtle">{t.onboarding.charHint(description.length)}</p>
         </div>
 
         {error !== null && (
@@ -121,17 +118,14 @@ export default function OnboardingPage(): React.JSX.Element {
             className="w-full"
           >
             <Sparkles className="h-4 w-4" aria-hidden />
-            Extract my interests
+            {t.onboarding.extractButton}
           </Button>
         )}
 
         {step === 'extracting' && (
           <div className="flex flex-col items-center gap-3 py-4">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-surface-elevated border-t-accent" />
-            <p className="animate-pulse text-sm text-gray-400">
-              Analysing your profile with AI…
-            </p>
-            <p className="text-xs text-gray-600">PUT /user/profile → MSW → mockExtractTags()</p>
+            <p className="animate-pulse text-sm text-content-muted">{t.onboarding.analysing}</p>
           </div>
         )}
 

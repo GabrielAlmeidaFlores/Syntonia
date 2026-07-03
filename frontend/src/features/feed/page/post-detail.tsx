@@ -7,9 +7,11 @@ import 'highlight.js/styles/github-dark.css';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/hooks/use-translation';
 import { formatRelativeTime } from '@/lib/utils';
 import { api } from '@/services/api';
 import { useSavedStore } from '@/stores/saved';
+import { useToastStore } from '@/stores/toast';
 import type { Post, SavePostResponse, UnsavePostResponse } from '@/types';
 
 interface PostDetailProps {
@@ -26,7 +28,9 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
   const isSaved = useSavedStore((s) => s.isSaved(post.id));
   const storeSave = useSavedStore((s) => s.save);
   const storeUnsave = useSavedStore((s) => s.unsave);
+  const addToast = useToastStore((s) => s.addToast);
   const [toggling, setToggling] = React.useState(false);
+  const t = useTranslation();
 
   const handleToggleSave = React.useCallback((): void => {
     if (toggling) return;
@@ -36,6 +40,10 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
         .delete<UnsavePostResponse>(`/post/${post.id}/save`)
         .then(() => {
           storeUnsave(post.id);
+          addToast({ type: 'success', message: t.saved.toastUnsaved });
+        })
+        .catch(() => {
+          addToast({ type: 'error', message: t.saved.toastUnsaveError });
         })
         .finally(() => {
           setToggling(false);
@@ -45,12 +53,16 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
         .post<SavePostResponse>(`/post/${post.id}/save`, {})
         .then((res) => {
           storeSave(post, res.savedAt);
+          addToast({ type: 'success', message: t.saved.toastSaved });
+        })
+        .catch(() => {
+          addToast({ type: 'error', message: t.saved.toastSaveError });
         })
         .finally(() => {
           setToggling(false);
         });
     }
-  }, [toggling, isSaved, post, storeSave, storeUnsave]);
+  }, [toggling, isSaved, post, storeSave, storeUnsave, addToast, t]);
 
   return (
     <div className="flex min-h-full flex-col bg-surface">
@@ -58,11 +70,11 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
         <button
           type="button"
           onClick={onClose}
-          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors"
-          aria-label="Go back to feed"
+          className="flex items-center gap-1.5 text-sm text-content-muted hover:text-content-primary transition-colors"
+          aria-label={t.postDetail.ariaBack}
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back
+          {t.postDetail.back}
         </button>
 
         <div className="flex items-center gap-1">
@@ -71,7 +83,7 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
             size="sm"
             onClick={handleToggleSave}
             disabled={toggling}
-            aria-label={isSaved ? 'Remove from saved' : 'Save post'}
+            aria-label={isSaved ? t.postDetail.ariaUnsave : t.postDetail.ariaSave}
             aria-pressed={isSaved}
           >
             {isSaved ? (
@@ -81,7 +93,7 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
             )}
           </Button>
 
-          <Button variant="ghost" size="sm" aria-label="Share post">
+          <Button variant="ghost" size="sm" aria-label={t.postDetail.ariaShare}>
             <Share2 className="h-4 w-4" aria-hidden />
           </Button>
         </div>
@@ -96,9 +108,9 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
           ))}
         </div>
 
-        <h1 className="mb-2 text-2xl font-bold leading-tight text-white">{post.title}</h1>
-        <p className="mb-4 text-sm text-gray-400">{post.summary}</p>
-        <p className="mb-6 text-xs text-gray-600">{formatRelativeTime(post.createdAt)}</p>
+        <h1 className="mb-2 text-2xl font-bold leading-tight text-content-primary">{post.title}</h1>
+        <p className="mb-4 text-sm text-content-muted">{post.summary}</p>
+        <p className="mb-6 text-xs text-content-subtle">{formatRelativeTime(post.createdAt)}</p>
 
         <div
           className="mb-6 h-0.5 w-16 rounded-full"

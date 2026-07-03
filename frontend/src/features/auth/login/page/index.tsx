@@ -3,6 +3,7 @@ import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/hooks/use-translation';
 import { useAuthStore } from '@/stores/auth';
 import { useUserStore } from '@/stores/user';
 
@@ -20,6 +21,7 @@ export default function MockCognitoPage(): React.JSX.Element {
   const setProfile = useUserStore((s) => s.setProfile);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const t = useTranslation();
 
   const returnTo = searchParams.get('returnTo') ?? '/feed';
 
@@ -37,7 +39,7 @@ export default function MockCognitoPage(): React.JSX.Element {
 
       navigate(returnTo, { replace: true });
     } catch {
-      setError('Login failed. Please try again.');
+      setError(t.auth.errorMessage);
       setLoading(false);
     }
   };
@@ -49,21 +51,18 @@ export default function MockCognitoPage(): React.JSX.Element {
           <Sparkles className="h-8 w-8 text-accent-light" aria-hidden />
         </div>
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-white">Syntonia</h1>
-          <p className="text-sm text-gray-400">Personal Learning Engine</p>
+          <h1 className="text-2xl font-bold text-content-primary">{t.auth.appTitle}</h1>
+          <p className="text-sm text-content-muted">{t.auth.appSubtitle}</p>
         </div>
       </div>
 
       <div className="w-full max-w-sm rounded-2xl border border-surface-border bg-surface-card p-6">
         <div className="mb-6 text-center">
-          <p className="mb-1 text-xs uppercase tracking-widest text-gray-500">
-            Mock Cognito Hosted UI
+          <p className="mb-1 text-xs uppercase tracking-widest text-content-subtle">
+            {t.auth.mockLabel}
           </p>
-          <h2 className="text-lg font-semibold text-white">Sign in to continue</h2>
-          <p className="mt-1 text-sm text-gray-400">
-            In production, Cognito handles authentication. This simulates the OAuth redirect via
-            POST /auth/callback intercepted by MSW.
-          </p>
+          <h2 className="text-lg font-semibold text-content-primary">{t.auth.signinHeading}</h2>
+          <p className="mt-1 text-sm text-content-muted">{t.auth.signinDescription}</p>
         </div>
 
         {error !== null && (
@@ -83,16 +82,12 @@ export default function MockCognitoPage(): React.JSX.Element {
           {loading ? (
             <span className="flex items-center gap-2">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-              Signing in…
+              {t.auth.signingInButton}
             </span>
           ) : (
-            'Continue with Cognito'
+            t.auth.signinButton
           )}
         </Button>
-
-        <p className="mt-4 text-center text-xs text-gray-600">
-          POST /auth/callback → MSW → mock user session
-        </p>
       </div>
     </div>
   );

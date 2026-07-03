@@ -425,13 +425,17 @@ Displayed when `GET /feed` returns `posts: []` and `isLoading` is `false`. Infor
 - `EmptyFeedScreen` shows a message, a link to `/profile`, and a reload button
 
 **`ProfilePage`** (`/profile`)
-- Shows a textarea with the user's current `description`
-- On description save → calls `PUT /user/profile` → AI re-extracts tags → refreshes tag list
-- Shows AI-extracted tags as toggleable chips
-- Enabled tags = `activeTags` (used for content generation)
-- On tag toggle → calls `PUT /user/preferences` with updated `{ activeTags }`
-- Changes to `activeTags` immediately affect the next JIT generation request
-- **Logout button** at the bottom of the page (moved from bottom nav)
+- Tab bar at the top with two tabs: **Profile** and **Settings**
+- **Profile tab:**
+  - Shows a textarea with the user's current `description`
+  - On description save → calls `PUT /user/profile` → AI re-extracts tags → updates `extractedTags` + `activeTags`
+  - Shows ALL AI-extracted tags (`extractedTags`) as toggleable chips — deactivated tags remain visible with muted style
+  - Toggle immediately calls `PUT /user/preferences` — no save button
+  - Changes to `activeTags` immediately affect the next JIT generation request
+- **Settings tab:**
+  - Theme selector: Dark / Light option cards — change is instant, no save button
+  - Language selector: English / Português (BR) option cards — persisted, future i18n use
+- **Logout button** at the bottom of the page (below both tabs)
 
 **`SavedGridPage`** (`/saved`)
 - 2-column grid of saved post cards
@@ -573,10 +577,12 @@ interface FeedState {
   cursor: string | null;
   hasMore: boolean;
   isLoading: boolean;
+  isPostExpanded: boolean;   // true while PostDetail is open — locks snap container scroll
   setPosts: (posts: Post[]) => void;
   setCurrentIndex: (index: number) => void;
   setCursor: (cursor: string | null) => void;
   setLoading: (loading: boolean) => void;
+  setPostExpanded: (expanded: boolean) => void;
   reset: () => void;
 }
 
@@ -586,10 +592,12 @@ export const useFeedStore = create<FeedState>((set) => ({
   cursor: null,
   hasMore: true,
   isLoading: false,
+  isPostExpanded: false,
   setPosts: (posts) => set({ posts }),
   setCurrentIndex: (currentIndex) => set({ currentIndex }),
   setCursor: (cursor) => set({ cursor, hasMore: cursor !== null }),
   setLoading: (isLoading) => set({ isLoading }),
+  setPostExpanded: (isPostExpanded) => set({ isPostExpanded }),
   reset: () => set({ posts: [], currentIndex: 0, cursor: null, hasMore: true }),
 }));
 ```
@@ -601,35 +609,117 @@ import { persist } from 'zustand/middleware';
 
 interface UserState {
   description: string;          // User's free-text profile description
-  activeTags: string[];         // AI-extracted tags the user has enabled
+  extractedTags: string[];      // All AI-extracted tags — never changes after extraction
+  activeTags: string[];         // Subset the user has enabled — drives feed generation
   setDescription: (description: string) => void;
   setTags: (tags: string[]) => void;
   toggleTag: (tag: string) => void;
+  setProfile: (description: string, tags: string[]) => void;
 }
 
 export const useUserStore = create<UserState>()(
   persist(
     (set, get) => ({
       description: '',
+      extractedTags: [],
       activeTags: [],
       setDescription: (description) => set({ description }),
-      setTags: (tags) => set({ activeTags: tags }),
+      setTags: (activeTags) => set({ activeTags }),
       toggleTag: (tag) => {
         const current = get().activeTags;
         const isActive = current.includes(tag);
-        // Always keep at least 1 active tag
         if (isActive && current.length <= 1) return;
-        set({
-          activeTags: isActive
-            ? current.filter((t) => t !== tag)
-            : [...current, tag],
-        });
+        set({ activeTags: isActive ? current.filter((t) => t !== tag) : [...current, tag] });
       },
+      setProfile: (description, tags) =>
+        set({ description, extractedTags: tags, activeTags: tags }),
     }),
-    { name: 'syntonia-user-prefs' } // persisted in localStorage
+    { name: 'syntonia-user-prefs' }
   )
 );
 ```
+
+**`src/stores/saved/index.ts`** — Persisted set of saved post IDs + ordered post list for the Saved feed. `savedIds` survives page refresh; `posts[]` is populated by `useSavedPosts` on mount.
+
+**`src/stores/preferences/index.ts`**
+```typescript
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+export type Theme = 'dark' | 'light';
+export type Language = 'en' | 'pt-BR';
+
+interface PreferencesState {
+  theme: Theme;         // Persisted — dark or light
+  language: Language;   // Persisted — en or pt-BR (ready for i18n)
+  setTheme: (theme: Theme) => void;
+  setLanguage: (language: Language) => void;
+}
+
+export const usePreferencesStore = create<PreferencesState>()(
+  persist(
+    (set) => ({
+      theme: detectSystemTheme(),   // First visit: follows OS preference
+      language: 'en',
+      setTheme: (theme) => set({ theme }),
+      setLanguage: (language) => set({ language }),
+    }),
+    { name: 'syntonia-preferences' }
+  )
+);
+```
+
+### Theme System
+
+Syntonia supports **Dark** and **Light** themes. The theme engine is CSS-variable-based — no component needs to know the active theme directly.
+
+**Architecture:**
+
+```
+usePreferencesStore.theme ('dark' | 'light')
+         │
+         ▼  [useEffect in App.tsx]
+document.documentElement.classList  →  'dark' or 'light'
+         │
+         ▼  [globals.css]
+:root (dark values)       ←  no class or html.dark
+html.light { ... }        ←  light values override :root
+         │
+         ▼  [tailwind.config.ts]
+surface.DEFAULT  =  rgb(var(--color-surface) / <alpha-value>)
+accent.DEFAULT   =  rgb(var(--color-accent)  / <alpha-value>)
+```
+
+**CSS variable tokens:**
+
+| Token | Dark | Light |
+|---|---|---|
+| `--color-surface` | `3 7 18` (#030712) | `248 250 252` (#f8fafc) |
+| `--color-surface-card` | `17 24 39` (#111827) | `255 255 255` (#ffffff) |
+| `--color-surface-elevated` | `31 41 55` (#1f2937) | `241 245 249` (#f1f5f9) |
+| `--color-surface-border` | `55 65 81` (#374151) | `226 232 240` (#e2e8f0) |
+| `--color-accent` | `79 70 229` (#4f46e5) | `79 70 229` (#4f46e5) |
+| `--color-accent-light` | `224 231 255` (#e0e7ff) | `55 48 163` (#3730a3) |
+| `--color-accent-muted` | `49 46 129` (#312e81) | `224 231 255` (#e0e7ff) |
+
+All Tailwind surface/accent utility classes (`bg-surface`, `text-accent-light`, `border-surface-border`, etc.) automatically adapt without any component changes. Text color overrides for Tailwind's built-in `text-white`, `text-gray-*` classes are provided via `html.light` selectors in `globals.css`.
+
+**First-visit behaviour:** `detectSystemTheme()` reads `window.matchMedia('(prefers-color-scheme: dark)').matches` before the persisted value is loaded. After the user sets a preference, it is saved to `syntonia-preferences` in localStorage and takes priority on all subsequent visits.
+
+### Language Preference
+
+Language is stored in `usePreferencesStore.language` as `'en' | 'pt-BR'`. The preference is persisted to `syntonia-preferences` in localStorage and **fully implemented** for UI translation.
+
+**Current state (implemented):**
+- `src/lib/i18n.ts` — single translations file with `Record<Language, Translations>`. All ~75 UI strings have EN and PT-BR versions. TypeScript enforces that every language implements every key.
+- `src/hooks/use-translation.ts` — `useTranslation()` reads `language` from `usePreferencesStore` reactively. The entire UI updates instantly when the user switches language in Settings — no page reload, no extra state.
+- Dynamic strings are typed as functions: `(n: number) => string`, enforcing signature parity across languages.
+
+**Future (Phase 4):**
+- Pass `language` to `PUT /user/profile` → Lambda includes it in Gemini prompt → AI generates posts in the user's preferred language
+- `SintoniaUsers` DynamoDB table will store `language` field alongside `description` and `activeTags`
+
+**Adding a new language:** Add the code to `Language` type in `stores/preferences` → add a full block to `translations` in `src/lib/i18n.ts` → TypeScript lists every missing key as a compile error.
 
 ### Services
 
@@ -2588,6 +2678,18 @@ export const AVAILABLE_TAGS = [
 ] as const;
 
 export type Tag = typeof AVAILABLE_TAGS[number];
+
+/** Visual theme applied to the application. Persisted in syntonia-preferences. */
+export type Theme = 'dark' | 'light';
+
+/** UI language. Persisted in syntonia-preferences. Drives Gemini prompt language in production. */
+export type Language = 'en' | 'pt-BR';
+
+/** Client-only preferences stored in usePreferencesStore (localStorage: syntonia-preferences). */
+export interface UserPreferencesLocal {
+  readonly theme: Theme;
+  readonly language: Language;
+}
 ```
 
 ### DynamoDB Item Shapes (JavaScript / backend)
@@ -3364,16 +3466,17 @@ syntonia-app/
 │       │   ├── LoginPage.tsx
 │       │   ├── SignupPage.tsx         # Cognito signUp + confirmSignUp flow
 │       │   ├── OnboardingPage.tsx     # Post-signup: description input → AI tag extraction → confirm
-│       │   └── ProfilePage.tsx        # Edit description + enable/disable AI-extracted tags
+│       │   └── ProfilePage.tsx        # Tabs: Profile (desc + tags) | Settings (theme + language)
 │       ├── services/
 │       │   ├── amplify.ts             # Amplify configuration
 │       │   └── api.ts                 # HTTP client + JWT injection
 │       ├── store/
-│       │   ├── feedStore.ts           # Zustand: in-memory posts
+│       │   ├── feedStore.ts           # Zustand: in-memory posts + isPostExpanded lock
 │       │   ├── savedStore.ts          # Zustand: saved post ids (persisted)
-│       │   └── userStore.ts           # Zustand: active tags (persisted)
+│       │   ├── preferencesStore.ts    # Zustand: theme + language (persisted — syntonia-preferences)
+│       │   └── userStore.ts           # Zustand: description, extractedTags, activeTags (persisted)
 │       └── types/
-│           └── index.ts               # Interfaces + AVAILABLE_TAGS (Post includes savedAt?)
+│           └── index.ts               # Post, Tag, Theme, Language, UserPreferencesLocal + AVAILABLE_TAGS
 │
 └── backend/                           # Serverless Framework
     ├── package.json
@@ -3915,11 +4018,12 @@ Saved posts actions: ~15 saves + ~5 unsaves per user/month = ~20,000 save/unsave
 - [ ] Implement `App.tsx` — router, `RequireAuth`, server sync on login (`GET /user/preferences` → Zustand `description` + `activeTags`)
 - [ ] Implement `LoginPage` + `SignupPage` (Cognito signUp + confirmSignUp)
 - [ ] Implement `OnboardingPage` — description textarea → `PUT /user/profile` → show extracted tags → confirm → `/feed`
-- [ ] Implement `ProfilePage` — edit description + tag enable/disable toggles
+- [ ] Implement `ProfilePage` — two tabs: Profile (desc + tag toggles) + Settings (theme + language)
 - [ ] Implement `FeedPage` with `FeedContainer` + `PostCard` (basic Y-scroll)
 - [ ] Implement `EmptyFeedScreen` with reload button and link to `/profile`
 - [ ] Implement `useFeed` + `feedStore`
 - [ ] Implement `SavedGridPage` + `SavedFeedPage` + `savedStore` + `useSavedPosts`
+- [ ] Implement `usePreferencesStore` (theme + language, persisted) + CSS variable theme system
 - [ ] Connect to real backend (`api.ts`)
 
 **Deploy:**
@@ -3953,6 +4057,7 @@ Saved posts actions: ~15 saves + ~5 unsaves per user/month = ~20,000 save/unsave
 - [ ] `SintoniaSeenPosts` table (PK: userId, SK: postId, TTL: 90 days) — prevents repetition
 - [ ] EventBridge scheduled Lambda — pre-warms the feed at 6am/6pm
 - [ ] Post sharing (`/post/:id` without authentication for public deep link)
-- [ ] Multi-language prompt support (EN/PT-BR via user preference)
+- [ ] **Multi-language content generation** — pass `language` from `usePreferencesStore` to `PUT /user/profile` → backend includes language in Gemini prompt → posts generated in user's preferred language; requires `language` field in `SintoniaUsers` DynamoDB table and `updateProfile` Lambda update
+- [ ] i18n: `useT()` hook + translations object (EN/PT-BR) covering all UI strings — backend `language` field already stored
 - [ ] Mermaid.js support for diagrams in posts
 - [ ] Engagement analytics (posts viewed, reading time) via CloudWatch custom metrics

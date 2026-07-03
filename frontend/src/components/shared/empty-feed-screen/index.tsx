@@ -3,6 +3,7 @@ import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/hooks/use-translation';
 
 interface EmptyFeedScreenProps {
   readonly onReload: () => void;
@@ -14,6 +15,7 @@ interface EmptyFeedScreenProps {
  */
 export function EmptyFeedScreen({ onReload }: EmptyFeedScreenProps): React.JSX.Element {
   const navigate = useNavigate();
+  const t = useTranslation();
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6 px-6 text-center">
@@ -22,11 +24,8 @@ export function EmptyFeedScreen({ onReload }: EmptyFeedScreenProps): React.JSX.E
       </div>
 
       <div className="flex flex-col gap-2">
-        <h2 className="text-xl font-semibold text-white">No posts yet</h2>
-        <p className="max-w-xs text-sm text-gray-400">
-          Your feed is generated based on your profile description and active tags. Configure your
-          interests to start receiving personalised content.
-        </p>
+        <h2 className="text-xl font-semibold text-content-primary">{t.emptyFeed.heading}</h2>
+        <p className="max-w-xs text-sm text-content-muted">{t.emptyFeed.description}</p>
       </div>
 
       <div className="flex w-full max-w-xs flex-col gap-3">
@@ -36,12 +35,12 @@ export function EmptyFeedScreen({ onReload }: EmptyFeedScreenProps): React.JSX.E
             navigate('/profile');
           }}
         >
-          Configure my profile
+          {t.emptyFeed.configureButton}
         </Button>
 
         <Button variant="ghost" onClick={onReload}>
           <RefreshCw className="h-4 w-4" aria-hidden />
-          Reload feed
+          {t.emptyFeed.reloadButton}
         </Button>
       </div>
     </div>

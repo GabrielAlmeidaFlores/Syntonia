@@ -26,7 +26,7 @@ function CardTitle({
   ...props
 }: React.HTMLAttributes<HTMLHeadingElement>): React.JSX.Element {
   return (
-    <h3 className={cn('text-base font-semibold leading-none text-white', className)} {...props} />
+    <h3 className={cn('text-base font-semibold leading-none text-content-primary', className)} {...props} />
   );
 }
 
@@ -35,7 +35,7 @@ function CardDescription({
   className,
   ...props
 }: React.HTMLAttributes<HTMLParagraphElement>): React.JSX.Element {
-  return <p className={cn('text-sm text-gray-400', className)} {...props} />;
+  return <p className={cn('text-sm text-content-muted', className)} {...props} />;
 }
 
 /** Main content area within a Card, with top padding removed. */

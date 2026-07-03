@@ -2,13 +2,8 @@ import { BookOpen, Bookmark, User } from 'lucide-react';
 import * as React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
+import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
-
-const BOTTOM_NAV = [
-  { label: 'Feed', href: '/feed', icon: BookOpen, exact: true },
-  { label: 'Saved', href: '/saved', icon: Bookmark, exact: true },
-  { label: 'Profile', href: '/profile', icon: User, exact: false },
-] as const;
 
 /**
  * Authenticated layout for the main app.
@@ -17,6 +12,14 @@ const BOTTOM_NAV = [
  * Logout is handled inside ProfilePage.
  */
 export function FeedLayout(): React.JSX.Element {
+  const t = useTranslation();
+
+  const BOTTOM_NAV = [
+    { label: t.nav.feed, href: '/feed', icon: BookOpen, exact: true },
+    { label: t.nav.saved, href: '/saved', icon: Bookmark, exact: true },
+    { label: t.nav.profile, href: '/profile', icon: User, exact: false },
+  ] as const;
+
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden bg-surface">
       <main className="flex-1 overflow-hidden">
@@ -25,7 +28,7 @@ export function FeedLayout(): React.JSX.Element {
 
       <nav
         className="flex h-16 shrink-0 items-center justify-around border-t border-surface-border bg-surface-card px-4"
-        aria-label="Main navigation"
+        aria-label={t.nav.ariaMain}
       >
         {BOTTOM_NAV.map((item) => (
           <NavLink
@@ -45,7 +48,7 @@ export function FeedLayout(): React.JSX.Element {
                   <item.icon
                     className={cn(
                       'h-5 w-5 transition-colors duration-200',
-                      isActive ? 'text-accent-light' : 'text-gray-500',
+                      isActive ? 'text-accent-light' : 'text-content-subtle',
                     )}
                     aria-hidden
                   />
@@ -53,7 +56,7 @@ export function FeedLayout(): React.JSX.Element {
                 <span
                   className={cn(
                     'text-xs transition-colors duration-200',
-                    isActive ? 'font-semibold text-accent-light' : 'font-medium text-gray-500',
+                    isActive ? 'font-semibold text-accent-light' : 'font-medium text-content-subtle',
                   )}
                 >
                   {item.label}

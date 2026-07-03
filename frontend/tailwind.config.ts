@@ -7,16 +7,22 @@ const config: Config = {
     extend: {
       colors: {
         surface: {
-          DEFAULT: '#030712', // gray-950 — app background
-          card: '#111827',    // gray-900 — card surfaces
-          elevated: '#1f2937', // gray-800 — elevated surfaces, inputs
-          border: '#374151',  // gray-700 — borders
+          DEFAULT: 'rgb(var(--color-surface) / <alpha-value>)',
+          card: 'rgb(var(--color-surface-card) / <alpha-value>)',
+          elevated: 'rgb(var(--color-surface-elevated) / <alpha-value>)',
+          border: 'rgb(var(--color-surface-border) / <alpha-value>)',
         },
         accent: {
-          DEFAULT: '#4f46e5', // indigo-600 — primary interactive
-          hover: '#4338ca',   // indigo-700
-          light: '#e0e7ff',   // indigo-100
-          muted: '#312e81',   // indigo-900 — subtle backgrounds
+          DEFAULT: 'rgb(var(--color-accent) / <alpha-value>)',
+          hover: 'rgb(var(--color-accent-hover) / <alpha-value>)',
+          light: 'rgb(var(--color-accent-light) / <alpha-value>)',
+          muted: 'rgb(var(--color-accent-muted) / <alpha-value>)',
+        },
+        content: {
+          primary:   'rgb(var(--color-content-primary)   / <alpha-value>)',
+          secondary: 'rgb(var(--color-content-secondary) / <alpha-value>)',
+          muted:     'rgb(var(--color-content-muted)     / <alpha-value>)',
+          subtle:    'rgb(var(--color-content-subtle)    / <alpha-value>)',
         },
       },
       fontFamily: {
@@ -41,8 +47,6 @@ const config: Config = {
         'modal-in': 'modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both',
         'modal-out': 'modalOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards',
         shimmer: 'shimmer 2.2s linear infinite',
-        'toast-in': 'toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-        'toast-out': 'toastHide 0.2s ease-in forwards',
         'spin-slow': 'spin 3s linear infinite',
       },
       keyframes: {
@@ -77,10 +81,6 @@ const config: Config = {
         shimmer: {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
-        },
-        toastSlideIn: {
-          '0%': { opacity: '0', transform: 'translateX(100%)' },
-          '100%': { opacity: '1', transform: 'translateX(0)' },
         },
         toastHide: {
           '0%': { opacity: '1', transform: 'scale(1)' },

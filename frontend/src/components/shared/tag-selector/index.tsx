@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { Badge } from '@/components/ui/badge';
+import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
 import type { Tag } from '@/types';
 
@@ -22,6 +23,8 @@ export function TagSelector({
   onToggle,
   className,
 }: TagSelectorProps): React.JSX.Element {
+  const t = useTranslation();
+
   return (
     <div className={cn('flex flex-wrap gap-2', className)}>
       {tags.map((tag) => {
@@ -34,7 +37,7 @@ export function TagSelector({
               onToggle(tag);
             }}
             aria-pressed={isActive}
-            aria-label={`${isActive ? 'Disable' : 'Enable'} ${tag}`}
+            aria-label={isActive ? t.tagSelector.ariaDisable(tag) : t.tagSelector.ariaEnable(tag)}
           >
             <Badge variant={isActive ? 'tag-active' : 'tag'}>{tag}</Badge>
           </button>

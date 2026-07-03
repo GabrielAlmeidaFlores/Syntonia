@@ -3,6 +3,7 @@ import * as React from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
 import type { Tag } from '@/types';
 
@@ -25,17 +26,16 @@ export function ExtractedTags({
   onConfirm,
   isConfirming,
 }: ExtractedTagsProps): React.JSX.Element {
+  const t = useTranslation();
+
   return (
     <div className="flex flex-col gap-5 animate-slide-up">
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <Check className="h-4 w-4 text-green-400" aria-hidden />
-          <p className="text-sm font-medium text-green-400">Tags extracted successfully</p>
+          <p className="text-sm font-medium text-green-400">{t.extractedTags.status}</p>
         </div>
-        <p className="text-sm text-gray-400">
-          Review your areas of interest. Only active tags (highlighted) will be used to generate
-          your feed.
-        </p>
+        <p className="text-sm text-content-muted">{t.extractedTags.description}</p>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -49,14 +49,14 @@ export function ExtractedTags({
                 onToggle(tag);
               }}
               aria-pressed={isActive}
-              aria-label={`${isActive ? 'Disable' : 'Enable'} ${tag}`}
+              aria-label={isActive ? t.extractedTags.ariaDisable(tag) : t.extractedTags.ariaEnable(tag)}
             >
               <Badge
                 className={cn(
                   'cursor-pointer transition-all',
                   isActive
                     ? 'border-accent bg-accent-muted text-accent-light'
-                    : 'border-surface-border bg-transparent text-gray-500',
+                    : 'border-surface-border bg-transparent text-content-subtle',
                 )}
               >
                 {tag}
@@ -66,8 +66,8 @@ export function ExtractedTags({
         })}
       </div>
 
-      <p className="text-xs text-gray-500">
-        {activeTags.length} of {tags.length} tags active
+      <p className="text-xs text-content-subtle">
+        {t.extractedTags.count(activeTags.length, tags.length)}
       </p>
 
       <Button
@@ -79,12 +79,12 @@ export function ExtractedTags({
         {isConfirming ? (
           <span className="flex items-center gap-2">
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-            Saving…
+            {t.extractedTags.savingButton}
           </span>
         ) : (
           <>
             <Sparkles className="h-4 w-4" aria-hidden />
-            Start my feed
+            {t.extractedTags.confirmButton}
           </>
         )}
       </Button>

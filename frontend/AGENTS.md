@@ -49,18 +49,24 @@ Every AI agent working on this codebase must follow this exact sequence before w
 ## §3 — Directory Structure
 
 ```
+public/
+└── mock-service-worker.js           MSW ServiceWorker script. kebab-case — no eslint-disable,
+                                     no // comments. Loaded at /mock-service-worker.js by browser.ts.
+
 src/
 ├── main.tsx                         Entry point. Starts MSW worker in dev, then renders App.
 ├── app/
-│   ├── App.tsx                      Root component. Toast + Tooltip providers + AppRouter.
+│   ├── app.tsx                      Root component. Syncs theme class on <html>, mesh-gradient
+│   │                                outer background, Toast + Tooltip providers + AppRouter.
 │   └── layouts/
 │       ├── index.tsx                Barrel export for layouts.
-│       └── feed-layout.tsx          Authenticated layout: Outlet + bottom nav (Feed | Saved | Profile | Logout).
+│       └── feed-layout.tsx          Authenticated layout: Outlet + bottom nav (Feed | Saved | Profile).
+│                                    Logout is inside ProfilePage, not the nav.
 ├── components/
 │   ├── shared/                      Feature-agnostic reusable components.
 │   │   ├── empty-feed-screen/       "No posts yet" — shown when feed is empty.
 │   │   ├── loading-skeleton/        Full-screen PostCard skeleton during loading.
-│   │   └── tag-selector/            Toggleable tag chips (receives tags + activeTags as props).
+│   │   └── tag-selector/            Toggleable tag chips. Reads useTranslation() for aria-labels.
 │   └── ui/                          Design system primitives (CVA + Radix UI).
 │       ├── button/                  Button — variants: primary, outline, ghost, destructive, link.
 │       ├── badge/                   Badge — variants: default, accent, outline, success, warning,
@@ -75,7 +81,8 @@ src/
 │   │   └── login/page/              MockCognitoPage — calls POST /auth/callback (MSW).
 │   ├── onboarding/page/             OnboardingPage + extracted-tags.tsx
 │   ├── feed/page/                   FeedPage + feed-container.tsx + post-card.tsx + post-detail.tsx
-│   ├── profile/page/                ProfilePage + description-form.tsx + tag-manager.tsx
+│   ├── profile/page/                ProfilePage (tabs: Profile | Settings) +
+│   │                                description-form.tsx + tag-manager.tsx + settings-panel.tsx
 │   ├── post/page/                   PostPage — deep-link single post view (/post/:id).
 │   └── saved/
 │       ├── page/                    SavedGridPage (index.tsx) + saved-post-card.tsx — /saved
@@ -83,10 +90,16 @@ src/
 ├── hooks/
 │   ├── use-feed.ts                  Calls GET /feed via api.ts; paginates with cursor.
 │   ├── use-jit.ts                   Calls POST /feed/request when buffer ≤ TRIGGER_THRESHOLD.
-│   └── use-saved-posts.ts           Loads GET /posts/saved; exposes save() / unsave() actions.
+│   ├── use-saved-posts.ts           Loads GET /posts/saved; exposes save() / unsave() actions.
+│   ├── use-snap-navigation.ts       Intercepts wheel + keyboard events on a snap-scroll container
+│   │                                for reliable desktop navigation (wheel delta fix + Arrow/Space keys).
+│   └── use-translation.ts           Returns the translations object for the active language.
+│                                    Reads usePreferencesStore.language — reactive on language switch.
 ├── lib/
 │   ├── env.ts                       Single source of truth for all VITE_* env vars. Every
 │   │                                import.meta.env access goes through here — nowhere else.
+│   ├── i18n.ts                      Master translations file. Record<Language, Translations>.
+│   │                                All UI strings live here. Adding a language = adding a key.
 │   ├── utils.ts                     cn(), formatDate(), formatRelativeTime(), truncate(), sleep().
 │   └── constants.ts                 AVAILABLE_TAGS, DEFAULT_TAGS, TRIGGER_THRESHOLD,
 │                                    MAX_PENDING_REQUESTS, FEED_PAGE_SIZE, SAVED_PAGE_SIZE,
@@ -115,19 +128,33 @@ src/
 │   ├── auth/
 │   │   └── index.ts                 useAuthStore — user, token, login(code), logout.
 │   ├── feed/
-│   │   └── index.ts                 useFeedStore — posts[], currentIndex, cursor, isLoading, hasMore.
+│   │   └── index.ts                 useFeedStore — posts[], currentIndex, cursor, isLoading,
+│   │                                hasMore, isPostExpanded (locks snap container when PostDetail open).
+│   ├── preferences/
+│   │   └── index.ts                 usePreferencesStore — theme ('dark'|'light'), language ('en'|'pt-BR').
+│   │                                Persisted to localStorage: syntonia-preferences.
+│   │                                First visit: theme detected from OS prefers-color-scheme.
 │   ├── saved/
-│   │   └── index.ts                 useSavedStore — savedIds (persisted), posts[], save(), unsave(), isSaved().
+│   │   └── index.ts                 useSavedStore — savedIds (Set, persisted), posts[], save(),
+│   │                                unsave(), isSaved(). Persisted to localStorage: syntonia-saved.
 │   ├── user/
-│   │   └── index.ts                 useUserStore — description, activeTags, setProfile, toggleTag.
+│   │   └── index.ts                 useUserStore — description, extractedTags (all AI-extracted,
+│   │                                immutable after extraction), activeTags (enabled subset),
+│   │                                setProfile(), setTags(), toggleTag().
+│   │                                Persisted to localStorage: syntonia-user-prefs.
 │   └── toast/
 │       └── index.ts                 useToastStore — toasts[], addToast, removeToast.
 ├── styles/
-│   └── globals.css                  @tailwind base/components/utilities + dark theme overrides +
-│                                    snap-scroll utilities (.snap-feed, .snap-card) +
-│                                    Markdown prose overrides.
+│   └── globals.css                  @tailwind base/components/utilities.
+│                                    CSS variable tokens: :root (dark) + html.light (light theme).
+│                                    surface.* and accent.* tokens for backgrounds/borders.
+│                                    content.* tokens for text (theme-adaptive, no overrides needed).
+│                                    snap-scroll utilities (.snap-feed, .snap-card — no height).
+│                                    Markdown prose uses content.* tokens directly.
+│                                    No html.light .text-* overrides — semantic tokens handle it.
 └── types/
-    ├── domain.ts                    Post (includes savedAt?), Tag, UserProfile, FeedResponse,
+    ├── domain.ts                    Post (includes savedAt?), Tag, Theme, Language,
+    │                                UserPreferencesLocal, UserProfile, FeedResponse,
     │                                SavedPostsResponse, SavePostResponse, UnsavePostResponse,
     │                                UserPreferences, GenerationResponse, UpdateProfileResponse.
     └── index.ts                     Re-exports from domain.ts.
@@ -144,6 +171,7 @@ src/
 | Hook files | `use-kebab-case.ts` | `use-feed.ts` |
 | Store files | `kebab-case/index.ts` | `feed/index.ts` |
 | Mock files | `kebab-case.ts` | `posts.ts` |
+| Public assets | `kebab-case.js` | `mock-service-worker.js` |
 | Constants | `SCREAMING_SNAKE_CASE` | `TRIGGER_THRESHOLD` |
 | Types/Interfaces | `PascalCase` | `Post`, `UserProfile` |
 | Functions | `camelCase` | `mockExtractTags` |
@@ -151,6 +179,8 @@ src/
 | Pages | `default export` + PascalCase | `export default function FeedPage` |
 
 **File structure rule:** Each UI component lives in its own folder with `index.tsx`. Sub-components for a feature page live alongside the page's `index.tsx`.
+
+**PascalCase and camelCase filenames are forbidden everywhere** — including `public/`. No `mockServiceWorker.js`, no `App.tsx`, no `feedStore.ts`.
 
 ---
 
@@ -190,18 +220,78 @@ noUnusedParameters: true
 
 ## §6 — Design System Tokens
 
-### Tailwind custom colors (dark theme)
+### Color system — CSS variables + Tailwind
+
+All colors are driven by **CSS variables** defined in `globals.css`. Tailwind resolves them at runtime so tokens adapt automatically when the theme changes — no component changes needed.
+
+#### Surface tokens (backgrounds, borders)
+
+**Dark (`:root` default) → Light (`html.light`):**
+```
+surface.DEFAULT     #030712 → #f8fafc   — app background
+surface.card        #111827 → #ffffff   — card surfaces
+surface.elevated    #1f2937 → #f1f5f9  — inputs, elevated elements
+surface.border      #374151 → #e2e8f0  — borders, dividers
+
+accent.DEFAULT      #4f46e5 → #4f46e5  — primary interactive (same both themes)
+accent.hover        #4338ca → #4338ca
+accent.light        #e0e7ff → #3730a3  — accent text (inverted for visibility)
+accent.muted        #312e81 → #e0e7ff  — subtle accent background (inverted)
+```
+
+#### Content tokens (text colors) — semantic, theme-adaptive
 
 ```
-surface.DEFAULT   #030712   gray-950 — app background
-surface.card      #111827   gray-900 — card surfaces
-surface.elevated  #1f2937   gray-800 — inputs, elevated elements
-surface.border    #374151   gray-700 — borders, dividers
+content.primary     white → slate-900  — headings, labels, primary values
+content.secondary   gray-300 → slate-600  — secondary labels, slightly muted
+content.muted       gray-400 → slate-500  — hints, subtitles, helper text
+content.subtle      gray-500/600 → slate-400  — timestamps, counters, very subtle
+```
 
-accent.DEFAULT    #4f46e5   indigo-600 — primary interactive
-accent.hover      #4338ca   indigo-700
-accent.light      #e0e7ff   indigo-100 — text on dark for accent context
-accent.muted      #312e81   indigo-900 — subtle accent backgrounds
+**Tailwind config syntax (supports opacity modifiers like `text-content-primary/80`):**
+```ts
+content: { primary: 'rgb(var(--color-content-primary) / <alpha-value>)', ... }
+```
+
+#### Usage rules — the most important part
+
+| Text context | Use | Never use |
+|---|---|---|
+| Heading / label on `surface` background | `text-content-primary` | `text-white` |
+| Secondary label on `surface` | `text-content-secondary` | `text-gray-300` |
+| Hint / subtitle on `surface` | `text-content-muted` | `text-gray-400`, `text-gray-500` |
+| Timestamp / counter on `surface` | `text-content-subtle` | `text-gray-600`, `text-gray-700` |
+| **Text on always-dark colored background** (accent btn, gradient card) | `text-white` | content tokens |
+
+**The rule in one sentence:** Use `text-content-*` when the background is theme-adaptive (`surface.*`). Use `text-white` when the background is always dark (post gradient, `bg-accent`, `bg-red-700`, `bg-black/40`).
+
+```tsx
+className="text-content-primary"          // ✓ heading on surface
+className="text-content-muted"            // ✓ hint text on surface
+className="bg-accent text-white"          // ✓ button on accent bg (always dark)
+className="text-white"                    // ✓ text on post gradient (always dark)
+
+className="text-white"                    // ✗ heading on surface — breaks in light mode
+className="text-gray-400"                 // ✗ hint on surface — no theme adaptation
+```
+
+**Never add CSS overrides to `globals.css` to fix broken text colors.** The semantic tokens are the correct solution — use the right token and the color adapts for free.
+
+#### CSS variable definitions (in `globals.css`)
+
+```css
+:root {                                      /* dark default */
+  --color-content-primary:   255 255 255;    /* white */
+  --color-content-secondary: 209 213 219;    /* gray-300 */
+  --color-content-muted:     156 163 175;    /* gray-400 */
+  --color-content-subtle:    107 114 128;    /* gray-500 */
+}
+html.light {                                 /* light override */
+  --color-content-primary:   15 23 42;       /* slate-900 */
+  --color-content-secondary: 71 85 105;      /* slate-600 */
+  --color-content-muted:     100 116 139;    /* slate-500 */
+  --color-content-subtle:    148 163 184;    /* slate-400 */
+}
 ```
 
 ### Animations
@@ -289,15 +379,18 @@ export type { ComponentProps };
 | `LoadingSkeleton` | none | Full-height shimmer card shown at the end of the feed while JIT runs. |
 | `TagSelector` | `tags`, `activeTags`, `onToggle`, `className?` | Toggleable tag chips. Renders only the provided `tags` — never `AVAILABLE_TAGS` directly. |
 
+**Toast** is not in the table above because it is used via `useToastStore`, not imported directly. See §28 for the full toast pattern.
+
 ---
 
 ## §9 — Layout Rules
 
-### `FeedLayout` (`/feed`, `/profile`)
+### `FeedLayout` (`/feed`, `/saved`, `/profile`)
 
-- `h-dvh` container, `flex-col`
+- `h-dvh` container, `flex-col`, `overflow-hidden`
 - `<Outlet />` fills `flex-1 overflow-hidden`
-- Bottom nav: `h-16 shrink-0` with Feed + Profile + Logout tabs
+- Bottom nav: `h-16 shrink-0` with **Feed · Saved · Profile** (three tabs — no Logout in nav)
+- **Logout** lives at the bottom of `ProfilePage`, not in the nav
 - No sidebar, no top header — Syntonia is mobile-first
 
 ### No-layout pages
@@ -306,26 +399,35 @@ Pages that render without `FeedLayout`:
 - `/auth/login` (MockCognitoPage)
 - `/onboarding` (OnboardingPage)
 - `/post/:id` (PostPage — full-screen, own sticky header)
+- `/saved/feed` (SavedFeedPage — full-screen snap-scroll, own back button)
 
 ### Snap-scroll CSS
 
-The feed uses CSS snap, not JavaScript scroll control:
+The feed uses CSS snap, not JavaScript scroll control. Heights are controlled by **utility classes**, not the CSS utilities themselves — this ensures proper sizing relative to the parent container.
 
 ```css
-/* Applied to FeedContainer's wrapper */
+/* .snap-feed — no height set here */
 .snap-feed {
   scroll-snap-type: y mandatory;
   overflow-y: scroll;
-  height: 100dvh;
 }
 
-/* Applied to each PostCard */
+/* .snap-card — no height set here */
 .snap-card {
   scroll-snap-align: start;
   scroll-snap-stop: always;
-  height: 100dvh;
 }
 ```
+
+**Height must be set on the container at usage site:**
+
+| Usage | Height | Why |
+|---|---|---|
+| `FeedContainer` (inside FeedLayout) | `snap-feed h-full` | Parent `main` is `flex-1` = `dvh - 64px` (nav height) |
+| `SavedFeedPage` (standalone) | `snap-feed h-dvh` | No nav — fills full viewport |
+| Each `PostCard` | `snap-card h-full` | Fills 100% of its snap container |
+
+**Snap container scroll lock:** When a `PostDetail` is open, `useFeedStore.isPostExpanded` is `true`. Both `FeedContainer` and `SavedFeedPage` observe this and set `el.style.overflowY = 'hidden'` via a DOM ref — bypassing CSS cascade so `overflow-y: scroll` cannot win.
 
 ---
 
@@ -378,18 +480,20 @@ export const useMyStore = create<MyState>((set) => ({
 **Rules:**
 - State fields are `readonly` in the interface.
 - Actions receive primitive values — no complex objects in `set()` unless necessary.
-- Use `(s) => s.field` selectors in components to avoid unnecessary re-renders.
-- `persist` middleware is used only for `useUserStore` (localStorage key: `syntonia-user-prefs`).
+- **Always use `(s) => s.field` selectors** in components to avoid unnecessary re-renders.
+- Never call `useMyStore()` without a selector in a component — it subscribes to all state.
+- `persist` middleware is used for `useUserStore`, `useSavedStore`, and `usePreferencesStore`.
 
 ### Stores summary
 
-| Store | Key state | Persisted? |
-|---|---|---|
-| `useAuthStore` | `user`, `isAuthenticated` | No |
-| `useFeedStore` | `posts[]`, `currentIndex`, `cursor`, `isLoading` | No |
-| `useSavedStore` | `savedIds` (Set), `posts[]`, `isSaved()` | Yes (localStorage: `syntonia-saved`) |
-| `useUserStore` | `description`, `activeTags` | Yes (localStorage: `syntonia-user-prefs`) |
-| `useToastStore` | `toasts[]` | No |
+| Store | Key state | Persisted? | localStorage key |
+|---|---|---|---|
+| `useAuthStore` | `user`, `isAuthenticated` | No | — |
+| `useFeedStore` | `posts[]`, `currentIndex`, `cursor`, `isLoading`, `isPostExpanded` | No | — |
+| `useSavedStore` | `savedIds` (Set), `posts[]`, `isSaved()` | Yes | `syntonia-saved` |
+| `usePreferencesStore` | `theme`, `language` | Yes | `syntonia-preferences` |
+| `useUserStore` | `description`, `extractedTags`, `activeTags` | Yes | `syntonia-user-prefs` |
+| `useToastStore` | `toasts[]` | No | — |
 
 ---
 
@@ -419,6 +523,19 @@ Component receives { posts, cursor, hasMore }
 ```
 
 In production: remove MSW initialisation from `main.tsx`, set `VITE_API_URL`, and all requests go to the real API Gateway.
+
+### Toast on every API action
+
+**Every action that calls the API must show a toast for feedback** — both on success and on error. Use `useToastStore` directly in the component that performs the action. See §28 for the full toast pattern.
+
+| Action | Success toast | Error toast |
+|---|---|---|
+| Save post | `t.saved.toastSaved` | `t.saved.toastSaveError` |
+| Unsave post | `t.saved.toastUnsaved` | `t.saved.toastUnsaveError` |
+| Update profile description | `t.descriptionForm.toastSuccess(n)` | `t.descriptionForm.toastError` |
+| Toggle tag | `t.tagManager.toastActivated/Deactivated(tag)` | `t.tagManager.toastError` |
+
+All toast strings are in `src/lib/i18n.ts` and must be translated for every supported language.
 
 ### Adding a new API endpoint
 
@@ -506,15 +623,15 @@ Source: `src/mocks/data/tags.ts`.
 
 ### Snap-scroll
 
-The feed is a CSS snap-scroll container. Each `PostCard` occupies `100dvh` and locks on scroll.
+The feed is a CSS snap-scroll container. Each `PostCard` fills the available height of the snap container (not `100dvh` directly — see §9 for the height model).
 
 ```
 FeedPage
-  └── FeedContainer (div.snap-feed)
-       ├── PostCard (div.snap-card) data-index="0"
-       ├── PostCard (div.snap-card) data-index="1"
-       ├── PostCard (div.snap-card) data-index="2"
-       └── LoadingSkeleton (div.snap-card)  ← shown when isLoading
+  └── FeedContainer (div.snap-feed h-full)  ← h-full = dvh - nav height (64px)
+       ├── PostCard (div.snap-card h-full) data-index="0"
+       ├── PostCard (div.snap-card h-full) data-index="1"
+       ├── PostCard (div.snap-card h-full) data-index="2"
+       └── LoadingSkeleton (div.snap-card h-full)  ← shown when isLoading
 ```
 
 ### currentIndex tracking
@@ -536,10 +653,20 @@ if postsRemaining <= TRIGGER_THRESHOLD (2) && !isGenerating:
 
 ### X-axis: PostCard → PostDetail
 
-1. User drags `PostCard` left > 80px (`framer-motion` drag).
-2. `setExpanded(true)` triggers `AnimatePresence`.
-3. `PostDetail` slides in from the right (`x: '100%' → 0`).
-4. "Back" button calls `setExpanded(false)` → `PostDetail` slides out.
+1. User swipes `PostCard` **left > 50px** OR taps the **"Read" button** — detected via native `addEventListener` on the gradient `div` (not Framer Motion drag, which conflicts with CSS snap-scroll).
+2. `open()` → `setExpanded(true)` + `useFeedStore.setPostExpanded(true)` (locks snap container).
+3. `PostDetail` slides in from the right (`motion.div` with `x: '100%' → 0`, spring transition).
+4. To close: tap the **"Back" button** or swipe **right > 80px** on the PostDetail panel (Framer Motion `drag="x"` with `dragDirectionLock`).
+5. `close()` → `setExpanded(false)` + `useFeedStore.setPostExpanded(false)` (unlocks snap container).
+
+**Pointer event pattern for swipe detection (used on the gradient `bgRef` div):**
+```tsx
+el.addEventListener('pointerdown', onDown, { passive: true });
+el.addEventListener('pointermove', onMove, { passive: false }); // passive:false to preventDefault
+el.addEventListener('pointerup', onUp, { passive: true });
+el.addEventListener('pointercancel', onCancel, { passive: true });
+```
+`pointermove` calls `e.preventDefault()` only when the gesture is clearly **horizontal** (`Math.abs(dx) > Math.abs(dy)`), blocking vertical snap-scroll only during horizontal drags.
 
 ---
 
@@ -571,11 +698,11 @@ The master list of 20 valid tags is defined in `src/lib/constants.ts` and `src/t
 
 Never hardcode tag strings in components — always import from `@/lib/constants`.
 
-### activeTags
+### activeTags vs extractedTags
 
-- Extracted by AI from the user's `description` (mocked via `mockExtractTags`).
-- Stored in `useUserStore.activeTags` (persisted in localStorage).
-- Minimum 1 active tag must always remain — enforced in `useUserStore.toggleTag` and `TagSelector`.
+- `extractedTags` — all tags extracted by AI from the user's description. Set once by `setProfile()`. **Never changes** after extraction. Always shown in `TagSelector` so the user can see and re-enable deactivated tags.
+- `activeTags` — the enabled subset of `extractedTags`. Drives feed generation. Stored in localStorage.
+- Minimum 1 active tag must always remain — enforced in `useUserStore.toggleTag` and `TagManager`.
 - Used by `useJIT` to filter relevant posts for generation.
 
 ### Tag display rules
@@ -584,7 +711,7 @@ Never hardcode tag strings in components — always import from `@/lib/constants
 |---|---|---|
 | PostCard gradient card | inline `Badge` | Post's own tags (from `post.tags`) |
 | OnboardingPage review | `ExtractedTags` | AI-extracted tags for confirmation |
-| ProfilePage / Tags tab | `TagSelector` | User's `activeTags` |
+| ProfilePage / Profile tab | `TagSelector` | `extractedTags` (all) with `activeTags` highlighted |
 
 ---
 
@@ -593,10 +720,12 @@ Never hardcode tag strings in components — always import from `@/lib/constants
 ### Description → Tags flow
 
 1. User writes description in `DescriptionForm` (min 20, max 500 chars).
-2. On save → `mockExtractTags(description)` simulates Gemini API.
+2. On save → `PUT /user/profile` → `mockExtractTags(description)` simulates Gemini API.
 3. Returns `Tag[]` → `useUserStore.setProfile(description, extractedTags)`.
-4. All extracted tags start as `activeTags`.
-5. User can then disable individual tags in `TagManager`.
+4. `setProfile` sets both `extractedTags = tags` and `activeTags = tags` — all start active.
+5. `extractedTags` never changes after this point (immutable from user's perspective).
+6. User can toggle individual tags in `TagManager` — only `activeTags` changes.
+7. Deactivated tags stay visible in `TagSelector` (muted style) and can be re-enabled.
 
 ### Onboarding vs Profile
 
@@ -606,7 +735,8 @@ Never hardcode tag strings in components — always import from `@/lib/constants
 | First-time only | Yes | No |
 | Has layout (bottom nav) | No | Yes |
 | Description field | Yes | Yes (`DescriptionForm`) |
-| Tag review | Yes (inline `ExtractedTags`) | Yes (separate `TagManager` tab) |
+| Tag review | Yes (inline `ExtractedTags`) | Yes (`TagManager` in Profile tab) |
+| Settings (theme + language) | No | Yes (Settings tab) |
 
 ---
 
@@ -647,16 +777,34 @@ return <Navigate to={`/auth/login?returnTo=${encodeURIComponent(location.pathnam
 
 ### When to use Framer Motion
 
-- **PostCard drag** — `useMotionValue(0)` + `drag="x"` + `dragConstraints`.
-- **PostDetail slide** — `AnimatePresence` + `motion.div` with `x: '100%' → 0`.
+- **PostDetail slide-in/out** — `AnimatePresence` + `motion.div` with `x: '100%' → 0`, spring transition.
+- **PostDetail swipe-to-close** — `drag="x"` with `dragDirectionLock` on the PostDetail panel. This allows vertical scroll inside PostDetail while detecting horizontal right-swipe to close.
 - **New page transitions** — optional, use `animate-fade-in` CSS class first.
 
 ### When to use CSS animations (Tailwind)
 
 - Skeleton shimmer: `animate-shimmer` or `shimmer-base` utility.
-- Toast notifications: `animate-toast-in`, `animate-toast-out`.
+- Toast enter/exit: `animate-toast-in` (slide from right with overshoot), `animate-toast-out` (slide out to right). Applied via Radix `data-[state=open/closed]` attributes.
 - Page content appearance: `animate-fade-in`, `animate-slide-up`, `animate-scale-in`.
 - Loading spinners: `animate-spin`.
+
+### Toast animation — special rules
+
+Radix UI Toast needs explicit `open` state to play exit animations. **Never** let `removeToast` be called synchronously in `onOpenChange` — the component would unmount before the exit animation plays.
+
+```tsx
+const [open, setOpen] = React.useState(true);
+
+React.useEffect(() => {
+  if (open) return;
+  const timer = setTimeout(() => { removeToast(id); }, EXIT_DURATION_MS);
+  return () => { clearTimeout(timer); };
+}, [open, removeToast, id]);
+
+<ToastPrimitive.Root open={open} onOpenChange={setOpen} ...>
+```
+
+`EXIT_DURATION_MS` is defined in `toast/index.tsx` and must match `toast-out` animation duration in `tailwind.config.ts` (currently 250ms, EXIT_DURATION_MS = 280ms).
 
 ### `prefers-reduced-motion`
 
@@ -741,7 +889,7 @@ src/features/{feature-name}/page/
 1. Create `src/components/ui/{name}/index.tsx`.
 2. Use the CVA pattern from §7.
 3. Export: component function + variants function + Props type.
-4. Add dark-theme-appropriate defaults (see §6 for color tokens).
+4. Use **semantic tokens** for text (`text-content-primary/secondary/muted/subtle`) and surface tokens for backgrounds — never hardcode `text-white` or `text-gray-*` for theme-adaptive elements (see §6).
 5. Add to the components table in §8 if it's a shared component.
 
 ---
@@ -871,4 +1019,203 @@ const x = risky() as string; // eslint-disable-next-line @typescript-eslint/no-e
 | Want to mark a TODO | Open a GitHub issue instead |
 | Need to document an exported function | Add a JSDoc block |
 | ESLint flags a rule violation | Fix the code — never suppress the rule |
+
+---
+
+## §26 — Theme System
+
+### Architecture
+
+Syntonia supports **Dark** and **Light** themes via CSS variables. No component needs to know the active theme — only the CSS variable values change.
+
+```
+usePreferencesStore.theme  ('dark' | 'light')
+        │
+        ▼  useEffect in app/app.tsx
+document.documentElement.classList.add('dark' | 'light')
+        │
+        ▼  globals.css
+:root           { --color-surface: 3 7 18; ... }      ← dark values (default)
+html.light      { --color-surface: 248 250 252; ... } ← light values override
+        │
+        ▼  tailwind.config.ts
+surface.DEFAULT = rgb(var(--color-surface) / <alpha-value>)
+```
+
+### Rules
+
+1. **Never hardcode hex colors** for theme-aware surfaces — always use the named tokens.
+2. **Surface + accent** tokens (`bg-surface`, `text-accent-light`, `border-surface-border`) adapt automatically via CSS variables.
+3. **Content tokens** (`text-content-primary/secondary/muted/subtle`) replace `text-white` and `text-gray-*` for all text on theme-adaptive backgrounds. No CSS overrides needed — see §6.
+4. The outer background in `app.tsx` switches between dark `#060714` and light `#dde3ee` via inline style reacting to `usePreferencesStore.theme`.
+5. `usePreferencesStore` is persisted. On first visit, `detectSystemTheme()` reads `prefers-color-scheme`.
+
+### Adding a new theme
+
+Currently only `dark` and `light` are supported. To add a new theme (e.g. `amoled`):
+1. Add `'amoled'` to the `Theme` union in `stores/preferences/index.ts`.
+2. Add `html.amoled { --color-surface: 0 0 0; ... }` to `globals.css`.
+3. Add an option card in `settings-panel.tsx` translations (`i18n.ts`) and UI.
+
+---
+
+## §27 — i18n (Translations)
+
+### Architecture
+
+All UI strings live in a **single file**: `src/lib/i18n.ts`. The `Translations` interface enforces that every language provides every key — TypeScript errors if a key is missing or has the wrong type.
+
+```typescript
+export const translations: Record<Language, Translations> = {
+  en:    { nav: { feed: 'Feed', ... }, ... },
+  'pt-BR': { nav: { feed: 'Feed', ... }, ... },
+};
+```
+
+### `useTranslation` hook
+
+```typescript
+import { useTranslation } from '@/hooks/use-translation';
+
+export function MyComponent(): React.JSX.Element {
+  const t = useTranslation();
+  return <button>{t.feed.readButton}</button>;
+}
+```
+
+- `useTranslation` reads `usePreferencesStore.language` reactively.
+- The entire UI updates instantly when the user changes language in Settings — no page reload.
+- **Do not import from `@/lib/i18n` directly in components** — always use the hook.
+
+### Dynamic strings (with parameters)
+
+Dynamic strings are typed as functions. TypeScript enforces the signature across all languages:
+
+```typescript
+charCount: (n: number) => string
+count: (active: number, total: number) => string
+toastActivated: (tag: string) => string
+```
+
+Usage:
+```tsx
+<p>{t.descriptionForm.charCount(value.length)}</p>
+<p>{t.tagManager.count(activeTags.length, extractedTags.length)}</p>
+```
+
+### Adding a new language
+
+1. Add the language code to `Language` type in `stores/preferences/index.ts`:
+   ```typescript
+   export type Language = 'en' | 'pt-BR' | 'es';
+   ```
+2. Add a new key to the `translations` object in `src/lib/i18n.ts`:
+   ```typescript
+   es: { nav: { feed: 'Feed', saved: 'Guardados', ... }, ... }
+   ```
+   TypeScript will list every missing key as a compile error until the object is complete.
+3. Add an option card for the new language in `settings-panel.tsx` (label + description strings go in `i18n.ts` `settings.language*` keys if needed).
+
+### Adding a new translatable string
+
+1. Add the key to the `Translations` interface in `src/lib/i18n.ts`.
+2. Add the value for `en` and `pt-BR`.
+3. Use `t.mySection.myKey` via `useTranslation()` in the component.
+4. TypeScript will error until all languages have the new key.
+
+### What NOT to translate
+
+- Tag names (`AWS`, `TypeScript`, etc.) — these are domain identifiers, not UI labels.
+- Mock/debug strings (e.g. `POST /auth/callback → MSW → mock user session`) — developer-facing only.
+- Post titles and content — generated by Gemini (language controlled via Gemini prompt, future feature).
+
+---
+
+## §28 — Toast Notification Pattern
+
+### Architecture
+
+Toasts are triggered via `useToastStore.addToast()` from any component or hook. `ToastContainer` + `ToastViewport` are rendered in `app.tsx` and position toasts in the **top-right corner** (`z-[100]`).
+
+```
+Component calls addToast({ type, message })
+        │
+        ▼
+useToastStore.toasts[] gains a new entry
+        │
+        ▼
+ToastContainer renders <ToastItem> (Radix ToastPrimitive.Root)
+        │
+        ▼
+data-[state=open]:animate-toast-in  ← slides in from right with overshoot
+        │
+        ▼  (after 4000ms, Radix calls onOpenChange(false))
+data-[state=closed]:animate-toast-out  ← slides out to right
+        │
+        ▼  (after EXIT_DURATION_MS = 280ms, useEffect)
+removeToast(id) → component unmounts
+```
+
+### Usage
+
+```typescript
+import { useToastStore } from '@/stores/toast';
+
+export function MyComponent(): React.JSX.Element {
+  const addToast = useToastStore((s) => s.addToast);
+
+  const handleSave = async (): Promise<void> => {
+    try {
+      await api.post('/some-endpoint', {});
+      addToast({ type: 'success', message: t.section.toastSuccess });
+    } catch {
+      addToast({ type: 'error', message: t.section.toastError });
+    }
+  };
+  ...
+}
+```
+
+### Types
+
+| Type | Icon | Bar color | When to use |
+|---|---|---|---|
+| `success` | ✓ CheckCircle | green-500 | Action completed successfully |
+| `error` | ✗ XCircle | red-500 | Action failed — always show on `.catch()` |
+| `warning` | ⚠ TriangleAlert | amber-400 | Non-critical issue, user should know |
+| `info` | ℹ Info | blue-500 | Neutral information |
+
+### Rules
+
+1. **Every API action must have a toast** — both `.then()` (success) and `.catch()` (error). Silent failures are forbidden.
+2. **All toast messages live in `src/lib/i18n.ts`** — never hardcode strings. Add keys to `Translations` interface + values for all languages.
+3. **Toast strings naming convention:** `toastSuccess`, `toastError`, `toastSaved`, `toastUnsaved`, `toastActivated`, etc. — co-located with the section they belong to.
+4. **Never call `removeToast` synchronously** in `onOpenChange` — this skips the exit animation. Use the `useEffect` + `setTimeout` pattern (already implemented in `toast/index.tsx`).
+5. **Duration:** default 4000ms. For destructive/error actions, use 5000ms: `addToast({ type: 'error', message: '...', duration: 5000 })`.
+6. **User can dismiss early** via the X button — the Radix `Close` component calls `onOpenChange(false)` which triggers the exit animation before removal.
+
+### Controlled Radix Toast pattern (implemented in `toast/index.tsx`)
+
+The key insight: `ToastPrimitive.Root` must use `open` + `onOpenChange` (controlled). Without this, Radix cannot auto-dismiss reliably.
+
+```tsx
+const [open, setOpen] = React.useState(true);
+
+React.useEffect(() => {
+  if (open) return;
+  const timer = setTimeout(() => { removeToast(id); }, EXIT_DURATION_MS);
+  return () => { clearTimeout(timer); };
+}, [open, removeToast, id]);
+
+<ToastPrimitive.Root
+  open={open}
+  onOpenChange={setOpen}  // Radix sets to false after `duration` ms OR on Close click
+  duration={duration}
+  className="... data-[state=open]:animate-toast-in data-[state=closed]:animate-toast-out"
+>
+  <ToastPrimitive.Close>  {/* NO onClick — Radix handles it via onOpenChange */}
+    <X />
+  </ToastPrimitive.Close>
+</ToastPrimitive.Root>
+```
 

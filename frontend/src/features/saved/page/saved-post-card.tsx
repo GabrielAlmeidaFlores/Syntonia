@@ -3,9 +3,11 @@ import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
+import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
 import { api } from '@/services/api';
 import { useSavedStore } from '@/stores/saved';
+import { useToastStore } from '@/stores/toast';
 import type { Post, UnsavePostResponse } from '@/types';
 
 interface SavedPostCardProps {
@@ -20,7 +22,9 @@ interface SavedPostCardProps {
 export function SavedPostCard({ post }: SavedPostCardProps): React.JSX.Element {
   const navigate = useNavigate();
   const storeUnsave = useSavedStore((s) => s.unsave);
+  const addToast = useToastStore((s) => s.addToast);
   const [unsaving, setUnsaving] = React.useState(false);
+  const t = useTranslation();
 
   const background = `linear-gradient(135deg, ${post.gradient[0]}, ${post.gradient[1]})`;
 
@@ -33,12 +37,16 @@ export function SavedPostCard({ post }: SavedPostCardProps): React.JSX.Element {
         .delete<UnsavePostResponse>(`/post/${post.id}/save`)
         .then(() => {
           storeUnsave(post.id);
+          addToast({ type: 'success', message: t.saved.toastUnsaved });
+        })
+        .catch(() => {
+          addToast({ type: 'error', message: t.saved.toastUnsaveError });
         })
         .finally(() => {
           setUnsaving(false);
         });
     },
-    [unsaving, post.id, storeUnsave],
+    [unsaving, post.id, storeUnsave, addToast, t],
   );
 
   const handleNavigate = React.useCallback((): void => {
@@ -54,7 +62,7 @@ export function SavedPostCard({ post }: SavedPostCardProps): React.JSX.Element {
         if (e.key === 'Enter' || e.key === ' ') handleNavigate();
       }}
       className="relative cursor-pointer overflow-hidden rounded-2xl"
-      aria-label={`Read: ${post.title}`}
+      aria-label={t.saved.ariaReadCard(post.title)}
     >
       <div
         style={{ background }}
@@ -87,7 +95,7 @@ export function SavedPostCard({ post }: SavedPostCardProps): React.JSX.Element {
           'absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm transition-opacity',
           unsaving ? 'opacity-40' : 'opacity-80 hover:opacity-100',
         )}
-        aria-label="Remove from saved"
+        aria-label={t.saved.ariaUnsave}
       >
         <BookmarkX className="h-3.5 w-3.5 text-white" aria-hidden />
       </button>

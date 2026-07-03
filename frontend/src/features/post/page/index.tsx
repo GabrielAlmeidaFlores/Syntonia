@@ -8,6 +8,7 @@ import 'highlight.js/styles/github-dark.css';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/hooks/use-translation';
 import { formatRelativeTime } from '@/lib/utils';
 import { api } from '@/services/api';
 import type { Post } from '@/types';
@@ -22,6 +23,7 @@ import type { Post } from '@/types';
 export default function PostPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const t = useTranslation();
 
   const [post, setPost] = React.useState<Post | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -58,14 +60,14 @@ export default function PostPage(): React.JSX.Element {
   if (notFound || post === null) {
     return (
       <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-surface px-6">
-        <p className="font-semibold text-white">Post not found</p>
+        <p className="font-semibold text-content-primary">{t.post.notFound}</p>
         <Button
           variant="ghost"
           onClick={() => {
             navigate('/feed');
           }}
         >
-          Back to feed
+          {t.post.backToFeed}
         </Button>
       </div>
     );
@@ -79,11 +81,11 @@ export default function PostPage(): React.JSX.Element {
           onClick={() => {
             navigate(-1);
           }}
-          className="flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-white"
-          aria-label="Go back"
+          className="flex items-center gap-1.5 text-sm text-content-muted transition-colors hover:text-content-primary"
+          aria-label={t.post.ariaBack}
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back
+          {t.post.back}
         </button>
       </div>
 
@@ -101,9 +103,9 @@ export default function PostPage(): React.JSX.Element {
           ))}
         </div>
 
-        <h1 className="mb-2 text-2xl font-bold leading-tight text-white">{post.title}</h1>
-        <p className="mb-2 text-sm text-gray-400">{post.summary}</p>
-        <p className="mb-6 text-xs text-gray-600">{formatRelativeTime(post.createdAt)}</p>
+        <h1 className="mb-2 text-2xl font-bold leading-tight text-content-primary">{post.title}</h1>
+        <p className="mb-2 text-sm text-content-muted">{post.summary}</p>
+        <p className="mb-6 text-xs text-content-subtle">{formatRelativeTime(post.createdAt)}</p>
 
         <div
           className="mb-6 h-0.5 w-16 rounded-full"

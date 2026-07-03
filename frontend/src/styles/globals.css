@@ -5,6 +5,38 @@
 @layer base {
   :root {
     --radius: 0.5rem;
+
+    --color-surface:          3 7 18;
+    --color-surface-card:     17 24 39;
+    --color-surface-elevated: 31 41 55;
+    --color-surface-border:   55 65 81;
+    --color-accent:           79 70 229;
+    --color-accent-hover:     67 56 202;
+    --color-accent-light:     224 231 255;
+    --color-accent-muted:     49 46 129;
+    --color-outer-bg:         6 7 20;
+
+    --color-content-primary:   255 255 255;
+    --color-content-secondary: 209 213 219;
+    --color-content-muted:     156 163 175;
+    --color-content-subtle:    107 114 128;
+  }
+
+  html.light {
+    --color-surface:          248 250 252;
+    --color-surface-card:     255 255 255;
+    --color-surface-elevated: 241 245 249;
+    --color-surface-border:   226 232 240;
+    --color-accent:           79 70 229;
+    --color-accent-hover:     67 56 202;
+    --color-accent-light:     55 48 163;
+    --color-accent-muted:     224 231 255;
+    --color-outer-bg:         203 213 225;
+
+    --color-content-primary:   15 23 42;
+    --color-content-secondary: 71 85 105;
+    --color-content-muted:     100 116 139;
+    --color-content-subtle:    148 163 184;
   }
 
   * {
@@ -16,7 +48,7 @@
   }
 
   body {
-    @apply bg-surface font-sans text-white antialiased;
+    @apply bg-surface font-sans text-content-primary antialiased;
   }
 
   h1,
@@ -25,7 +57,7 @@
   h4,
   h5,
   h6 {
-    @apply font-semibold tracking-tight text-white;
+    @apply font-semibold tracking-tight text-content-primary;
   }
 }
 
@@ -112,15 +144,15 @@
   }
 }
 
-/* ── Markdown prose overrides (dark theme) ────────── */
+/* ── Markdown prose — uses semantic content tokens ── */
 .prose {
-  @apply text-gray-200;
+  @apply text-content-secondary;
 }
 .prose h1,
 .prose h2,
 .prose h3,
 .prose h4 {
-  @apply text-white;
+  @apply text-content-primary;
 }
 .prose a {
   @apply text-accent-light;
@@ -132,10 +164,10 @@
   @apply rounded-xl bg-surface-elevated;
 }
 .prose blockquote {
-  @apply border-accent text-gray-400;
+  @apply border-accent text-content-muted;
 }
 .prose strong {
-  @apply text-white;
+  @apply text-content-primary;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -3,6 +3,7 @@ import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { useTranslation } from '@/hooks/use-translation';
 import { api } from '@/services/api';
 import { useToastStore } from '@/stores/toast';
 import { useUserStore } from '@/stores/user';
@@ -20,8 +21,10 @@ type ExtractionState = 'idle' | 'extracting';
  * Result feedback is shown via toast only — no inline label.
  */
 export function DescriptionForm(): React.JSX.Element {
-  const { description, setProfile } = useUserStore();
+  const description = useUserStore((s) => s.description);
+  const setProfile = useUserStore((s) => s.setProfile);
   const addToast = useToastStore((s) => s.addToast);
+  const t = useTranslation();
 
   const [value, setValue] = React.useState(description);
   const [state, setState] = React.useState<ExtractionState>('idle');
@@ -40,10 +43,10 @@ export function DescriptionForm(): React.JSX.Element {
       setProfile(response.description, response.activeTags);
       addToast({
         type: 'success',
-        message: `Profile updated — ${String(response.activeTags.length)} tags extracted.`,
+        message: t.descriptionForm.toastSuccess(response.activeTags.length),
       });
     } catch {
-      addToast({ type: 'error', message: 'Failed to save profile. Please try again.' });
+      addToast({ type: 'error', message: t.descriptionForm.toastError });
     } finally {
       setState('idle');
     }
@@ -52,13 +55,10 @@ export function DescriptionForm(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <label htmlFor="profile-description" className="text-sm font-medium text-gray-300">
-          Profile description
+        <label htmlFor="profile-description" className="text-sm font-medium text-content-secondary">
+          {t.descriptionForm.label}
         </label>
-        <p className="text-xs text-gray-500">
-          Describe your background and interests. Syntonia uses this to extract your areas of
-          interest and generate relevant content.
-        </p>
+        <p className="text-xs text-content-subtle">{t.descriptionForm.hint}</p>
       </div>
 
       <Textarea
@@ -69,11 +69,11 @@ export function DescriptionForm(): React.JSX.Element {
         }}
         disabled={state === 'extracting'}
         rows={5}
-        placeholder="e.g. Backend developer working with AWS Lambda and TypeScript…"
+        placeholder={t.descriptionForm.placeholder}
       />
 
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-600">{value.length} / 500 characters</p>
+        <p className="text-xs text-content-subtle">{t.descriptionForm.charCount(value.length)}</p>
 
         <Button
           variant="primary"
@@ -86,12 +86,12 @@ export function DescriptionForm(): React.JSX.Element {
           {state === 'extracting' ? (
             <span className="flex items-center gap-2">
               <span className="h-3 w-3 animate-spin rounded-full border border-white/30 border-t-white" />
-              Extracting…
+              {t.descriptionForm.savingButton}
             </span>
           ) : (
             <>
               <Sparkles className="h-3.5 w-3.5" aria-hidden />
-              Save & extract tags
+              {t.descriptionForm.saveButton}
             </>
           )}
         </Button>
