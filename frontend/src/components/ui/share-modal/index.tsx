@@ -36,19 +36,16 @@ export function ShareModal({
   const postUrl = `${window.location.origin}/post/${postId}`;
 
   const handleCopy = React.useCallback((): void => {
-    const activate = (): void => {
+    const showCopied = (): void => {
       setCopied(true);
       setTimeout(() => {
         setCopied(false);
       }, 2500);
     };
-    try {
-      void navigator.clipboard
-        .writeText(postUrl)
-        .then(activate)
-        .catch(activate);
-    } catch {
-      activate();
+
+    const clipboard = navigator.clipboard as Clipboard | undefined;
+    if (clipboard !== undefined) {
+      void clipboard.writeText(postUrl).then(showCopied);
     }
   }, [postUrl]);
 
@@ -123,9 +120,15 @@ export function ShareModal({
                 {linkLabel}
               </p>
               <div className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface-elevated px-3 py-2.5">
-                <span className="flex-1 truncate text-sm text-content-secondary font-mono">
-                  {postUrl}
-                </span>
+                <input
+                  type="text"
+                  readOnly
+                  value={postUrl}
+                  onFocus={(e) => {
+                    e.currentTarget.select();
+                  }}
+                  className="flex-1 truncate bg-transparent text-sm text-content-secondary font-mono focus:outline-none cursor-text select-all"
+                />
                 <button
                   type="button"
                   onClick={handleCopy}
