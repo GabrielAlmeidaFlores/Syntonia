@@ -138,6 +138,20 @@ interface Translations {
     ariaDisable: (tag: string) => string;
     ariaEnable: (tag: string) => string;
   };
+  legal: {
+    tabLabel: string;
+    termsTitle: string;
+    privacyTitle: string;
+    version: (v: string) => string;
+    updatedAt: (d: string) => string;
+    viewButton: string;
+    loadingError: string;
+    acceptTitle: string;
+    acceptSubtitle: string;
+    acceptCheckbox: string;
+    acceptButton: string;
+    acceptLoading: string;
+  };
 }
 
 /**
@@ -284,6 +298,20 @@ export const translations: Record<Language, Translations> = {
       ariaDisable: (tag) => `Disable ${tag}`,
       ariaEnable: (tag) => `Enable ${tag}`,
     },
+    legal: {
+      tabLabel: 'Legal',
+      termsTitle: 'Terms of Use',
+      privacyTitle: 'Privacy Policy',
+      version: (v) => `Version ${v}`,
+      updatedAt: (d) => `Updated on ${d}`,
+      viewButton: 'View',
+      loadingError: 'Failed to load document. Please try again.',
+      acceptTitle: 'Updated Terms',
+      acceptSubtitle: 'We updated our Terms of Use and Privacy Policy. Please review and accept to continue using Syntonia.',
+      acceptCheckbox: 'I have read and accept the Terms of Use and Privacy Policy.',
+      acceptButton: 'Accept and continue',
+      acceptLoading: 'Saving…',
+    },
   },
 
   'pt-BR': {
@@ -423,6 +451,20 @@ export const translations: Record<Language, Translations> = {
       savingButton: 'Salvando…',
       ariaDisable: (tag) => `Desativar ${tag}`,
       ariaEnable: (tag) => `Ativar ${tag}`,
+    },
+    legal: {
+      tabLabel: 'Legal',
+      termsTitle: 'Termos de Uso',
+      privacyTitle: 'Política de Privacidade',
+      version: (v) => `Versão ${v}`,
+      updatedAt: (d) => `Atualizado em ${d}`,
+      viewButton: 'Ver',
+      loadingError: 'Falha ao carregar o documento. Tente novamente.',
+      acceptTitle: 'Termos Atualizados',
+      acceptSubtitle: 'Atualizamos nossos Termos de Uso e Política de Privacidade. Leia e aceite para continuar usando o Syntonia.',
+      acceptCheckbox: 'Li e aceito os Termos de Uso e a Política de Privacidade.',
+      acceptButton: 'Aceitar e continuar',
+      acceptLoading: 'Salvando…',
     },
   },
 };

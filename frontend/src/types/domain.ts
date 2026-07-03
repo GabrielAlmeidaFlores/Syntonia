@@ -87,3 +87,29 @@ export interface UpdateProfileResponse {
   readonly activeTags: Tag[];
   readonly updatedAt: string;
 }
+
+/** Response from GET /legal/terms-status. */
+export interface TermsStatus {
+  readonly needsAcceptance: boolean;
+  readonly termsVersion: string;
+  readonly privacyVersion: string;
+}
+
+/** Response from GET /legal/terms or GET /legal/privacy. */
+export interface LegalDocument {
+  readonly type: 'terms' | 'privacy';
+  readonly version: string;
+  readonly updatedAt: string;
+  readonly content: string;
+}
+
+/** Request body for POST /legal/accept. */
+export interface AcceptTermsRequest {
+  readonly termsVersion: string;
+  readonly privacyVersion: string;
+}
+
+/** Response from POST /legal/accept. */
+export interface AcceptTermsResponse {
+  readonly acceptedAt: string;
+}

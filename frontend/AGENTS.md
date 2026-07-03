@@ -72,17 +72,25 @@ src/
 │       ├── badge/                   Badge — variants: default, accent, outline, success, warning,
 │       │                            destructive, tag, tag-active.
 │       ├── card/                    Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter.
+│       ├── confirm-modal/           ConfirmModal — bottom-sheet confirmation with backdrop. Used for
+│       │                            logout and unsave actions. Portal + AnimatePresence.
 │       ├── input/                   Controlled text input (dark theme).
-│       ├── textarea/                Controlled textarea (dark theme).
+│       ├── legal-doc-modal/         LegalDocModal — bottom-sheet that fetches and renders a legal
+│       │                            document (terms/privacy) as Markdown from GET /legal/{type}.
+│       ├── share-modal/             ShareModal — bottom-sheet with post URL + copy-to-clipboard button.
 │       ├── skeleton/                Shimmer skeleton block (dark theme).
-│       └── toast/                   ToastContainer + ToastViewport (Radix Toast).
+│       ├── terms-acceptance-modal/  TermsAcceptanceModal — full-screen blocking modal (z:99999) shown
+│       │                            when needsAcceptance=true. Cannot be dismissed without accepting.
+│       │                            Fetches both documents, accordion expand, checkbox + confirm button.
+│       └── toast/                   ToastContainer (Framer Motion, portal) + ToastViewport (no-op).
 ├── features/                        One folder per feature, structured as {feature}/page/.
 │   ├── auth/
 │   │   └── login/page/              MockCognitoPage — calls POST /auth/callback (MSW).
 │   ├── onboarding/page/             OnboardingPage + extracted-tags.tsx
 │   ├── feed/page/                   FeedPage + feed-container.tsx + post-card.tsx + post-detail.tsx
-│   ├── profile/page/                ProfilePage (tabs: Profile | Settings) +
-│   │                                description-form.tsx + tag-manager.tsx + settings-panel.tsx
+│   ├── profile/page/                ProfilePage (tabs: Profile | Settings | Legal) +
+│   │                                description-form.tsx + tag-manager.tsx + settings-panel.tsx +
+│   │                                legal-tab.tsx
 │   ├── post/page/                   PostPage — deep-link single post view (/post/:id).
 │   └── saved/
 │       ├── page/                    SavedGridPage (index.tsx) + saved-post-card.tsx — /saved
@@ -107,14 +115,18 @@ src/
 ├── mocks/
 │   ├── browser.ts                   Configures and exports the MSW ServiceWorker instance.
 │   ├── handlers/
-│   │   ├── index.ts                 Barrel: [...authHandlers, ...feedHandlers, ...savedHandlers, ...userHandlers].
+│   │   ├── index.ts                 Barrel: [...authHandlers, ...feedHandlers, ...legalHandlers, ...savedHandlers, ...userHandlers].
 │   │   ├── auth.ts                  POST /auth/callback → returns MOCK_USER + fake token (800ms).
 │   │   ├── feed.ts                  GET /feed, GET /post/:id, POST /feed/request.
+│   │   ├── legal.ts                 GET /legal/terms-status, GET /legal/terms, GET /legal/privacy,
+│   │   │                            POST /legal/accept. In-memory state: mockTermsStatus.
 │   │   ├── saved.ts                 POST /post/:id/save, DELETE /post/:id/save, GET /posts/saved.
 │   │   └── user.ts                  GET /user/preferences, PUT /user/preferences, PUT /user/profile.
 │   └── data/
 │       ├── index.ts                 Barrel: exports MOCK_POSTS, MOCK_USER, mockExtractTags, TAG_COLORS,
-│       │                            MOCK_SAVED_AT, getMockSavedPosts.
+│       │                            MOCK_SAVED_AT, getMockSavedPosts, getMockLegalDocument, mockTermsStatus.
+│       ├── legal.ts                 mockTermsStatus + mockAcceptTerms() + getMockLegalDocument().
+│       │                            Terms of Use and Privacy Policy content in Markdown.
 │       ├── posts.ts                 15 mock posts (5 topics × 3) with Markdown content.
 │       ├── saved.ts                 MOCK_SAVED_AT map + getMockSavedPosts() helper.
 │       ├── user.ts                  MOCK_USER — single source of truth for the mock authenticated user.
@@ -137,6 +149,10 @@ src/
 │   ├── saved/
 │   │   └── index.ts                 useSavedStore — savedIds (Set, persisted), posts[], save(),
 │   │                                unsave(), isSaved(). Persisted to localStorage: syntonia-saved.
+│   ├── terms/
+│   │   └── index.ts                 useTermsStore — needsAcceptance, termsVersion, privacyVersion,
+│   │                                isChecking. NOT persisted. Checked on every authenticated session
+│   │                                via GET /legal/terms-status in app.tsx useEffect.
 │   ├── user/
 │   │   └── index.ts                 useUserStore — description, extractedTags (all AI-extracted,
 │   │                                immutable after extraction), activeTags (enabled subset),
@@ -156,7 +172,8 @@ src/
     ├── domain.ts                    Post (includes savedAt?), Tag, Theme, Language,
     │                                UserPreferencesLocal, UserProfile, FeedResponse,
     │                                SavedPostsResponse, SavePostResponse, UnsavePostResponse,
-    │                                UserPreferences, GenerationResponse, UpdateProfileResponse.
+    │                                UserPreferences, GenerationResponse, UpdateProfileResponse,
+    │                                TermsStatus, LegalDocument, AcceptTermsRequest, AcceptTermsResponse.
     └── index.ts                     Re-exports from domain.ts.
 ```
 

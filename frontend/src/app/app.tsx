@@ -1,9 +1,14 @@
 import * as Tooltip from '@radix-ui/react-tooltip';
 import * as React from 'react';
 
+import { TermsAcceptanceModal } from '@/components/ui/terms-acceptance-modal';
 import { ToastContainer } from '@/components/ui/toast';
 import { AppRouter } from '@/router';
+import { api } from '@/services/api';
+import { useAuthStore } from '@/stores/auth';
 import { usePreferencesStore } from '@/stores/preferences';
+import { useTermsStore } from '@/stores/terms';
+import type { TermsStatus } from '@/types';
 
 /**
  * Root application component.
@@ -12,11 +17,17 @@ import { usePreferencesStore } from '@/stores/preferences';
  * The outer background is a mesh-gradient effect that adapts to the active theme.
  *
  * Theme synchronisation: on every change to `usePreferencesStore.theme`, the
- * corresponding class (`dark` or `light`) is applied to `<html>`. CSS variables
- * defined in globals.css then update every surface and accent color across the app.
+ * corresponding class (`dark` or `light`) is applied to `<html>`.
+ *
+ * Terms check: after authentication, GET /legal/terms-status is called once.
+ * If `needsAcceptance: true`, TermsAcceptanceModal blocks the entire app until
+ * the user accepts. The modal is rendered at z-index 99999 via React Portal.
  */
 export function App(): React.JSX.Element {
   const theme = usePreferencesStore((s) => s.theme);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const setStatus = useTermsStore((s) => s.setStatus);
+  const setChecking = useTermsStore((s) => s.setChecking);
 
   React.useEffect(() => {
     const root = document.documentElement;
@@ -29,10 +40,19 @@ export function App(): React.JSX.Element {
     }
   }, [theme]);
 
+  React.useEffect(() => {
+    if (!isAuthenticated) return;
+    setChecking(true);
+    void api
+      .get<TermsStatus>('/legal/terms-status')
+      .then((status) => {
+        setStatus(status.needsAcceptance, status.termsVersion, status.privacyVersion);
+      })
+      .finally(() => { setChecking(false); });
+  }, [isAuthenticated, setStatus, setChecking]);
+
   const isDark = theme === 'dark';
-
   const outerBg = isDark ? '#060714' : '#dde3ee';
-
   const orbs = isDark
     ? [
         'radial-gradient(ellipse 70% 60% at 20% 10%, rgba(79,70,229,0.28) 0%, transparent 70%)',
@@ -61,6 +81,7 @@ export function App(): React.JSX.Element {
         </div>
       </div>
       <ToastContainer />
+      <TermsAcceptanceModal />
     </Tooltip.Provider>
   );
 }

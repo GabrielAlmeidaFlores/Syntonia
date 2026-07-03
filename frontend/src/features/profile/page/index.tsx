@@ -1,8 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { LogOut, Settings, User } from 'lucide-react';
+import { LogOut, Scale, Settings, User } from 'lucide-react';
 import * as React from 'react';
 
 import { DescriptionForm } from './description-form';
+import { LegalTab } from './legal-tab';
 import { SettingsPanel } from './settings-panel';
 import { TagManager } from './tag-manager';
 
@@ -15,9 +16,9 @@ import { useAuthStore } from '@/stores/auth';
 import { useUserStore } from '@/stores/user';
 import type { UserPreferences } from '@/types';
 
-type Tab = 'profile' | 'settings';
+type Tab = 'profile' | 'settings' | 'legal';
 
-const TAB_ORDER: Record<Tab, number> = { profile: 0, settings: 1 };
+const TAB_ORDER: Record<Tab, number> = { profile: 0, settings: 1, legal: 2 };
 
 /**
  * Profile page at /profile.
@@ -42,6 +43,7 @@ export default function ProfilePage(): React.JSX.Element {
   const TABS: Array<{ value: Tab; label: string; icon: typeof User }> = [
     { value: 'profile', label: t.profile.tabProfile, icon: User },
     { value: 'settings', label: t.profile.tabSettings, icon: Settings },
+    { value: 'legal', label: t.legal.tabLabel, icon: Scale },
   ];
 
   const handleTabChange = React.useCallback((tab: Tab): void => {
@@ -129,6 +131,7 @@ export default function ProfilePage(): React.JSX.Element {
             )}
 
             {activeTab === 'settings' && <SettingsPanel />}
+            {activeTab === 'legal' && <LegalTab />}
           </motion.div>
         </AnimatePresence>
         </div>
