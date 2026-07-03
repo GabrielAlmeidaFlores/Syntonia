@@ -6,9 +6,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/services/api';
 import { useToastStore } from '@/stores/toast';
 import { useUserStore } from '@/stores/user';
-import type { Tag, UpdateProfileResponse } from '@/types';
+import type { UpdateProfileResponse } from '@/types';
 
-type ExtractionState = 'idle' | 'extracting' | 'done';
+type ExtractionState = 'idle' | 'extracting';
 
 /**
  * Description editing form on the ProfilePage.
@@ -17,6 +17,7 @@ type ExtractionState = 'idle' | 'extracting' | 'done';
  * runs mockExtractTags() to simulate Gemini AI tag extraction, and returns the
  * new activeTags after a 2s delay that mirrors real API latency.
  * Both the description and extracted tags are then synced to the user store.
+ * Result feedback is shown via toast only — no inline label.
  */
 export function DescriptionForm(): React.JSX.Element {
   const { description, setProfile } = useUserStore();
@@ -24,7 +25,6 @@ export function DescriptionForm(): React.JSX.Element {
 
   const [value, setValue] = React.useState(description);
   const [state, setState] = React.useState<ExtractionState>('idle');
-  const [extractedTags, setExtractedTags] = React.useState<Tag[]>([]);
 
   const isDirty = value.trim() !== description.trim();
   const canSave = isDirty && value.trim().length >= 20;
@@ -37,16 +37,14 @@ export function DescriptionForm(): React.JSX.Element {
         description: value.trim(),
       });
 
-      setExtractedTags(response.activeTags);
       setProfile(response.description, response.activeTags);
-      setState('done');
-
       addToast({
         type: 'success',
         message: `Profile updated — ${String(response.activeTags.length)} tags extracted.`,
       });
     } catch {
       addToast({ type: 'error', message: 'Failed to save profile. Please try again.' });
+    } finally {
       setState('idle');
     }
   };
@@ -68,7 +66,6 @@ export function DescriptionForm(): React.JSX.Element {
         value={value}
         onChange={(e) => {
           setValue(e.target.value);
-          if (state === 'done') setState('idle');
         }}
         disabled={state === 'extracting'}
         rows={5}
@@ -99,12 +96,6 @@ export function DescriptionForm(): React.JSX.Element {
           )}
         </Button>
       </div>
-
-      {state === 'done' && extractedTags.length > 0 && (
-        <p className="animate-fade-in text-xs text-green-400">
-          ✓ {String(extractedTags.length)} tags extracted and saved to your profile.
-        </p>
-      )}
     </div>
   );
 }

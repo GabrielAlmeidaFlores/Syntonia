@@ -6,6 +6,7 @@ import { PostDetail } from './post-detail';
 
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useFeedStore } from '@/stores/feed';
 import type { Post } from '@/types';
 
 interface PostCardProps {
@@ -22,10 +23,24 @@ interface PostCardProps {
  *     call preventDefault() when the gesture is clearly horizontal, blocking the
  *     snap-scroll from consuming the event.
  *   - Tapping the "Read" button.
+ *
+ * While PostDetail is open, `isPostExpanded` is set in useFeedStore so the
+ * snap container can lock its own scroll (preventing accidental swipe-to-next-card).
  */
 export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
   const [expanded, setExpanded] = React.useState(false);
   const bgRef = React.useRef<HTMLDivElement>(null);
+  const setPostExpanded = useFeedStore((s) => s.setPostExpanded);
+
+  const open = React.useCallback((): void => {
+    setExpanded(true);
+    setPostExpanded(true);
+  }, [setPostExpanded]);
+
+  const close = React.useCallback((): void => {
+    setExpanded(false);
+    setPostExpanded(false);
+  }, [setPostExpanded]);
 
   const background = `linear-gradient(135deg, ${post.gradient[0]}, ${post.gradient[1]})`;
 
@@ -64,7 +79,7 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
       active = false;
       const dx = e.clientX - startX;
       if (horizontal && dx < -50) {
-        setExpanded(true);
+        open();
       }
       horizontal = false;
     };
@@ -85,15 +100,12 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
       el.removeEventListener('pointerup', onUp);
       el.removeEventListener('pointercancel', onCancel);
     };
-  }, []);
+  }, [open]);
 
   return (
     <div
       data-index={index}
-      className={cn(
-        'relative flex-shrink-0 overflow-hidden',
-        expanded ? 'snap-none h-dvh' : 'snap-card',
-      )}
+      className="snap-card relative h-full flex-shrink-0 overflow-hidden"
       aria-label={`Post: ${post.title}`}
     >
       <div
@@ -123,9 +135,7 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
 
           <button
             type="button"
-            onClick={() => {
-              setExpanded(true);
-            }}
+            onClick={open}
             className="mt-2 flex items-center gap-2 self-start rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs text-white/80 backdrop-blur-sm transition-colors hover:bg-white/20 active:bg-white/30"
             aria-label="Read full post"
           >
@@ -146,9 +156,7 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
           >
             <PostDetail
               post={post}
-              onClose={() => {
-                setExpanded(false);
-              }}
+              onClose={close}
             />
           </motion.div>
         )}

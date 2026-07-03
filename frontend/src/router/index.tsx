@@ -15,6 +15,8 @@ const OnboardingPage = React.lazy(async () => import('@/features/onboarding/page
 const FeedPage = React.lazy(async () => import('@/features/feed/page'));
 const ProfilePage = React.lazy(async () => import('@/features/profile/page'));
 const PostPage = React.lazy(async () => import('@/features/post/page'));
+const SavedGridPage = React.lazy(async () => import('@/features/saved/page'));
+const SavedFeedPage = React.lazy(async () => import('@/features/saved/feed'));
 
 function SuspenseFallback(): React.JSX.Element {
   return (
@@ -82,6 +84,7 @@ const router = createBrowserRouter([
     ),
     children: [
       { path: '/feed', element: withSuspense(FeedPage) },
+      { path: '/saved', element: withSuspense(SavedGridPage) },
       { path: '/profile', element: withSuspense(ProfilePage) },
     ],
   },
@@ -89,9 +92,14 @@ const router = createBrowserRouter([
     path: '/post/:id',
     element: <RequireAuth>{withSuspense(PostPage)}</RequireAuth>,
   },
+  {
+    path: '/saved/feed',
+    element: <RequireAuth>{withSuspense(SavedFeedPage)}</RequireAuth>,
+  },
 ]);
 
 /** Application router. Renders all routes with lazy-loaded pages. */
 export function AppRouter(): React.JSX.Element {
   return <RouterProvider router={router} />;
 }
+

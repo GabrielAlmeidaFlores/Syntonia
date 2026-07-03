@@ -55,7 +55,7 @@ src/
 │   ├── App.tsx                      Root component. Toast + Tooltip providers + AppRouter.
 │   └── layouts/
 │       ├── index.tsx                Barrel export for layouts.
-│       └── feed-layout.tsx          Authenticated layout: Outlet + bottom nav (Feed | Profile | Logout).
+│       └── feed-layout.tsx          Authenticated layout: Outlet + bottom nav (Feed | Saved | Profile | Logout).
 ├── components/
 │   ├── shared/                      Feature-agnostic reusable components.
 │   │   ├── empty-feed-screen/       "No posts yet" — shown when feed is empty.
@@ -76,27 +76,34 @@ src/
 │   ├── onboarding/page/             OnboardingPage + extracted-tags.tsx
 │   ├── feed/page/                   FeedPage + feed-container.tsx + post-card.tsx + post-detail.tsx
 │   ├── profile/page/                ProfilePage + description-form.tsx + tag-manager.tsx
-│   └── post/page/                   PostPage — deep-link single post view (/post/:id).
+│   ├── post/page/                   PostPage — deep-link single post view (/post/:id).
+│   └── saved/
+│       ├── page/                    SavedGridPage (index.tsx) + saved-post-card.tsx — /saved
+│       └── feed/                    SavedFeedPage (index.tsx) — /saved/feed?start=post-id
 ├── hooks/
 │   ├── use-feed.ts                  Calls GET /feed via api.ts; paginates with cursor.
-│   └── use-jit.ts                   Calls POST /feed/request when buffer ≤ TRIGGER_THRESHOLD.
+│   ├── use-jit.ts                   Calls POST /feed/request when buffer ≤ TRIGGER_THRESHOLD.
+│   └── use-saved-posts.ts           Loads GET /posts/saved; exposes save() / unsave() actions.
 ├── lib/
 │   ├── env.ts                       Single source of truth for all VITE_* env vars. Every
 │   │                                import.meta.env access goes through here — nowhere else.
 │   ├── utils.ts                     cn(), formatDate(), formatRelativeTime(), truncate(), sleep().
 │   └── constants.ts                 AVAILABLE_TAGS, DEFAULT_TAGS, TRIGGER_THRESHOLD,
-│                                    MAX_PENDING_REQUESTS, FEED_PAGE_SIZE, TAG_EXTRACTION_DELAY_MS,
-│                                    JIT_GENERATION_DELAY_MS.
+│                                    MAX_PENDING_REQUESTS, FEED_PAGE_SIZE, SAVED_PAGE_SIZE,
+│                                    TAG_EXTRACTION_DELAY_MS, JIT_GENERATION_DELAY_MS.
 ├── mocks/
 │   ├── browser.ts                   Configures and exports the MSW ServiceWorker instance.
 │   ├── handlers/
-│   │   ├── index.ts                 Barrel: [...authHandlers, ...feedHandlers, ...userHandlers].
+│   │   ├── index.ts                 Barrel: [...authHandlers, ...feedHandlers, ...savedHandlers, ...userHandlers].
 │   │   ├── auth.ts                  POST /auth/callback → returns MOCK_USER + fake token (800ms).
 │   │   ├── feed.ts                  GET /feed, GET /post/:id, POST /feed/request.
+│   │   ├── saved.ts                 POST /post/:id/save, DELETE /post/:id/save, GET /posts/saved.
 │   │   └── user.ts                  GET /user/preferences, PUT /user/preferences, PUT /user/profile.
 │   └── data/
-│       ├── index.ts                 Barrel: exports MOCK_POSTS, MOCK_USER, mockExtractTags, TAG_COLORS.
+│       ├── index.ts                 Barrel: exports MOCK_POSTS, MOCK_USER, mockExtractTags, TAG_COLORS,
+│       │                            MOCK_SAVED_AT, getMockSavedPosts.
 │       ├── posts.ts                 15 mock posts (5 topics × 3) with Markdown content.
+│       ├── saved.ts                 MOCK_SAVED_AT map + getMockSavedPosts() helper.
 │       ├── user.ts                  MOCK_USER — single source of truth for the mock authenticated user.
 │       └── tags.ts                  TAG_COLORS map + mockExtractTags() simulation function.
 ├── router/
@@ -109,6 +116,8 @@ src/
 │   │   └── index.ts                 useAuthStore — user, token, login(code), logout.
 │   ├── feed/
 │   │   └── index.ts                 useFeedStore — posts[], currentIndex, cursor, isLoading, hasMore.
+│   ├── saved/
+│   │   └── index.ts                 useSavedStore — savedIds (persisted), posts[], save(), unsave(), isSaved().
 │   ├── user/
 │   │   └── index.ts                 useUserStore — description, activeTags, setProfile, toggleTag.
 │   └── toast/
@@ -118,8 +127,9 @@ src/
 │                                    snap-scroll utilities (.snap-feed, .snap-card) +
 │                                    Markdown prose overrides.
 └── types/
-    ├── domain.ts                    Post, Tag, UserProfile, FeedResponse, UserPreferences,
-    │                                GenerationResponse, UpdateProfileResponse.
+    ├── domain.ts                    Post (includes savedAt?), Tag, UserProfile, FeedResponse,
+    │                                SavedPostsResponse, SavePostResponse, UnsavePostResponse,
+    │                                UserPreferences, GenerationResponse, UpdateProfileResponse.
     └── index.ts                     Re-exports from domain.ts.
 ```
 
@@ -326,8 +336,10 @@ The feed uses CSS snap, not JavaScript scroll control:
 /auth/login        MockCognitoPage (no auth required)
 /onboarding        OnboardingPage (RequireAuth)
 /feed              FeedPage (RequireAuth + FeedLayout)
+/saved             SavedGridPage (RequireAuth + FeedLayout)
 /profile           ProfilePage (RequireAuth + FeedLayout)
 /post/:id          PostPage (RequireAuth, no layout)
+/saved/feed        SavedFeedPage (RequireAuth, no layout — snap-scroll)
 ```
 
 **`RootRedirect` logic:**
@@ -375,7 +387,8 @@ export const useMyStore = create<MyState>((set) => ({
 |---|---|---|
 | `useAuthStore` | `user`, `isAuthenticated` | No |
 | `useFeedStore` | `posts[]`, `currentIndex`, `cursor`, `isLoading` | No |
-| `useUserStore` | `description`, `activeTags` | Yes (localStorage) |
+| `useSavedStore` | `savedIds` (Set), `posts[]`, `isSaved()` | Yes (localStorage: `syntonia-saved`) |
+| `useUserStore` | `description`, `activeTags` | Yes (localStorage: `syntonia-user-prefs`) |
 | `useToastStore` | `toasts[]` | No |
 
 ---
@@ -442,6 +455,9 @@ Add to `src/mocks/data/posts.ts`. Follow this shape:
 | `GET /user/preferences` | 200ms | DynamoDB GetItem |
 | `PUT /user/preferences` | 400ms | DynamoDB UpdateItem |
 | `PUT /user/profile` | 2000ms | Gemini API tag extraction |
+| `POST /post/:id/save` | 300ms | DynamoDB UpdateItem (remove TTL, set savedAt) |
+| `DELETE /post/:id/save` | 300ms | DynamoDB UpdateItem (restore TTL, clear savedAt) |
+| `GET /posts/saved` | 400ms | DynamoDB GSI Query (userId-savedAt-index) |
 
 ### `mockExtractTags(description: string): Tag[]`
 

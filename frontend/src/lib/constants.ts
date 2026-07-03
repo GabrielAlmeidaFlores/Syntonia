@@ -31,6 +31,8 @@ export const MAX_PENDING_REQUESTS = 5;
 
 export const FEED_PAGE_SIZE = 5;
 
+export const SAVED_PAGE_SIZE = 12;
+
 export const TAG_EXTRACTION_DELAY_MS = 2000;
 
 export const JIT_GENERATION_DELAY_MS = 1500;

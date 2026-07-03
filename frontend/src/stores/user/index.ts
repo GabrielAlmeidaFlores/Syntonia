@@ -5,12 +5,15 @@ import type { Tag } from '@/types';
 
 interface UserState {
   readonly description: string;
+  /** All tags extracted by AI — never changes after extraction. */
+  readonly extractedTags: Tag[];
+  /** Subset of extractedTags the user has enabled — drives feed generation. */
   readonly activeTags: Tag[];
   readonly setDescription: (description: string) => void;
   readonly setTags: (tags: Tag[]) => void;
   /** Toggles a single tag on/off. Always keeps at least 1 active tag. */
   readonly toggleTag: (tag: Tag) => void;
-  /** Replaces description and tags atomically after AI extraction. */
+  /** Replaces description and extracted tags atomically after AI extraction. All tags start active. */
   readonly setProfile: (description: string, tags: Tag[]) => void;
 }
 
@@ -18,6 +21,7 @@ export const useUserStore = create<UserState>()(
   persist(
     (set, get) => ({
       description: '',
+      extractedTags: [],
       activeTags: [],
       setDescription: (description) => set({ description }),
       setTags: (activeTags) => set({ activeTags }),
@@ -29,7 +33,8 @@ export const useUserStore = create<UserState>()(
           activeTags: isActive ? current.filter((t) => t !== tag) : [...current, tag],
         });
       },
-      setProfile: (description, activeTags) => set({ description, activeTags }),
+      setProfile: (description, tags) =>
+        set({ description, extractedTags: tags, activeTags: tags }),
     }),
     { name: 'syntonia-user-prefs' },
   ),

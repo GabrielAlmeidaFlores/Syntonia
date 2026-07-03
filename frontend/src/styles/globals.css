@@ -57,13 +57,11 @@
   .snap-feed {
     scroll-snap-type: y mandatory;
     overflow-y: scroll;
-    height: 100dvh;
   }
 
   .snap-card {
     scroll-snap-align: start;
     scroll-snap-stop: always;
-    height: 100dvh;
   }
 
   /* ── Shimmer skeleton ────────────────────────────── */

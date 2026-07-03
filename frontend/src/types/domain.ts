@@ -30,6 +30,25 @@ export interface Post {
   readonly tags: Tag[];
   readonly gradient: readonly [string, string];
   readonly createdAt: string;
+  /** ISO 8601 — present only when the user has saved this post. */
+  readonly savedAt?: string;
+}
+
+/** Paginated response from GET /posts/saved. */
+export interface SavedPostsResponse {
+  readonly posts: Post[];
+  readonly cursor: string | null;
+  readonly hasMore: boolean;
+}
+
+/** Response from POST /post/:id/save. */
+export interface SavePostResponse {
+  readonly savedAt: string;
+}
+
+/** Response from DELETE /post/:id/save. */
+export interface UnsavePostResponse {
+  readonly message: string;
 }
 
 /** Authenticated user profile stored in DynamoDB and synced to the Zustand store. */

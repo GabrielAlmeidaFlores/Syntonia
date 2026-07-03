@@ -1,4 +1,4 @@
-import { ArrowLeft, Share2 } from 'lucide-react';
+import { ArrowLeft, Bookmark, BookmarkCheck, Share2 } from 'lucide-react';
 import * as React from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -8,7 +8,9 @@ import 'highlight.js/styles/github-dark.css';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
-import type { Post } from '@/types';
+import { api } from '@/services/api';
+import { useSavedStore } from '@/stores/saved';
+import type { Post, SavePostResponse, UnsavePostResponse } from '@/types';
 
 interface PostDetailProps {
   readonly post: Post;
@@ -18,8 +20,38 @@ interface PostDetailProps {
 /**
  * Full-screen post detail panel that slides in from the right.
  * Renders the post's Markdown content with syntax-highlighted code blocks.
+ * Includes a save/unsave bookmark toggle that calls POST|DELETE /post/:id/save.
  */
 export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Element {
+  const isSaved = useSavedStore((s) => s.isSaved(post.id));
+  const storeSave = useSavedStore((s) => s.save);
+  const storeUnsave = useSavedStore((s) => s.unsave);
+  const [toggling, setToggling] = React.useState(false);
+
+  const handleToggleSave = React.useCallback((): void => {
+    if (toggling) return;
+    setToggling(true);
+    if (isSaved) {
+      void api
+        .delete<UnsavePostResponse>(`/post/${post.id}/save`)
+        .then(() => {
+          storeUnsave(post.id);
+        })
+        .finally(() => {
+          setToggling(false);
+        });
+    } else {
+      void api
+        .post<SavePostResponse>(`/post/${post.id}/save`, {})
+        .then((res) => {
+          storeSave(post, res.savedAt);
+        })
+        .finally(() => {
+          setToggling(false);
+        });
+    }
+  }, [toggling, isSaved, post, storeSave, storeUnsave]);
+
   return (
     <div className="flex min-h-full flex-col bg-surface">
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-surface-border bg-surface/80 px-4 py-3 backdrop-blur-md">
@@ -33,9 +65,26 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
           Back
         </button>
 
-        <Button variant="ghost" size="sm" aria-label="Share post">
-          <Share2 className="h-4 w-4" aria-hidden />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleToggleSave}
+            disabled={toggling}
+            aria-label={isSaved ? 'Remove from saved' : 'Save post'}
+            aria-pressed={isSaved}
+          >
+            {isSaved ? (
+              <BookmarkCheck className="h-4 w-4 text-accent-light" aria-hidden />
+            ) : (
+              <Bookmark className="h-4 w-4" aria-hidden />
+            )}
+          </Button>
+
+          <Button variant="ghost" size="sm" aria-label="Share post">
+            <Share2 className="h-4 w-4" aria-hidden />
+          </Button>
+        </div>
       </div>
 
       <article className="flex-1 px-5 py-6">
@@ -67,3 +116,4 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
     </div>
   );
 }
+

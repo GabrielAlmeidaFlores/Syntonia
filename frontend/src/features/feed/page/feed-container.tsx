@@ -18,6 +18,10 @@ interface FeedContainerProps {
  *
  * Uses IntersectionObserver to track the current visible card and update
  * `currentIndex` in the feed store, which drives the JIT generation trigger.
+ *
+ * When `isPostExpanded` is true (a PostDetail is open), `overflowY` is set
+ * directly via the DOM ref to lock the snap container — bypassing CSS cascade
+ * so `snap-feed`'s `overflow-y: scroll` cannot override the lock.
  */
 export function FeedContainer({
   posts,
@@ -25,7 +29,14 @@ export function FeedContainer({
   onReload,
 }: FeedContainerProps): React.JSX.Element {
   const setCurrentIndex = useFeedStore((s) => s.setCurrentIndex);
+  const isPostExpanded = useFeedStore((s) => s.isPostExpanded);
   const containerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (el === null) return;
+    el.style.overflowY = isPostExpanded ? 'hidden' : '';
+  }, [isPostExpanded]);
 
   React.useEffect(() => {
     const observer = new IntersectionObserver(
@@ -50,7 +61,7 @@ export function FeedContainer({
 
   if (posts.length === 0 && !isLoading) {
     return (
-      <div className="snap-card flex items-center justify-center">
+      <div className="snap-card h-full flex items-center justify-center">
         <EmptyFeedScreen onReload={onReload} />
       </div>
     );
@@ -63,7 +74,7 @@ export function FeedContainer({
       ))}
 
       {isLoading && (
-        <div className="snap-card">
+        <div className="snap-card h-full">
           <LoadingSkeleton />
         </div>
       )}

@@ -87,7 +87,7 @@ Y-AXIS (vertical scroll — navigates between posts)
        │              │              │              │
        ▼              ▼              ▼              ▼
   [getFeed]    [requestPost]   [getPost]     [user/preferences]
-       │              │              │        [get + update]
+  [getSaved]   [savePost]      [unsavePost]  [get + update]
        │              │              │
        │    ┌─────────┴──────────┐   │
        │    │                    │   │
@@ -105,6 +105,8 @@ Y-AXIS (vertical scroll — navigates between posts)
        │
        ▼    ▼
      [DynamoDB: SintoniaFeed]
+       │    ttl = 90 days on creation
+       │    savedAt set when saved → ttl removed
                       │
      [DynamoDB: SintoniaUsers] ◄── Cognito Post-Confirmation Trigger
                                    (creates user profile automatically)
@@ -156,7 +158,9 @@ React 18 (Vite 5)
 /signup               → Cognito account creation (email + password + email verification)
 /onboarding           → Post-signup: user writes description → AI extracts tags → confirm → /feed
 /feed                 → Main feed (protected route via RequireAuth)
-/profile              → Profile page: edit description, enable/disable AI-extracted tags
+/saved                → Saved posts grid — all bookmarked posts (protected)
+/saved/feed           → Snap-scroll feed of saved posts starting at ?from=postId (protected)
+/profile              → Profile page: edit description, enable/disable AI-extracted tags, logout
 /post/:id             → Individual post expanded view (shareable deep link)
 ```
 
@@ -427,6 +431,30 @@ Displayed when `GET /feed` returns `posts: []` and `isLoading` is `false`. Infor
 - Enabled tags = `activeTags` (used for content generation)
 - On tag toggle → calls `PUT /user/preferences` with updated `{ activeTags }`
 - Changes to `activeTags` immediately affect the next JIT generation request
+- **Logout button** at the bottom of the page (moved from bottom nav)
+
+**`SavedGridPage`** (`/saved`)
+- 2-column grid of saved post cards
+- Each card shows: gradient background, title, tags chip row
+- Each card has an **unsave button** (bookmark-fill icon) visible in the top-right corner
+  - Tapping unsave calls `DELETE /post/{id}/save` and removes the card from the grid
+- Tapping a card (anywhere except the unsave button) navigates to `/saved/feed?from={postId}`
+- Empty state if no saved posts, with a link back to `/feed`
+
+**`SavedFeedPage`** (`/saved/feed?from={postId}`)
+- **Identical snap-scroll feed experience as `/feed`** — same `PostCard` + `PostDetail` components
+- Contains only the user's saved posts fetched from `GET /posts/saved`
+- Starts scrolled to the post matching `?from=postId`
+- Can scroll up/down through all saved posts (snap behaviour)
+- No JIT generation (fixed list — only saved posts, no background requests)
+- Back button (top-left) returns to `/saved`
+
+**`PostDetail`** (updated — applies to both feed and saved feed)
+- Bookmark icon button added to the header (next to Share button)
+- Filled bookmark = post is saved; outline bookmark = not saved
+- Tapping:
+  - If not saved → `POST /post/{id}/save` → icon becomes filled, post added to saved store
+  - If saved → `DELETE /post/{id}/save` → icon becomes outline, post removed from saved store
 
 **`src/hooks/useFeed.ts`**
 ```typescript
@@ -911,8 +939,11 @@ STAGE=dev
 |---|---|---|---|---|
 | `getFeed` | GET /feed | 10s | Default | Returns paginated posts via GSI |
 | `requestPost` | POST /feed/request | 10s | Default | Sends to SQS + persists request to DynamoDB |
-| `workerInternal` | SQS (GenerationQueue) | 60s | 5 (reserved) | Calls Gemini and saves the generated post |
+| `workerInternal` | SQS (GenerationQueue) | 60s | 5 (reserved) | Calls Gemini, saves post with 90-day TTL |
 | `getPost` | GET /post/{id} | 10s | Default | Returns a full post by ID |
+| `savePost` | POST /post/{id}/save | 10s | Default | Sets `savedAt`, removes `ttl` — post persists forever |
+| `unsavePost` | DELETE /post/{id}/save | 10s | Default | Removes `savedAt`, restores `ttl = now + 30d` |
+| `getSavedPosts` | GET /posts/saved | 10s | Default | Returns saved posts via `userId-savedAt-index` GSI |
 | `getPreferences` | GET /user/preferences | 10s | Default | Returns user profile, description, and active tags |
 | `updatePreferences` | PUT /user/preferences | 10s | Default | Enables/disables individual active tags |
 | `updateProfile` | PUT /user/profile | 29s | Default | Saves description + calls Gemini to extract tags |
@@ -968,6 +999,49 @@ export const getPostById = async (postId) => {
 
 export const savePost = async (post) => {
   return db.send(new PutCommand({ TableName: Tables.FEED, Item: post }));
+};
+
+export const markPostSaved = async (postId, userId) => {
+  const savedAt = new Date().toISOString();
+  return db.send(new UpdateCommand({
+    TableName: Tables.FEED,
+    Key: { id: postId },
+    ConditionExpression: 'userId = :uid',
+    UpdateExpression: 'SET savedAt = :s REMOVE #ttl',
+    ExpressionAttributeNames: { '#ttl': 'ttl' },
+    ExpressionAttributeValues: { ':s': savedAt, ':uid': userId },
+  }));
+};
+
+export const markPostUnsaved = async (postId, userId) => {
+  const ttl = Math.floor(Date.now() / 1000) + 2592000; // now + 30 days
+  return db.send(new UpdateCommand({
+    TableName: Tables.FEED,
+    Key: { id: postId },
+    ConditionExpression: 'userId = :uid',
+    UpdateExpression: 'REMOVE savedAt SET #ttl = :t',
+    ExpressionAttributeNames: { '#ttl': 'ttl' },
+    ExpressionAttributeValues: { ':t': ttl, ':uid': userId },
+  }));
+};
+
+export const getSavedByUser = async (userId, limit = 20, cursor = null) => {
+  const params = {
+    TableName: Tables.FEED,
+    IndexName: 'userId-savedAt-index',
+    KeyConditionExpression: 'userId = :uid',
+    ExpressionAttributeValues: { ':uid': userId },
+    ScanIndexForward: false, // newest saved first
+    Limit: limit,
+  };
+  if (cursor) {
+    params.ExclusiveStartKey = JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8'));
+  }
+  const result = await db.send(new QueryCommand(params));
+  const nextCursor = result.LastEvaluatedKey
+    ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64')
+    : null;
+  return { items: result.Items, cursor: nextCursor };
 };
 
 // ── Requests ─────────────────────────────────────────────────────────
@@ -1561,6 +1635,7 @@ export const handler = async (event) => {
           gradient: postData.gradient,
           createdAt: new Date().toISOString(),
           status: 'READY',
+          ttl: Math.floor(Date.now() / 1000) + 7776000, // 90 days — removed when post is saved
         };
 
         await savePost(post);
@@ -1778,6 +1853,78 @@ export const handler = async (event) => {
 };
 ```
 
+**`src/functions/savePost.js`**
+```javascript
+import { getUserId, AuthError } from '../shared/auth.js';
+import { markPostSaved } from '../shared/db.js';
+import { ok, unauthorized, notFound, serverError } from '../shared/response.js';
+
+export const handler = async (event) => {
+  try {
+    const userId = getUserId(event);
+    const postId = event.pathParameters?.id;
+    if (!postId) return notFound(event);
+
+    await markPostSaved(postId, userId);
+
+    return ok(event, {
+      savedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(event);
+    return serverError(event, err);
+  }
+};
+```
+
+**`src/functions/unsavePost.js`**
+```javascript
+import { getUserId, AuthError } from '../shared/auth.js';
+import { markPostUnsaved } from '../shared/db.js';
+import { ok, unauthorized, notFound, serverError } from '../shared/response.js';
+
+export const handler = async (event) => {
+  try {
+    const userId = getUserId(event);
+    const postId = event.pathParameters?.id;
+    if (!postId) return notFound(event);
+
+    await markPostUnsaved(postId, userId);
+
+    return ok(event, { message: 'Post unsaved. TTL restored to 30 days.' });
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(event);
+    return serverError(event, err);
+  }
+};
+```
+
+**`src/functions/getSavedPosts.js`**
+```javascript
+import { getUserId, AuthError } from '../shared/auth.js';
+import { getSavedByUser } from '../shared/db.js';
+import { ok, unauthorized, serverError } from '../shared/response.js';
+
+export const handler = async (event) => {
+  try {
+    const userId = getUserId(event);
+    const limit = Math.min(Number(event.queryStringParameters?.limit ?? 20), 50);
+    const cursor = event.queryStringParameters?.cursor ?? null;
+
+    const { items, cursor: nextCursor } = await getSavedByUser(userId, limit, cursor);
+
+    return ok(event, {
+      posts: items,
+      cursor: nextCursor,
+      hasMore: nextCursor !== null,
+    });
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(event);
+    return serverError(event, err);
+  }
+};
+```
+
 ---
 
 ## 5. Database — DynamoDB
@@ -1789,6 +1936,9 @@ export const handler = async (event) => {
 | Fetch paginated feed for a user | `SintoniaFeed` / GSI `userId-createdAt-index` | Query | PK: userId, SK: createdAt (desc) |
 | Fetch a specific post by ID | `SintoniaFeed` | GetItem | PK: id |
 | Save a new generated post | `SintoniaFeed` | PutItem | PK: id |
+| **Save a post (bookmark)** | `SintoniaFeed` | UpdateItem (SET savedAt, REMOVE ttl) | PK: id |
+| **Unsave a post** | `SintoniaFeed` | UpdateItem (REMOVE savedAt, SET ttl) | PK: id |
+| **Fetch saved posts for a user** | `SintoniaFeed` / GSI `userId-savedAt-index` | Query | PK: userId, SK: savedAt (desc) |
 | Save a generation request | `SintoniaRequests` | PutItem | PK: id |
 | Update request status | `SintoniaRequests` | UpdateItem | PK: id |
 | Count PENDING requests for a user | `SintoniaRequests` / GSI `userId-status-index` | Query + COUNT | PK: userId, SK: status |
@@ -1810,18 +1960,31 @@ export const handler = async (event) => {
 | `content` | String | Full Markdown content (600+ words) |
 | `tags` | List\<String\> | Content tags |
 | `gradient` | List\<String\> | Array of 2 hex colors: `["#FF6B35", "#F7931E"]` |
-| `createdAt` | String | ISO 8601 — used as SK in GSI for ordering |
+| `createdAt` | String | ISO 8601 — used as SK in `userId-createdAt-index` GSI |
 | `status` | String | `READY` — only valid value (FAILED posts are never saved) |
+| `ttl` | Number | Unix timestamp — **set on creation** (`now + 90d`). **Removed** when post is saved. **Restored** (`now + 30d`) when unsaved. DynamoDB auto-deletes expired unsaved posts. |
+| `savedAt` | String | ISO 8601 — **set when user saves the post**. Absent when not saved. Used as SK in `userId-savedAt-index` GSI. |
+
+**TTL strategy:**
+
+| Event | `ttl` value | `savedAt` |
+|---|---|---|
+| Post created by `workerInternal` | `now + 90 days` | absent |
+| User saves post (`POST /post/{id}/save`) | **removed** | set to current ISO timestamp |
+| User unsaves post (`DELETE /post/{id}/save`) | `now + 30 days` | **removed** |
 
 **GSI `userId-createdAt-index`:**
-- PK: `userId`
-- SK: `createdAt`
-- Projection: ALL
-- Enables querying and paginating a user's posts in descending date order
+- PK: `userId` · SK: `createdAt` · Projection: ALL
+- Enables paginating the feed in descending date order
+
+**GSI `userId-savedAt-index`** *(new)*:
+- PK: `userId` · SK: `savedAt` · Projection: ALL
+- Enables `GET /posts/saved` — all saved posts for a user, newest-saved-first
+- Only items that have a `savedAt` attribute appear in this index
 
 > **Design decision:** `id` is the simple PK (no Sort Key) on the main table.
 > This allows direct `GetItem` by `id` for the `GET /post/:id` endpoint.
-> The GSI handles user-scoped queries.
+> The two GSIs handle user-scoped feed and saved queries.
 
 #### 5.2 `SintoniaRequests` — Generation Request History & Throttle Source
 
@@ -2297,6 +2460,83 @@ Enables or disables individual tags from the user's AI-extracted tag set. Does *
 
 ---
 
+### `POST /post/:id/save` [AUTH]
+
+Saves a post — sets `savedAt` to now and removes the `ttl` attribute so the post persists indefinitely.
+
+**Response 200:**
+```json
+{ "savedAt": "2026-07-02T10:00:00Z" }
+```
+
+**Possible errors:**
+
+| Status | When |
+|---|---|
+| `401 Unauthorized` | Invalid token |
+| `404 Not Found` | Post does not exist or belongs to another user |
+| `500 Internal Server Error` | DynamoDB failure |
+
+---
+
+### `DELETE /post/:id/save` [AUTH]
+
+Unsaves a post — removes `savedAt` and restores `ttl = now + 30 days`.
+
+**Response 200:**
+```json
+{ "message": "Post unsaved. TTL restored to 30 days." }
+```
+
+**Possible errors:**
+
+| Status | When |
+|---|---|
+| `401 Unauthorized` | Invalid token |
+| `404 Not Found` | Post does not exist or belongs to another user |
+| `500 Internal Server Error` | DynamoDB failure |
+
+---
+
+### `GET /posts/saved` [AUTH]
+
+Returns all saved posts for the authenticated user, ordered by `savedAt` descending (newest saved first).
+
+**Query params:**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `limit` | integer | 20 | Posts per page. Max: 50 |
+| `cursor` | string | null | Pagination cursor from previous response |
+
+**Response 200:**
+```json
+{
+  "posts": [
+    {
+      "id": "uuid",
+      "title": "AWS Lambda Cold Start: Real-World Strategies",
+      "summary": "...",
+      "tags": ["AWS", "Lambda", "Performance"],
+      "gradient": ["#FF6B35", "#F7931E"],
+      "createdAt": "2026-07-02T10:00:00Z",
+      "savedAt": "2026-07-02T14:30:00Z"
+    }
+  ],
+  "cursor": "base64encodedKey==",
+  "hasMore": false
+}
+```
+
+**Possible errors:**
+
+| Status | When |
+|---|---|
+| `401 Unauthorized` | Invalid token |
+| `500 Internal Server Error` | DynamoDB failure |
+
+---
+
 ## 9. Data Models
 
 ### TypeScript (frontend)
@@ -2312,6 +2552,13 @@ export interface Post {
   tags: string[];
   gradient: [string, string];
   createdAt: string;        // ISO 8601
+  savedAt?: string;         // ISO 8601 — present when the post is saved by the user
+}
+
+export interface SavedPostsResponse {
+  posts: Post[];
+  cursor: string | null;
+  hasMore: boolean;
 }
 
 export interface UserPreferences {
@@ -2357,6 +2604,8 @@ export type Tag = typeof AVAILABLE_TAGS[number];
   gradient: ["#FF6B35", "#F7931E"], // List<String>
   createdAt: "2026-07-02T10:00:00Z", // String ISO 8601
   status: "READY",              // String
+  ttl: 1759978000,              // Number — set on creation (now+90d), removed when saved
+  savedAt: "2026-07-05T...",    // String ISO 8601 — OPTIONAL, present only when saved
 }
 
 // SintoniaRequests item
@@ -2450,7 +2699,8 @@ POST /feed/request
   4. parseGeminiResponse(raw) — validates JSON + required fields
   5. PutItem SintoniaFeed:
      { id (new UUID), userId, title, summary, content, tags, gradient,
-       createdAt, status: 'READY' }
+       createdAt, status: 'READY',
+       ttl: now + 90 days }   ← auto-deleted unless user saves the post
   6. UpdateItem SintoniaRequests[requestId]:
      { status: 'COMPLETED', completedAt, postId }
   7. Lambda returns without error → SQS auto-deletes the message
@@ -2737,6 +2987,54 @@ functions:
           method: get
           cors: true
 
+  savePost:
+    handler: src/functions/savePost.handler
+    timeout: 10
+    description: "Saves a post — sets savedAt, removes TTL so post persists indefinitely"
+    events:
+      - http:
+          path: post/{id}/save
+          method: post
+          cors:
+            origin: 'https://syntonia.app,https://dev.syntonia.app,http://localhost:5173'
+            headers: ['Content-Type', 'Authorization']
+            allowCredentials: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  unsavePost:
+    handler: src/functions/unsavePost.handler
+    timeout: 10
+    description: "Unsaves a post — removes savedAt, restores TTL to now + 30 days"
+    events:
+      - http:
+          path: post/{id}/save
+          method: delete
+          cors:
+            origin: 'https://syntonia.app,https://dev.syntonia.app,http://localhost:5173'
+            headers: ['Content-Type', 'Authorization']
+            allowCredentials: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  getSavedPosts:
+    handler: src/functions/getSavedPosts.handler
+    timeout: 10
+    description: "Returns the authenticated user's saved posts via userId-savedAt-index GSI"
+    events:
+      - http:
+          path: posts/saved
+          method: get
+          cors:
+            origin: 'https://syntonia.app,https://dev.syntonia.app,http://localhost:5173'
+            headers: ['Content-Type', 'Authorization']
+            allowCredentials: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
   # ── Async Worker ───────────────────────────────────────────────────
 
   workerInternal:
@@ -2826,12 +3124,18 @@ resources:
         TableName: SintoniaFeed-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
         # StreamSpecification intentionally omitted — streams are not needed on this table
+        # TTL enabled — posts auto-expire 90 days after creation unless saved by the user
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
         AttributeDefinitions:
           - AttributeName: id
             AttributeType: S
           - AttributeName: userId
             AttributeType: S
           - AttributeName: createdAt
+            AttributeType: S
+          - AttributeName: savedAt
             AttributeType: S
         KeySchema:
           - AttributeName: id
@@ -2842,6 +3146,14 @@ resources:
               - AttributeName: userId
                 KeyType: HASH
               - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: userId-savedAt-index
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: savedAt
                 KeyType: RANGE
             Projection:
               ProjectionType: ALL
@@ -3047,6 +3359,8 @@ syntonia-app/
 │       │   └── useAuth.ts             # Amplify Auth wrapper
 │       ├── pages/
 │       │   ├── FeedPage.tsx           # Feed + empty state (EmptyFeedScreen)
+│       │   ├── SavedGridPage.tsx       # Grid of saved posts with unsave button
+│       │   ├── SavedFeedPage.tsx       # Snap-scroll feed view of saved posts
 │       │   ├── LoginPage.tsx
 │       │   ├── SignupPage.tsx         # Cognito signUp + confirmSignUp flow
 │       │   ├── OnboardingPage.tsx     # Post-signup: description input → AI tag extraction → confirm
@@ -3056,9 +3370,10 @@ syntonia-app/
 │       │   └── api.ts                 # HTTP client + JWT injection
 │       ├── store/
 │       │   ├── feedStore.ts           # Zustand: in-memory posts
+│       │   ├── savedStore.ts          # Zustand: saved post ids (persisted)
 │       │   └── userStore.ts           # Zustand: active tags (persisted)
 │       └── types/
-│           └── index.ts               # Interfaces + AVAILABLE_TAGS
+│           └── index.ts               # Interfaces + AVAILABLE_TAGS (Post includes savedAt?)
 │
 └── backend/                           # Serverless Framework
     ├── package.json
@@ -3071,6 +3386,9 @@ syntonia-app/
         │   ├── getFeed.js             # GET /feed
         │   ├── requestPost.js         # POST /feed/request (fetches description for SQS payload)
         │   ├── getPost.js             # GET /post/{id}
+        │   ├── savePost.js            # POST /post/{id}/save
+        │   ├── unsavePost.js          # DELETE /post/{id}/save
+        │   ├── getSavedPosts.js       # GET /posts/saved
         │   ├── getPreferences.js      # GET /user/preferences (with upsert fallback)
         │   ├── updatePreferences.js   # PUT /user/preferences (tag enable/disable)
         │   ├── updateProfile.js       # PUT /user/profile (description → AI tag extraction)
@@ -3489,34 +3807,39 @@ fields @timestamp, @message
 
 Assumes: 5 sessions/user/month × 20 posts/session = 100 posts viewed per user.
 Generated posts: 10% new posts per user = ~10 new posts/user/month = 10,000 posts/month total.
+Saved posts actions: ~15 saves + ~5 unsaves per user/month = ~20,000 save/unsave calls total.
 
 | Service | Billing unit | Volume/month | Estimated cost |
 |---|---|---|---|
 | **Amplify Hosting** | Build min + GB transferred | 500 min + 10 GB | ~$1.00 |
-| **API Gateway** | HTTP requests | ~500,000 req | ~$1.75 |
-| **Lambda** | GB-second | ~600,000 invocations × 128MB × 0.5s | ~$0.25 |
-| **DynamoDB** | WCU + RCU (PAY_PER_REQUEST) | ~2M WCU + 6M RCU | ~$2.75 |
-| **DynamoDB Streams** | Not used (disabled on SintoniaRequests) | — | **$0.00** |
+| **API Gateway** | HTTP requests | ~520,000 req | ~$1.82 |
+| **Lambda** | GB-second | ~620,000 invocations × 128MB × 0.5s | ~$0.26 |
+| **DynamoDB** | WCU + RCU (PAY_PER_REQUEST) | ~2.1M WCU + 6.2M RCU | ~$2.90 |
+| **DynamoDB Streams** | Not used (disabled on all tables) | — | **$0.00** |
+| **DynamoDB TTL** | Deletes by TTL | ~10,000 expired posts/month | **FREE** |
 | **SQS (GenerationQueue + DLQ)** | Messages sent | ~10,000 messages | ~$0.004 |
 | **Cognito User Pools** | MAUs | 1,000 MAUs | **FREE** (free tier: 50,000) |
 | **Gemini 1.5 Flash** | Output tokens | 10,000 posts × 1,200 tokens | ~$1.80 |
 | **CloudWatch Logs** | GB ingested + stored | ~1 GB | ~$0.50 |
 | **SSM Parameter Store** | Standard parameters | 4 parameters | **FREE** |
 | **IAM** | — | — | **FREE** |
-| **Total** | | | **~$8.06/month** |
+| **Total** | | | **~$8.28/month** |
+
+> The 3 new Saved Posts Lambdas (`savePost`, `unsavePost`, `getSavedPosts`) add ~20,000 invocations/month — roughly **+$0.22** total across Lambda + DynamoDB + API Gateway.
 
 ### Cost Scaling
 
 | Active users/month | Generated posts/month | Estimated cost/month |
 |---|---|---|
 | 100 | 1,000 | ~$1.50 |
-| 1,000 | 10,000 | ~$8.00 |
-| 5,000 | 50,000 | ~$32.00 |
-| 10,000 | 100,000 | ~$60.00 |
-| 50,000 | 500,000 | ~$280.00 |
+| 1,000 | 10,000 | ~$8.30 |
+| 5,000 | 50,000 | ~$33.00 |
+| 10,000 | 100,000 | ~$62.00 |
+| 50,000 | 500,000 | ~$285.00 |
 
 > The largest cost variable is the **Gemini API** (~60% of total).
 > DynamoDB PAY_PER_REQUEST ensures zero fixed cost during idle periods.
+> DynamoDB TTL auto-deletes unsaved posts for free — no cleanup Lambda needed.
 
 ---
 
@@ -3579,10 +3902,11 @@ Generated posts: 10% new posts per user = ~10 new posts/user/month = 10,000 post
 - [ ] Repository setup + folder structure
 - [ ] `sls deploy --stage dev` — create DynamoDB tables and User Pool
 - [ ] Implement `onUserSignup` (Cognito trigger) — uses `DEFAULT_TAGS` from `constants.js`
-- [ ] Implement `getFeed` + `requestPost` (with description in SQS payload) + `workerInternal` (with description in prompt)
+- [ ] Implement `getFeed` + `requestPost` (with description in SQS payload) + `workerInternal` (with description in prompt, sets `ttl = now+90d`)
 - [ ] Implement `getPreferences` (with upsert fallback) + `updatePreferences` (tag toggle)
 - [ ] Implement `updateProfile` (description → Gemini tag extraction → save)
 - [ ] Implement `getPost` + `health`
+- [ ] Implement `savePost` + `unsavePost` + `getSavedPosts`
 - [ ] Create SSM secrets (dev + prod)
 
 **Frontend:**
@@ -3595,13 +3919,14 @@ Generated posts: 10% new posts per user = ~10 new posts/user/month = 10,000 post
 - [ ] Implement `FeedPage` with `FeedContainer` + `PostCard` (basic Y-scroll)
 - [ ] Implement `EmptyFeedScreen` with reload button and link to `/profile`
 - [ ] Implement `useFeed` + `feedStore`
+- [ ] Implement `SavedGridPage` + `SavedFeedPage` + `savedStore` + `useSavedPosts`
 - [ ] Connect to real backend (`api.ts`)
 
 **Deploy:**
 - [ ] Connect repository to Amplify Hosting
 - [ ] Configure environment variables in Amplify Console
 - [ ] GitHub Actions CI/CD for backend
-- [ ] Test full flow: signup → onboarding (description → AI tags) → feed → JIT generation
+- [ ] Test full flow: signup → onboarding (description → AI tags) → feed → JIT generation → save post → saved grid
 
 ---
 
@@ -3627,7 +3952,6 @@ Generated posts: 10% new posts per user = ~10 new posts/user/month = 10,000 post
 ### Phase 4 — Scale & Features (future)
 - [ ] `SintoniaSeenPosts` table (PK: userId, SK: postId, TTL: 90 days) — prevents repetition
 - [ ] EventBridge scheduled Lambda — pre-warms the feed at 6am/6pm
-- [ ] Bookmarks / saved posts
 - [ ] Post sharing (`/post/:id` without authentication for public deep link)
 - [ ] Multi-language prompt support (EN/PT-BR via user preference)
 - [ ] Mermaid.js support for diagrams in posts

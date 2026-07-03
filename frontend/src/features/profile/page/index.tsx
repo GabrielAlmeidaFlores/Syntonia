@@ -1,9 +1,10 @@
-import { User } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
 import * as React from 'react';
 
 import { DescriptionForm } from './description-form';
 import { TagManager } from './tag-manager';
 
+import { Button } from '@/components/ui/button';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/auth';
 import { useUserStore } from '@/stores/user';
@@ -16,10 +17,12 @@ import type { UserPreferences } from '@/types';
  * the server-side description and activeTags. This ensures the profile is always
  * in sync with the "backend" even after a page refresh.
  *
- * Single scrollable layout: DescriptionForm followed by TagManager stacked vertically.
+ * Single scrollable layout: DescriptionForm followed by TagManager stacked
+ * vertically, with a Logout button at the bottom.
  */
 export default function ProfilePage(): React.JSX.Element {
   const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
   const setProfile = useUserStore((s) => s.setProfile);
 
   React.useEffect(() => {
@@ -50,7 +53,20 @@ export default function ProfilePage(): React.JSX.Element {
         <div className="border-t border-surface-border pt-6">
           <TagManager />
         </div>
+
+        <div className="border-t border-surface-border pt-6 pb-2">
+          <Button
+            variant="ghost"
+            onClick={logout}
+            className="flex w-full items-center justify-center gap-2 text-gray-400 hover:text-white"
+            aria-label="Log out"
+          >
+            <LogOut className="h-4 w-4" aria-hidden />
+            Log out
+          </Button>
+        </div>
       </div>
     </div>
   );
 }
+

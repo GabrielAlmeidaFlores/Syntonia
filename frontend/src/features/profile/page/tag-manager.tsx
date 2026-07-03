@@ -1,7 +1,6 @@
 import * as React from 'react';
 
 import { TagSelector } from '@/components/shared/tag-selector';
-import { Button } from '@/components/ui/button';
 import { api } from '@/services/api';
 import { useToastStore } from '@/stores/toast';
 import { useUserStore } from '@/stores/user';
@@ -10,48 +9,41 @@ import type { Tag } from '@/types';
 /**
  * Tag enable/disable manager on the ProfilePage.
  *
- * Shows the user's AI-extracted tags as toggleable chips. Saving calls
- * PUT /user/preferences — MSW intercepts and persists the change to the mock
- * user object, then confirms with 200 OK. The user store is also updated locally
- * so the change is immediately reflected in JIT generation requests.
+ * Shows ALL AI-extracted tags (`extractedTags`) as toggleable chips.
+ * Deactivated tags stay visible with a muted style so they can be re-enabled.
+ * Each toggle immediately calls PUT /user/preferences — no save button.
+ * On error the previous state is restored and a toast is shown.
  */
 export function TagManager(): React.JSX.Element {
-  const { activeTags, setTags } = useUserStore();
+  const extractedTags = useUserStore((s) => s.extractedTags);
+  const activeTags = useUserStore((s) => s.activeTags);
+  const setTags = useUserStore((s) => s.setTags);
   const addToast = useToastStore((s) => s.addToast);
 
-  const [localTags, setLocalTags] = React.useState<Tag[]>(activeTags);
-  const [saving, setSaving] = React.useState(false);
-
-  const isDirty =
-    JSON.stringify([...localTags].sort()) !== JSON.stringify([...activeTags].sort());
-
   const handleToggle = (tag: Tag): void => {
-    setLocalTags((prev) => {
-      const isActive = prev.includes(tag);
-      if (isActive && prev.length <= 1) return prev;
-      return isActive ? prev.filter((t) => t !== tag) : [...prev, tag];
+    const isActive = activeTags.includes(tag);
+    if (isActive && activeTags.length <= 1) return;
+
+    const previous = activeTags;
+    const next = isActive
+      ? activeTags.filter((t) => t !== tag)
+      : [...activeTags, tag];
+
+    setTags(next);
+    addToast({
+      type: 'success',
+      message: isActive ? `"${tag}" deactivated.` : `"${tag}" activated.`,
     });
+
+    void api
+      .put('/user/preferences', { activeTags: next })
+      .catch(() => {
+        setTags(previous);
+        addToast({ type: 'error', message: 'Failed to update tags. Please try again.' });
+      });
   };
 
-  const handleSave = async (): Promise<void> => {
-    setSaving(true);
-
-    try {
-      await api.put('/user/preferences', { activeTags: localTags });
-      setTags(localTags);
-      addToast({ type: 'success', message: 'Active tags saved.' });
-    } catch {
-      addToast({ type: 'error', message: 'Failed to save tags. Please try again.' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  React.useEffect(() => {
-    setLocalTags(activeTags);
-  }, [activeTags]);
-
-  if (activeTags.length === 0) {
+  if (extractedTags.length === 0) {
     return (
       <p className="text-sm text-gray-500">
         Save a profile description first to extract your areas of interest.
@@ -67,24 +59,11 @@ export function TagManager(): React.JSX.Element {
         your feed content.
       </p>
 
-      <TagSelector tags={activeTags} activeTags={localTags} onToggle={handleToggle} />
+      <TagSelector tags={extractedTags} activeTags={activeTags} onToggle={handleToggle} />
 
-      <div className="flex items-center justify-between pt-1">
-        <p className="text-xs text-gray-600">
-          {localTags.length} of {activeTags.length} active
-        </p>
-
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={!isDirty || saving}
-          onClick={() => {
-            void handleSave();
-          }}
-        >
-          {saving ? 'Saving…' : 'Save tags'}
-        </Button>
-      </div>
+      <p className="text-xs text-gray-600">
+        {activeTags.length} of {extractedTags.length} active
+      </p>
     </div>
   );
 }
