@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
 import * as React from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -74,7 +75,12 @@ export default function PostPage(): React.JSX.Element {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-surface">
+    <motion.div
+      className="flex min-h-dvh flex-col bg-surface"
+      initial={{ opacity: 0, x: 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.28, ease: 'easeOut' }}
+    >
       <div className="sticky top-0 z-10 flex items-center border-b border-surface-border bg-surface/80 px-4 py-3 backdrop-blur-md">
         <button
           type="button"
@@ -118,6 +124,6 @@ export default function PostPage(): React.JSX.Element {
           </ReactMarkdown>
         </div>
       </article>
-    </div>
+    </motion.div>
   );
 }

@@ -12,14 +12,17 @@ import type { Post, UnsavePostResponse } from '@/types';
 
 interface SavedPostCardProps {
   readonly post: Post;
+  /** If provided, called on card body click with the card's DOMRect instead of the default /post/:id navigation. */
+  readonly onCardClick?: () => void;
 }
 
 /**
  * Compact grid card for a saved post.
- * Tapping the card body navigates to /post/:id.
- * The unsave button (bookmark-x icon) calls DELETE /post/:id/save immediately.
+ * If `onCardClick` is provided, it is called on body click.
+ * Otherwise the card navigates to /post/:id.
+ * The unsave button always calls DELETE /post/:id/save immediately.
  */
-export function SavedPostCard({ post }: SavedPostCardProps): React.JSX.Element {
+export function SavedPostCard({ post, onCardClick }: SavedPostCardProps): React.JSX.Element {
   const navigate = useNavigate();
   const storeUnsave = useSavedStore((s) => s.unsave);
   const addToast = useToastStore((s) => s.addToast);
@@ -49,17 +52,21 @@ export function SavedPostCard({ post }: SavedPostCardProps): React.JSX.Element {
     [unsaving, post.id, storeUnsave, addToast, t],
   );
 
-  const handleNavigate = React.useCallback((): void => {
-    navigate(`/post/${post.id}`);
-  }, [navigate, post.id]);
+  const handleCardClick = React.useCallback((): void => {
+    if (onCardClick !== undefined) {
+      onCardClick();
+    } else {
+      navigate(`/post/${post.id}`);
+    }
+  }, [onCardClick, navigate, post.id]);
 
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={handleNavigate}
+      onClick={handleCardClick}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') handleNavigate();
+        if (e.key === 'Enter' || e.key === ' ') handleCardClick();
       }}
       className="relative cursor-pointer overflow-hidden rounded-2xl"
       aria-label={t.saved.ariaReadCard(post.title)}

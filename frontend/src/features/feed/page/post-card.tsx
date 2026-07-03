@@ -13,6 +13,10 @@ import type { Post } from '@/types';
 interface PostCardProps {
   readonly post: Post;
   readonly index: number;
+  /** Controls how PostDetail animates in/out.
+   *  - 'slide' (default): slides in from the right — used in the main feed.
+   *  - 'expand': scales up from the center with a fade — used in the saved feed. */
+  readonly detailVariant?: 'slide' | 'expand';
 }
 
 /**
@@ -31,7 +35,7 @@ interface PostCardProps {
  * While PostDetail is open, `isPostExpanded` is set in useFeedStore so the
  * snap container locks its own scroll.
  */
-export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
+export function PostCard({ post, index, detailVariant = 'slide' }: PostCardProps): React.JSX.Element {
   const [expanded, setExpanded] = React.useState(false);
   const bgRef = React.useRef<HTMLDivElement>(null);
   const detailRef = React.useRef<HTMLDivElement>(null);
@@ -235,19 +239,48 @@ export function PostCard({ post, index }: PostCardProps): React.JSX.Element {
 
       <AnimatePresence>
         {expanded && (
-          <motion.div
-            ref={detailRef}
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 28, stiffness: 280 }}
-            className="absolute inset-0 z-10 overflow-y-auto overscroll-y-contain bg-surface scrollbar-thin"
-          >
-            <PostDetail
-              post={post}
-              onClose={close}
-            />
-          </motion.div>
+          detailVariant === 'expand' ? (
+            <motion.div
+              ref={detailRef}
+              initial={{
+                opacity: 0,
+                scale: 0.18,
+                borderRadius: '24px',
+              }}
+              animate={{
+                opacity: 1,
+                scale: 1,
+                borderRadius: '0px',
+              }}
+              exit={{
+                opacity: 0,
+                scale: 0.18,
+                borderRadius: '24px',
+              }}
+              transition={{
+                type: 'spring',
+                damping: 22,
+                stiffness: 190,
+                opacity: { duration: 0.18, ease: 'easeOut' },
+                borderRadius: { duration: 0.3 },
+              }}
+              style={{ originX: 0.5, originY: 0.5 }}
+              className="absolute inset-0 z-10 overflow-y-auto overscroll-y-contain bg-surface scrollbar-thin"
+            >
+              <PostDetail post={post} onClose={close} />
+            </motion.div>
+          ) : (
+            <motion.div
+              ref={detailRef}
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+              className="absolute inset-0 z-10 overflow-y-auto overscroll-y-contain bg-surface scrollbar-thin"
+            >
+              <PostDetail post={post} onClose={close} />
+            </motion.div>
+          )
         )}
       </AnimatePresence>
     </div>

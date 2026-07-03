@@ -775,40 +775,101 @@ return <Navigate to={`/auth/login?returnTo=${encodeURIComponent(location.pathnam
 
 ## §18 — Animation Guidelines
 
+### Animation inventory — what exists
+
+| Context | Mechanism | Animation |
+|---|---|---|
+| Route change (Feed/Saved/Profile) | Framer Motion `AnimatePresence mode="wait"` in `FeedLayout` | Crossfade 140ms |
+| Bottom nav active indicator | Framer Motion `layoutId="nav-active"` spring | Pill slides between tabs |
+| ProfilePage tab switch | Framer Motion `AnimatePresence` + direction variants | Slide 20px horizontal, 200ms |
+| SavedGrid card entrance | Framer Motion stagger (`gridContainerVariants`) | Scale 0.9→1, stagger 45ms |
+| PostDetail open/close | `AnimatePresence` + `motion.div` spring | Slide from right, spring |
+| PostPage entrance | `motion.div` | Slide 30px from right, 280ms |
+| Login / Onboarding entrance | `motion.div` | Fade + y:16→0, 300ms |
+| EmptyFeedScreen entrance | `motion.div` | Fade + y:16→0, 300ms |
+| Toast enter | Framer Motion `AnimatePresence mode="popLayout"` | Slide from right with overshoot |
+| Toast exit | Framer Motion exit variants | Slide right + fade 300ms |
+| Toast layout shift | Framer Motion `layout` prop | Spring — others animate up smoothly |
+
 ### When to use Framer Motion
 
-- **PostDetail slide-in/out** — `AnimatePresence` + `motion.div` with `x: '100%' → 0`, spring transition.
-- **PostDetail swipe-to-close** — `drag="x"` with `dragDirectionLock` on the PostDetail panel. This allows vertical scroll inside PostDetail while detecting horizontal right-swipe to close.
-- **New page transitions** — optional, use `animate-fade-in` CSS class first.
+- **Route transitions** — `AnimatePresence` with `key={location.pathname}` in `FeedLayout`
+- **Direction-aware transitions** — `custom` prop + `variants` functions for ProfilePage tabs
+- **Layout animations** — `layoutId` for shared element transitions (nav indicator), `layout` for reordering (toast stack)
+- **Stagger lists** — `variants` + `staggerChildren` on container for SavedGrid, etc.
+- **PostDetail slide-in/out** — `AnimatePresence` + `motion.div` with spring transition
 
 ### When to use CSS animations (Tailwind)
 
-- Skeleton shimmer: `animate-shimmer` or `shimmer-base` utility.
-- Toast enter/exit: `animate-toast-in` (slide from right with overshoot), `animate-toast-out` (slide out to right). Applied via Radix `data-[state=open/closed]` attributes.
-- Page content appearance: `animate-fade-in`, `animate-slide-up`, `animate-scale-in`.
-- Loading spinners: `animate-spin`.
+- Skeleton shimmer: `animate-shimmer` or `shimmer-base` utility
+- Loading spinners: `animate-spin`
+- Content appearance (simple): `animate-fade-in`, `animate-slide-up`, `animate-scale-in`
+
+### Standard timing values
+
+```
+Micro (button press):  100ms  — active:scale-[0.97] (Tailwind)
+Fast (crossfade):      140ms  — route change in FeedLayout
+Normal (slide):        200ms  — tab content, card items
+Slow (page entrance):  280–300ms  — full page enter animations
+Spring (layout):       damping 30, stiffness 380  — nav indicator, layout shifts
+```
+
+### Direction-aware animation pattern (ProfilePage tabs)
+
+```tsx
+const [slideDirection, setSlideDirection] = React.useState<1 | -1>(1);
+
+const handleTabChange = (tab: Tab): void => {
+  setSlideDirection(TAB_ORDER[tab] > TAB_ORDER[activeTab] ? 1 : -1);
+  setActiveTab(tab);
+};
+
+<AnimatePresence mode="wait" initial={false} custom={slideDirection}>
+  <motion.div
+    key={activeTab}
+    custom={slideDirection}
+    variants={{
+      initial: (dir: number) => ({ opacity: 0, x: dir * 20 }),
+      animate: { opacity: 1, x: 0 },
+      exit: (dir: number) => ({ opacity: 0, x: dir * -20 }),
+    }}
+    initial="initial"
+    animate="animate"
+    exit="exit"
+    transition={{ duration: 0.2, ease: 'easeInOut' }}
+  >
+    {/* content */}
+  </motion.div>
+</AnimatePresence>
+```
+
+### Stagger list pattern (SavedGrid)
+
+```tsx
+const containerVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.045, delayChildren: 0.05 } },
+};
+const itemVariants = {
+  hidden: { opacity: 0, scale: 0.9, y: 8 },
+  visible: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.22, ease: 'easeOut' } },
+};
+
+<motion.ul variants={containerVariants} initial="hidden" animate="visible">
+  {items.map(item => (
+    <motion.li key={item.id} variants={itemVariants}>...</motion.li>
+  ))}
+</motion.ul>
+```
 
 ### Toast animation — special rules
 
-Radix UI Toast needs explicit `open` state to play exit animations. **Never** let `removeToast` be called synchronously in `onOpenChange` — the component would unmount before the exit animation plays.
-
-```tsx
-const [open, setOpen] = React.useState(true);
-
-React.useEffect(() => {
-  if (open) return;
-  const timer = setTimeout(() => { removeToast(id); }, EXIT_DURATION_MS);
-  return () => { clearTimeout(timer); };
-}, [open, removeToast, id]);
-
-<ToastPrimitive.Root open={open} onOpenChange={setOpen} ...>
-```
-
-`EXIT_DURATION_MS` is defined in `toast/index.tsx` and must match `toast-out` animation duration in `tailwind.config.ts` (currently 250ms, EXIT_DURATION_MS = 280ms).
+Radix UI Toast was replaced by Framer Motion. See §28 for the full toast pattern.
 
 ### `prefers-reduced-motion`
 
-`globals.css` includes a media query that disables all animations for users who prefer reduced motion. **Never override this.**
+`globals.css` includes a media query that disables all CSS animations for users who prefer reduced motion. **Never override this.** Framer Motion respects `prefers-reduced-motion` automatically when you use `useReducedMotion()` — add it to animation-heavy components if needed.
 
 ---
 

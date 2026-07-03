@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import { LogOut, Settings, User } from 'lucide-react';
 import * as React from 'react';
 
@@ -15,6 +16,8 @@ import type { UserPreferences } from '@/types';
 
 type Tab = 'profile' | 'settings';
 
+const TAB_ORDER: Record<Tab, number> = { profile: 0, settings: 1 };
+
 /**
  * Profile page at /profile.
  *
@@ -22,20 +25,27 @@ type Tab = 'profile' | 'settings';
  *   - Profile: description form + tag manager (existing content).
  *   - Settings: theme and language selectors.
  *
- * On mount, calls GET /user/preferences to hydrate the Zustand userStore
- * so the profile is always in sync with the "backend" after a page refresh.
+ * Tab content uses a direction-aware slide animation: switching to Settings
+ * slides from the right; switching back to Profile slides from the left.
+ * On mount, calls GET /user/preferences to hydrate the Zustand userStore.
  */
 export default function ProfilePage(): React.JSX.Element {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const setProfile = useUserStore((s) => s.setProfile);
   const [activeTab, setActiveTab] = React.useState<Tab>('profile');
+  const [slideDirection, setSlideDirection] = React.useState<1 | -1>(1);
   const t = useTranslation();
 
   const TABS: Array<{ value: Tab; label: string; icon: typeof User }> = [
     { value: 'profile', label: t.profile.tabProfile, icon: User },
     { value: 'settings', label: t.profile.tabSettings, icon: Settings },
   ];
+
+  const handleTabChange = React.useCallback((tab: Tab): void => {
+    setSlideDirection(TAB_ORDER[tab] > TAB_ORDER[activeTab] ? 1 : -1);
+    setActiveTab(tab);
+  }, [activeTab]);
 
   React.useEffect(() => {
     void api.get<UserPreferences>('/user/preferences').then((prefs) => {
@@ -48,7 +58,12 @@ export default function ProfilePage(): React.JSX.Element {
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-surface scrollbar-thin">
       <div className="flex flex-col gap-4 border-b border-surface-border px-5 py-6">
-        <div className="flex items-center gap-3">
+        <motion.div
+          className="flex items-center gap-3"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+        >
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent-muted">
             <User className="h-6 w-6 text-accent-light" aria-hidden />
           </div>
@@ -56,7 +71,7 @@ export default function ProfilePage(): React.JSX.Element {
             <p className="font-semibold text-content-primary">{user?.email ?? 'User'}</p>
             <p className="text-xs text-content-subtle">{t.profile.subtitle}</p>
           </div>
-        </div>
+        </motion.div>
 
         <div className="flex gap-1 rounded-xl bg-surface-elevated p-1" role="tablist">
           {TABS.map((tab) => {
@@ -68,7 +83,7 @@ export default function ProfilePage(): React.JSX.Element {
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => {
-                  setActiveTab(tab.value);
+                  handleTabChange(tab.value);
                 }}
                 className={cn(
                   'flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
@@ -86,16 +101,35 @@ export default function ProfilePage(): React.JSX.Element {
       </div>
 
       <div className="flex flex-col gap-8 px-5 py-6">
-        {activeTab === 'profile' && (
-          <>
-            <DescriptionForm />
-            <div className="border-t border-surface-border pt-6">
-              <TagManager />
-            </div>
-          </>
-        )}
+        <div className="overflow-x-hidden">
+          <AnimatePresence mode="wait" initial={false} custom={slideDirection}>
+            <motion.div
+              key={activeTab}
+              custom={slideDirection}
+              variants={{
+                initial: (dir: number) => ({ opacity: 0, x: dir * 20 }),
+                animate: { opacity: 1, x: 0 },
+                exit: (dir: number) => ({ opacity: 0, x: dir * -20 }),
+              }}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="flex flex-col gap-8"
+            >
+            {activeTab === 'profile' && (
+              <>
+                <DescriptionForm />
+                <div className="border-t border-surface-border pt-6">
+                  <TagManager />
+                </div>
+              </>
+            )}
 
-        {activeTab === 'settings' && <SettingsPanel />}
+            {activeTab === 'settings' && <SettingsPanel />}
+          </motion.div>
+        </AnimatePresence>
+        </div>
 
         <div className="border-t border-surface-border pb-2 pt-6">
           <Button

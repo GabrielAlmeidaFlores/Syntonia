@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
 import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -75,7 +76,12 @@ export default function SavedFeedPage(): React.JSX.Element {
   }
 
   return (
-    <div className="relative h-dvh bg-surface">
+    <motion.div
+      className="relative h-dvh bg-surface"
+      initial={{ opacity: 0, x: 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.26, ease: 'easeOut' }}
+    >
       <button
         type="button"
         onClick={() => {
@@ -90,9 +96,9 @@ export default function SavedFeedPage(): React.JSX.Element {
 
       <div ref={containerRef} tabIndex={0} className="snap-feed h-dvh outline-none">
         {posts.map((post, i) => (
-          <PostCard key={post.id} post={post} index={i} />
+          <PostCard key={post.id} post={post} index={i} detailVariant="expand" />
         ))}
       </div>
-    </div>
+    </motion.div>
   );
 }

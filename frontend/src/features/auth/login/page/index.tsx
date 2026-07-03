@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
 import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -45,7 +46,12 @@ export default function MockCognitoPage(): React.JSX.Element {
   };
 
   return (
-    <div className="flex h-dvh flex-col items-center justify-center gap-8 bg-surface px-6">
+    <motion.div
+      className="flex h-dvh flex-col items-center justify-center gap-8 bg-surface px-6"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+    >
       <div className="flex flex-col items-center gap-3">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-accent-muted">
           <Sparkles className="h-8 w-8 text-accent-light" aria-hidden />
@@ -89,6 +95,6 @@ export default function MockCognitoPage(): React.JSX.Element {
           )}
         </Button>
       </div>
-    </div>
+    </motion.div>
   );
 }

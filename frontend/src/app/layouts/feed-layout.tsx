@@ -1,6 +1,7 @@
+import { motion } from 'framer-motion';
 import { BookOpen, Bookmark, User } from 'lucide-react';
 import * as React from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
@@ -10,9 +11,14 @@ import { cn } from '@/lib/utils';
  * Renders the page outlet above a fixed bottom navigation bar
  * with three tabs: Feed, Saved, and Profile.
  * Logout is handled inside ProfilePage.
+ *
+ * Route transitions: AnimatePresence crossfade on pathname change.
+ * Nav indicator: Framer Motion layoutId "nav-active" animates the
+ * accent background pill between tabs as a spring transition.
  */
 export function FeedLayout(): React.JSX.Element {
   const t = useTranslation();
+  const location = useLocation();
 
   const BOTTOM_NAV = [
     { label: t.nav.feed, href: '/feed', icon: BookOpen, exact: true },
@@ -23,7 +29,20 @@ export function FeedLayout(): React.JSX.Element {
   return (
     <div className="relative flex h-dvh flex-col overflow-hidden bg-surface">
       <main className="flex-1 overflow-hidden">
-        <Outlet />
+        <motion.div
+          key={location.pathname}
+          initial={{ opacity: 0, y: 60, scale: 0.94 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            type: 'spring',
+            damping: 22,
+            stiffness: 200,
+            opacity: { duration: 0.18, ease: 'easeOut' },
+          }}
+          className="h-full"
+        >
+          <Outlet />
+        </motion.div>
       </main>
 
       <nav
@@ -39,15 +58,17 @@ export function FeedLayout(): React.JSX.Element {
           >
             {({ isActive }) => (
               <>
-                <div
-                  className={cn(
-                    'rounded-xl px-4 py-1.5 transition-all duration-200',
-                    isActive ? 'bg-accent-muted' : '',
+                <div className="relative rounded-xl px-4 py-1.5">
+                  {isActive && (
+                    <motion.div
+                      layoutId="nav-active"
+                      className="absolute inset-0 rounded-xl bg-accent-muted"
+                      transition={{ type: 'spring', damping: 30, stiffness: 380 }}
+                    />
                   )}
-                >
                   <item.icon
                     className={cn(
-                      'h-5 w-5 transition-colors duration-200',
+                      'relative h-5 w-5 transition-colors duration-200',
                       isActive ? 'text-accent-light' : 'text-content-subtle',
                     )}
                     aria-hidden
@@ -69,4 +90,3 @@ export function FeedLayout(): React.JSX.Element {
     </div>
   );
 }
-

@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -77,7 +78,12 @@ export default function OnboardingPage(): React.JSX.Element {
   };
 
   return (
-    <div className="flex min-h-dvh flex-col bg-surface px-6 py-10">
+    <motion.div
+      className="flex min-h-dvh flex-col bg-surface px-6 py-10"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+    >
       <div className="mx-auto flex w-full max-w-md flex-col gap-8">
         <div className="flex flex-col gap-2">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-muted">
@@ -141,6 +147,6 @@ export default function OnboardingPage(): React.JSX.Element {
           />
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
