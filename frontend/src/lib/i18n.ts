@@ -21,6 +21,10 @@ interface Translations {
     back: string;
     ariaBack: string;
     ariaShare: string;
+    shareTitle: string;
+    shareLink: string;
+    shareCopy: string;
+    shareCopied: string;
     ariaSave: string;
     ariaUnsave: string;
   };
@@ -35,6 +39,9 @@ interface Translations {
     description: string;
     configureButton: string;
     reloadButton: string;
+  };
+  feedLoading: {
+    heading: string;
   };
   saved: {
     title: string;
@@ -155,6 +162,10 @@ export const translations: Record<Language, Translations> = {
       back: 'Back',
       ariaBack: 'Go back to feed',
       ariaShare: 'Share post',
+      shareTitle: 'Share post',
+      shareLink: 'Post link',
+      shareCopy: 'Copy link',
+      shareCopied: 'Copied!',
       ariaSave: 'Save post',
       ariaUnsave: 'Remove from saved',
     },
@@ -170,6 +181,9 @@ export const translations: Record<Language, Translations> = {
         'Your feed is generated based on your profile description and active tags. Configure your interests to start receiving personalised content.',
       configureButton: 'Configure my profile',
       reloadButton: 'Reload feed',
+    },
+    feedLoading: {
+      heading: 'Generating your feed…',
     },
     saved: {
       title: 'Saved',
@@ -288,6 +302,10 @@ export const translations: Record<Language, Translations> = {
       back: 'Voltar',
       ariaBack: 'Voltar para o feed',
       ariaShare: 'Compartilhar post',
+      shareTitle: 'Compartilhar post',
+      shareLink: 'Link do post',
+      shareCopy: 'Copiar link',
+      shareCopied: 'Copiado!',
       ariaSave: 'Salvar post',
       ariaUnsave: 'Remover dos salvos',
     },
@@ -303,6 +321,9 @@ export const translations: Record<Language, Translations> = {
         'Seu feed é gerado com base na descrição do seu perfil e nas tags ativas. Configure seus interesses para começar a receber conteúdo personalizado.',
       configureButton: 'Configurar meu perfil',
       reloadButton: 'Recarregar feed',
+    },
+    feedLoading: {
+      heading: 'Gerando o seu feed…',
     },
     saved: {
       title: 'Salvos',

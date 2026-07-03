@@ -8,6 +8,7 @@ import 'highlight.js/styles/github-dark.css';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/confirm-modal';
+import { ShareModal } from '@/components/ui/share-modal';
 import { useTranslation } from '@/hooks/use-translation';
 import { formatRelativeTime } from '@/lib/utils';
 import { api } from '@/services/api';
@@ -32,6 +33,7 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
   const addToast = useToastStore((s) => s.addToast);
   const [toggling, setToggling] = React.useState(false);
   const [showUnsaveConfirm, setShowUnsaveConfirm] = React.useState(false);
+  const [showShare, setShowShare] = React.useState(false);
   const t = useTranslation();
 
   const doUnsave = React.useCallback((): void => {
@@ -102,7 +104,7 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
             )}
           </Button>
 
-          <Button variant="ghost" size="sm" aria-label={t.postDetail.ariaShare}>
+          <Button variant="ghost" size="sm" aria-label={t.postDetail.ariaShare} onClick={() => { setShowShare(true); }}>
             <Share2 className="h-4 w-4" aria-hidden />
           </Button>
         </div>
@@ -144,6 +146,16 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
         confirmVariant="destructive"
         onConfirm={doUnsave}
         onCancel={() => { setShowUnsaveConfirm(false); }}
+      />
+
+      <ShareModal
+        open={showShare}
+        postId={post.id}
+        title={t.postDetail.shareTitle}
+        linkLabel={t.postDetail.shareLink}
+        copyLabel={t.postDetail.shareCopy}
+        copiedLabel={t.postDetail.shareCopied}
+        onClose={() => { setShowShare(false); }}
       />
     </div>
   );
