@@ -3,6 +3,7 @@ import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
 import { api } from '@/services/api';
@@ -27,29 +28,35 @@ export function SavedPostCard({ post, onCardClick }: SavedPostCardProps): React.
   const storeUnsave = useSavedStore((s) => s.unsave);
   const addToast = useToastStore((s) => s.addToast);
   const [unsaving, setUnsaving] = React.useState(false);
+  const [showConfirm, setShowConfirm] = React.useState(false);
   const t = useTranslation();
 
   const background = `linear-gradient(135deg, ${post.gradient[0]}, ${post.gradient[1]})`;
 
-  const handleUnsave = React.useCallback(
+  const confirmUnsave = React.useCallback((): void => {
+    if (unsaving) return;
+    setUnsaving(true);
+    setShowConfirm(false);
+    void api
+      .delete<UnsavePostResponse>(`/post/${post.id}/save`)
+      .then(() => {
+        storeUnsave(post.id);
+        addToast({ type: 'success', message: t.saved.toastUnsaved });
+      })
+      .catch(() => {
+        addToast({ type: 'error', message: t.saved.toastUnsaveError });
+      })
+      .finally(() => {
+        setUnsaving(false);
+      });
+  }, [unsaving, post.id, storeUnsave, addToast, t]);
+
+  const handleUnsaveClick = React.useCallback(
     (e: React.MouseEvent): void => {
       e.stopPropagation();
-      if (unsaving) return;
-      setUnsaving(true);
-      void api
-        .delete<UnsavePostResponse>(`/post/${post.id}/save`)
-        .then(() => {
-          storeUnsave(post.id);
-          addToast({ type: 'success', message: t.saved.toastUnsaved });
-        })
-        .catch(() => {
-          addToast({ type: 'error', message: t.saved.toastUnsaveError });
-        })
-        .finally(() => {
-          setUnsaving(false);
-        });
+      setShowConfirm(true);
     },
-    [unsaving, post.id, storeUnsave, addToast, t],
+    [],
   );
 
   const handleCardClick = React.useCallback((): void => {
@@ -61,15 +68,16 @@ export function SavedPostCard({ post, onCardClick }: SavedPostCardProps): React.
   }, [onCardClick, navigate, post.id]);
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={handleCardClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') handleCardClick();
-      }}
-      className="relative cursor-pointer overflow-hidden rounded-2xl"
-      aria-label={t.saved.ariaReadCard(post.title)}
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={handleCardClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') handleCardClick();
+        }}
+        className="relative cursor-pointer overflow-hidden rounded-2xl"
+        aria-label={t.saved.ariaReadCard(post.title)}
     >
       <div
         style={{ background }}
@@ -96,7 +104,7 @@ export function SavedPostCard({ post, onCardClick }: SavedPostCardProps): React.
 
       <button
         type="button"
-        onClick={handleUnsave}
+        onClick={handleUnsaveClick}
         disabled={unsaving}
         className={cn(
           'absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm transition-opacity',
@@ -107,5 +115,17 @@ export function SavedPostCard({ post, onCardClick }: SavedPostCardProps): React.
         <BookmarkX className="h-3.5 w-3.5 text-white" aria-hidden />
       </button>
     </div>
+
+    <ConfirmModal
+      open={showConfirm}
+      title={t.confirmModal.unsaveTitle}
+      message={t.confirmModal.unsaveMessage}
+      confirmLabel={t.confirmModal.unsaveAction}
+      cancelLabel={t.confirmModal.cancel}
+      confirmVariant="destructive"
+      onConfirm={confirmUnsave}
+      onCancel={() => { setShowConfirm(false); }}
+    />
+  </>
   );
 }

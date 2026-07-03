@@ -57,6 +57,15 @@ interface Translations {
     tabSettings: string;
     logout: string;
     ariaLogout: string;
+    logoutConfirmTitle: string;
+    logoutConfirmMessage: string;
+    logoutConfirmAction: string;
+  };
+  confirmModal: {
+    cancel: string;
+    unsaveTitle: string;
+    unsaveMessage: string;
+    unsaveAction: string;
   };
   descriptionForm: {
     label: string;
@@ -183,6 +192,15 @@ export const translations: Record<Language, Translations> = {
       tabSettings: 'Settings',
       logout: 'Log out',
       ariaLogout: 'Log out',
+      logoutConfirmTitle: 'Log out?',
+      logoutConfirmMessage: 'You will need to sign in again to access your feed.',
+      logoutConfirmAction: 'Log out',
+    },
+    confirmModal: {
+      cancel: 'Cancel',
+      unsaveTitle: 'Remove from saved?',
+      unsaveMessage: 'This post will be removed from your saved list.',
+      unsaveAction: 'Remove',
     },
     descriptionForm: {
       label: 'Profile description',
@@ -307,6 +325,15 @@ export const translations: Record<Language, Translations> = {
       tabSettings: 'Configurações',
       logout: 'Sair',
       ariaLogout: 'Sair da conta',
+      logoutConfirmTitle: 'Sair da conta?',
+      logoutConfirmMessage: 'Você precisará fazer login novamente para acessar o seu feed.',
+      logoutConfirmAction: 'Sair',
+    },
+    confirmModal: {
+      cancel: 'Cancelar',
+      unsaveTitle: 'Remover dos salvos?',
+      unsaveMessage: 'Este post será removido da sua lista de salvos.',
+      unsaveAction: 'Remover',
     },
     descriptionForm: {
       label: 'Descrição do perfil',

@@ -7,6 +7,7 @@ import 'highlight.js/styles/github-dark.css';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { useTranslation } from '@/hooks/use-translation';
 import { formatRelativeTime } from '@/lib/utils';
 import { api } from '@/services/api';
@@ -30,39 +31,47 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
   const storeUnsave = useSavedStore((s) => s.unsave);
   const addToast = useToastStore((s) => s.addToast);
   const [toggling, setToggling] = React.useState(false);
+  const [showUnsaveConfirm, setShowUnsaveConfirm] = React.useState(false);
   const t = useTranslation();
+
+  const doUnsave = React.useCallback((): void => {
+    if (toggling) return;
+    setToggling(true);
+    setShowUnsaveConfirm(false);
+    void api
+      .delete<UnsavePostResponse>(`/post/${post.id}/save`)
+      .then(() => {
+        storeUnsave(post.id);
+        addToast({ type: 'success', message: t.saved.toastUnsaved });
+      })
+      .catch(() => {
+        addToast({ type: 'error', message: t.saved.toastUnsaveError });
+      })
+      .finally(() => {
+        setToggling(false);
+      });
+  }, [toggling, post.id, storeUnsave, addToast, t]);
 
   const handleToggleSave = React.useCallback((): void => {
     if (toggling) return;
-    setToggling(true);
     if (isSaved) {
-      void api
-        .delete<UnsavePostResponse>(`/post/${post.id}/save`)
-        .then(() => {
-          storeUnsave(post.id);
-          addToast({ type: 'success', message: t.saved.toastUnsaved });
-        })
-        .catch(() => {
-          addToast({ type: 'error', message: t.saved.toastUnsaveError });
-        })
-        .finally(() => {
-          setToggling(false);
-        });
-    } else {
-      void api
-        .post<SavePostResponse>(`/post/${post.id}/save`, {})
-        .then((res) => {
-          storeSave(post, res.savedAt);
-          addToast({ type: 'success', message: t.saved.toastSaved });
-        })
-        .catch(() => {
-          addToast({ type: 'error', message: t.saved.toastSaveError });
-        })
-        .finally(() => {
-          setToggling(false);
-        });
+      setShowUnsaveConfirm(true);
+      return;
     }
-  }, [toggling, isSaved, post, storeSave, storeUnsave, addToast, t]);
+    setToggling(true);
+    void api
+      .post<SavePostResponse>(`/post/${post.id}/save`, {})
+      .then((res) => {
+        storeSave(post, res.savedAt);
+        addToast({ type: 'success', message: t.saved.toastSaved });
+      })
+      .catch(() => {
+        addToast({ type: 'error', message: t.saved.toastSaveError });
+      })
+      .finally(() => {
+        setToggling(false);
+      });
+  }, [toggling, isSaved, post, storeSave, addToast, t]);
 
   return (
     <div className="flex min-h-full flex-col bg-surface">
@@ -125,6 +134,17 @@ export function PostDetail({ post, onClose }: PostDetailProps): React.JSX.Elemen
           </ReactMarkdown>
         </div>
       </article>
+
+      <ConfirmModal
+        open={showUnsaveConfirm}
+        title={t.confirmModal.unsaveTitle}
+        message={t.confirmModal.unsaveMessage}
+        confirmLabel={t.confirmModal.unsaveAction}
+        cancelLabel={t.confirmModal.cancel}
+        confirmVariant="destructive"
+        onConfirm={doUnsave}
+        onCancel={() => { setShowUnsaveConfirm(false); }}
+      />
     </div>
   );
 }

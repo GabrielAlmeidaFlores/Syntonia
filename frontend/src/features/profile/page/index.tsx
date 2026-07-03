@@ -7,6 +7,7 @@ import { SettingsPanel } from './settings-panel';
 import { TagManager } from './tag-manager';
 
 import { Button } from '@/components/ui/button';
+import { ConfirmModal } from '@/components/ui/confirm-modal';
 import { useTranslation } from '@/hooks/use-translation';
 import { cn } from '@/lib/utils';
 import { api } from '@/services/api';
@@ -35,6 +36,7 @@ export default function ProfilePage(): React.JSX.Element {
   const setProfile = useUserStore((s) => s.setProfile);
   const [activeTab, setActiveTab] = React.useState<Tab>('profile');
   const [slideDirection, setSlideDirection] = React.useState<1 | -1>(1);
+  const [showLogoutModal, setShowLogoutModal] = React.useState(false);
   const t = useTranslation();
 
   const TABS: Array<{ value: Tab; label: string; icon: typeof User }> = [
@@ -134,7 +136,7 @@ export default function ProfilePage(): React.JSX.Element {
         <div className="border-t border-surface-border pb-2 pt-6">
           <Button
             variant="ghost"
-            onClick={logout}
+            onClick={() => { setShowLogoutModal(true); }}
             className="flex w-full items-center justify-center gap-2 text-content-muted hover:text-content-primary"
             aria-label={t.profile.ariaLogout}
           >
@@ -143,6 +145,17 @@ export default function ProfilePage(): React.JSX.Element {
           </Button>
         </div>
       </div>
+
+      <ConfirmModal
+        open={showLogoutModal}
+        title={t.profile.logoutConfirmTitle}
+        message={t.profile.logoutConfirmMessage}
+        confirmLabel={t.profile.logoutConfirmAction}
+        cancelLabel={t.confirmModal.cancel}
+        confirmVariant="destructive"
+        onConfirm={logout}
+        onCancel={() => { setShowLogoutModal(false); }}
+      />
     </div>
   );
 }
