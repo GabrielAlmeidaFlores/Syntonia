@@ -4,10 +4,17 @@ import { mockExtractTags } from "../data/tags";
 import { MOCK_USER } from "../data/user";
 
 import { AVAILABLE_TAGS } from "@/lib/constants";
+import type { Language, Theme } from "@/stores/preferences";
 import type { Tag, UpdateProfileResponse, UserPreferences } from "@/types";
 
 interface UpdatePreferencesBody {
-  readonly activeTags: Tag[];
+  readonly activeTags?: Tag[];
+  readonly theme?: Theme;
+  readonly language?: Language;
+}
+
+interface UpdatePreferencesResponse {
+  readonly updatedAt: string;
 }
 
 interface UpdateProfileBody {
@@ -18,7 +25,8 @@ interface UpdateProfileBody {
  * GET /user/preferences
  *
  * Returns the authenticated user's profile including their description,
- * active tags and the full list of available tags.
+ * active tags, full list of available tags, and persisted UI preferences
+ * (theme and language).
  *
  * The 200ms delay simulates a DynamoDB GetItem on SintoniaUsers.
  */
@@ -32,6 +40,8 @@ const getPreferencesHandler = http.get<never, never, UserPreferences>(
       description: MOCK_USER.description,
       activeTags: MOCK_USER.activeTags,
       availableTags: AVAILABLE_TAGS,
+      theme: MOCK_USER.theme,
+      language: MOCK_USER.language,
     });
   },
 );
@@ -39,26 +49,41 @@ const getPreferencesHandler = http.get<never, never, UserPreferences>(
 /**
  * PUT /user/preferences
  *
- * Persists the user's active tag selection. This endpoint is called when the
- * user enables or disables individual AI-extracted tags on the Profile page.
+ * Patch endpoint — accepts any combination of `activeTags`, `theme`, and
+ * `language`. Only the provided fields are updated; omitted fields are
+ * left unchanged. This endpoint is called from:
+ *   - TagManager (activeTags only)
+ *   - SettingsPanel (theme only, or language only)
  *
  * The 400ms delay simulates a DynamoDB UpdateItem on SintoniaUsers.
  */
-const putPreferencesHandler = http.put<never, UpdatePreferencesBody>(
-  "/user/preferences",
-  async ({ request }) => {
-    await delay(400);
+const putPreferencesHandler = http.put<
+  never,
+  UpdatePreferencesBody,
+  UpdatePreferencesResponse
+>("/user/preferences", async ({ request }) => {
+  await delay(400);
 
-    const { activeTags } = await request.json();
+  const body = await request.json();
 
-    MOCK_USER.activeTags.splice(0, MOCK_USER.activeTags.length, ...activeTags);
+  if (body.activeTags !== undefined) {
+    MOCK_USER.activeTags.splice(
+      0,
+      MOCK_USER.activeTags.length,
+      ...body.activeTags,
+    );
+  }
 
-    return HttpResponse.json({
-      activeTags,
-      updatedAt: new Date().toISOString(),
-    });
-  },
-);
+  if (body.theme !== undefined) {
+    (MOCK_USER as { theme: Theme }).theme = body.theme;
+  }
+
+  if (body.language !== undefined) {
+    (MOCK_USER as { language: Language }).language = body.language;
+  }
+
+  return HttpResponse.json({ updatedAt: new Date().toISOString() });
+});
 
 /**
  * PUT /user/profile

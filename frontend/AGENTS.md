@@ -105,7 +105,7 @@ src/
 │   │                                Uses setPointerCapture + passive:false on pointermove to block
 │   │                                vertical snap-scroll only when horizontal intent is confirmed.
 │   ├── use-jit.ts                   Calls POST /feed/request when buffer ≤ TRIGGER_THRESHOLD.
-│   ├── use-saved-posts.ts           Loads GET /posts/saved; exposes save() / unsave() actions.
+│   ├── use-saved-posts.ts           Loads GET /posts/saved on mount; exposes `isLoading`.
 │   ├── use-snap-navigation.ts       Intercepts wheel + keyboard events on a snap-scroll container
 │   │                                for reliable desktop navigation (wheel delta fix + Arrow/Space keys).
 │   └── use-translation.ts           Returns the translations object for the active language.
@@ -143,6 +143,8 @@ src/
 ├── services/
 │   └── api.ts                       Central HTTP client (api.get/post/put/delete). MSW intercepts
 │                                    all calls in dev; real API Gateway in production.
+│                                    Exports `getApiErrorMessage(err, errors)` helper — maps
+│                                    backend `ApiErrorCode` to a translated string from `t.errors`.
 ├── stores/
 │   ├── auth/
 │   │   └── index.ts                 useAuthStore — user, token, login(code), logout.
@@ -176,10 +178,11 @@ src/
 │                                    Markdown prose uses content.* tokens directly.
 │                                    No html.light .text-* overrides — semantic tokens handle it.
 └── types/
-    ├── domain.ts                    Post (includes savedAt?), Tag, Theme, Language,
+    ├── domain.ts                    Post (includes savedAt?), Tag, ApiErrorCode, Theme, Language,
     │                                UserPreferencesLocal, UserProfile, FeedResponse,
     │                                SavedPostsResponse, SavePostResponse, UnsavePostResponse,
-    │                                UserPreferences, GenerationResponse, UpdateProfileResponse,
+    │                                UserPreferences (includes theme + language),
+    │                                GenerationResponse, UpdateProfileResponse,
     │                                TermsStatus, LegalDocument, AcceptTermsRequest, AcceptTermsResponse.
     └── index.ts                     Re-exports from domain.ts.
 ```
@@ -569,14 +572,35 @@ In production: remove MSW initialisation from `main.tsx`, set `VITE_API_URL`, an
 
 **Every action that calls the API must show a toast for feedback** — both on success and on error. Use `useToastStore` directly in the component that performs the action. See §28 for the full toast pattern.
 
-| Action                     | Success toast                                  | Error toast                    |
-| -------------------------- | ---------------------------------------------- | ------------------------------ |
-| Save post                  | `t.saved.toastSaved`                           | `t.saved.toastSaveError`       |
-| Unsave post                | `t.saved.toastUnsaved`                         | `t.saved.toastUnsaveError`     |
-| Update profile description | `t.descriptionForm.toastSuccess(n)`            | `t.descriptionForm.toastError` |
-| Toggle tag                 | `t.tagManager.toastActivated/Deactivated(tag)` | `t.tagManager.toastError`      |
+**Success toasts** use component-specific i18n keys. **Error toasts** always use `getApiErrorMessage(err, t.errors)` from `@/services/api` — this maps the backend `ApiErrorCode` to the translated message in `t.errors[code]`.
 
-All toast strings are in `src/lib/i18n.ts` and must be translated for every supported language.
+| Action                     | Success toast                                  | Error pattern                                         |
+| -------------------------- | ---------------------------------------------- | ----------------------------------------------------- |
+| Save post                  | `t.saved.toastSaved`                           | `getApiErrorMessage(err, t.errors)`                   |
+| Unsave post                | `t.saved.toastUnsaved`                         | `getApiErrorMessage(err, t.errors)`                   |
+| Update profile description | `t.descriptionForm.toastSuccess(n)`            | `getApiErrorMessage(err, t.errors)`                   |
+| Toggle tag                 | `t.tagManager.toastActivated/Deactivated(tag)` | `getApiErrorMessage(err, t.errors)`                   |
+| Change theme / language    | — (no success toast)                           | `getApiErrorMessage(err, t.errors)` as `warning` type |
+
+All error code → message mappings live in `t.errors: Record<ApiErrorCode, string>` in `src/lib/i18n.ts`.
+
+### API error codes
+
+All non-2xx backend responses carry `{ code: ApiErrorCode, error: string, message: string }`. The frontend maps `code` to a translated message. `ApiErrorCode` is exported from `src/types/domain.ts`:
+
+| Code                       | When                                                  |
+| -------------------------- | ----------------------------------------------------- |
+| `UNAUTHENTICATED`          | Token absent, expired, or invalid                     |
+| `POST_NOT_FOUND`           | Post not found or belongs to another user             |
+| `POST_NOT_SAVED`           | Unsaving a post that is not saved                     |
+| `LEGAL_DOCUMENT_NOT_FOUND` | No active legal document for the type                 |
+| `VALIDATION_ERROR`         | Malformed body or invalid fields                      |
+| `TERMS_VERSION_MISMATCH`   | Accepted versions don't match current active versions |
+| `GENERATION_LIMIT_REACHED` | Too many pending generations                          |
+| `RATE_LIMIT_EXCEEDED`      | General API rate limit                                |
+| `AI_EXTRACTION_FAILED`     | Gemini failed to extract tags                         |
+| `INTERNAL_ERROR`           | Uncategorised server error                            |
+| `UNKNOWN_ERROR`            | Fallback for unrecognised codes                       |
 
 ### Adding a new API endpoint
 
@@ -604,18 +628,22 @@ Add to `src/mocks/data/posts.ts`. Follow this shape:
 
 ### Mock delays (defined in MSW handlers)
 
-| Endpoint                | Delay  | Simulates                                        |
-| ----------------------- | ------ | ------------------------------------------------ |
-| `POST /auth/callback`   | 800ms  | Cognito OAuth round-trip                         |
-| `GET /feed`             | 400ms  | DynamoDB GSI Query + Lambda                      |
-| `GET /post/:id`         | 200ms  | DynamoDB GetItem                                 |
-| `POST /feed/request`    | 300ms  | SQS SendMessage                                  |
-| `GET /user/preferences` | 200ms  | DynamoDB GetItem                                 |
-| `PUT /user/preferences` | 400ms  | DynamoDB UpdateItem                              |
-| `PUT /user/profile`     | 2000ms | Gemini API tag extraction                        |
-| `POST /post/:id/save`   | 300ms  | DynamoDB UpdateItem (remove TTL, set savedAt)    |
-| `DELETE /post/:id/save` | 300ms  | DynamoDB UpdateItem (restore TTL, clear savedAt) |
-| `GET /posts/saved`      | 400ms  | DynamoDB GSI Query (userId-savedAt-index)        |
+| Endpoint                  | Delay  | Simulates                                        |
+| ------------------------- | ------ | ------------------------------------------------ |
+| `POST /auth/callback`     | 800ms  | Cognito OAuth round-trip                         |
+| `GET /feed`               | 400ms  | DynamoDB GSI Query + Lambda                      |
+| `GET /post/:id`           | 200ms  | DynamoDB GetItem                                 |
+| `POST /feed/request`      | 300ms  | SQS SendMessage                                  |
+| `GET /user/preferences`   | 200ms  | DynamoDB GetItem                                 |
+| `PUT /user/preferences`   | 400ms  | DynamoDB UpdateItem                              |
+| `PUT /user/profile`       | 2000ms | Gemini API tag extraction                        |
+| `POST /post/:id/save`     | 300ms  | DynamoDB UpdateItem (remove TTL, set savedAt)    |
+| `DELETE /post/:id/save`   | 300ms  | DynamoDB UpdateItem (restore TTL, clear savedAt) |
+| `GET /posts/saved`        | 400ms  | DynamoDB GSI Query (userId-savedAt-index)        |
+| `GET /legal/terms-status` | 300ms  | DynamoDB GetItem (SintoniaUsers + SintoniaLegal) |
+| `GET /legal/terms`        | 500ms  | DynamoDB Query (SintoniaLegal)                   |
+| `GET /legal/privacy`      | 500ms  | DynamoDB Query (SintoniaLegal)                   |
+| `POST /legal/accept`      | 400ms  | DynamoDB UpdateItem (SintoniaUsers)              |
 
 ### `mockExtractTags(description: string): Tag[]`
 
@@ -1230,7 +1258,20 @@ Usage:
 
 ### `common` namespace
 
-Shared strings reused across multiple unrelated components (e.g. `t.common.close` for every modal close button). Always prefer a `common.*` key over duplicating a string in two sections or hardcoding English.
+Shared strings reused across multiple unrelated components:
+
+- `t.common.close` — close button aria-label (used by all portal modals)
+
+### `errors` namespace
+
+`t.errors: Record<ApiErrorCode, string>` — maps every `ApiErrorCode` to a translated user-facing message. **All catch blocks use `getApiErrorMessage(err, t.errors)` — never hardcode error strings in components.**
+
+Adding a new error code requires:
+
+1. Add the code to `ApiErrorCode` in `src/types/domain.ts`
+2. Add to the `isApiErrorCode` guard in `src/services/api.ts`
+3. Add the `switch` case in `getApiErrorMessage`
+4. Add translations in `t.errors` for all languages in `src/lib/i18n.ts`
 
 ---
 
@@ -1263,16 +1304,18 @@ removeToast(id) → component unmounts
 
 ```typescript
 import { useToastStore } from '@/stores/toast';
+import { getApiErrorMessage } from '@/services/api';
 
 export function MyComponent(): React.JSX.Element {
   const addToast = useToastStore((s) => s.addToast);
+  const t = useTranslation();
 
   const handleSave = async (): Promise<void> => {
     try {
       await api.post('/some-endpoint', {});
       addToast({ type: 'success', message: t.section.toastSuccess });
-    } catch {
-      addToast({ type: 'error', message: t.section.toastError });
+    } catch (err) {
+      addToast({ type: 'error', message: getApiErrorMessage(err, t.errors) });
     }
   };
   ...
@@ -1281,18 +1324,18 @@ export function MyComponent(): React.JSX.Element {
 
 ### Types
 
-| Type      | Icon            | Bar color | When to use                               |
-| --------- | --------------- | --------- | ----------------------------------------- |
-| `success` | ✓ CheckCircle   | green-500 | Action completed successfully             |
-| `error`   | ✗ XCircle       | red-500   | Action failed — always show on `.catch()` |
-| `warning` | ⚠ TriangleAlert | amber-400 | Non-critical issue, user should know      |
-| `info`    | ℹ Info          | blue-500  | Neutral information                       |
+| Type      | Icon            | Bar color | When to use                                       |
+| --------- | --------------- | --------- | ------------------------------------------------- |
+| `success` | ✓ CheckCircle   | green-500 | Action completed successfully                     |
+| `error`   | ✗ XCircle       | red-500   | Action failed — always show on `.catch()`         |
+| `warning` | ⚠ TriangleAlert | amber-400 | Non-critical issue (e.g. settings failed to sync) |
+| `info`    | ℹ Info          | blue-500  | Neutral information                               |
 
 ### Rules
 
 1. **Every API action must have a toast** — both `.then()` (success) and `.catch()` (error). Silent failures are forbidden.
-2. **All toast messages live in `src/lib/i18n.ts`** — never hardcode strings. Add keys to `Translations` interface + values for all languages.
-3. **Toast strings naming convention:** `toastSuccess`, `toastError`, `toastSaved`, `toastUnsaved`, `toastActivated`, etc. — co-located with the section they belong to.
+2. **Success toasts** use component-specific `t.*` strings (e.g. `t.saved.toastSaved`).
+3. **Error toasts** always use `getApiErrorMessage(err, t.errors)` — maps the backend `ApiErrorCode` to the translated message from `t.errors`. Never hardcode error message strings in components.
 4. **Never call `removeToast` synchronously** in `onOpenChange` — this skips the exit animation. Use the `useEffect` + `setTimeout` pattern (already implemented in `toast/index.tsx`).
 5. **Duration:** default 4000ms. For destructive/error actions, use 5000ms: `addToast({ type: 'error', message: '...', duration: 5000 })`.
 6. **User can dismiss early** via the X button — the Radix `Close` component calls `onOpenChange(false)` which triggers the exit animation before removal.

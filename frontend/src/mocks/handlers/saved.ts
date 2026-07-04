@@ -3,11 +3,7 @@ import { delay, http, HttpResponse } from "msw";
 import { getMockSavedPosts, MOCK_SAVED_AT } from "../data/saved";
 
 import { MOCK_POSTS } from "@/mocks/data/posts";
-import type {
-  SavedPostsResponse,
-  SavePostResponse,
-  UnsavePostResponse,
-} from "@/types";
+import type { SavedPostsResponse, SavePostResponse } from "@/types";
 
 /**
  * In-memory set of saved post IDs for the mock session.
@@ -60,7 +56,7 @@ const savePostHandler = http.post<
 const unsavePostHandler = http.delete<
   { id: string },
   never,
-  UnsavePostResponse | { error: string }
+  Record<string, never> | { error: string }
 >("/post/:id/save", async ({ params }) => {
   await delay(300);
 
@@ -75,9 +71,7 @@ const unsavePostHandler = http.delete<
   savedIds.delete(id);
   runtimeSavedAt.delete(id);
 
-  return HttpResponse.json({
-    message: "Post unsaved. TTL restored to 30 days.",
-  });
+  return HttpResponse.json({});
 });
 
 /**

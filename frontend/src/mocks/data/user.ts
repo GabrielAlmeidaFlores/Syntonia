@@ -1,6 +1,13 @@
-import type { UserProfile } from "@/types";
+import type { Language, Theme } from "@/stores/preferences";
+import type { Tag, UserProfile } from "@/types";
 
-export const MOCK_USER: UserProfile = {
+interface MockUser extends UserProfile {
+  readonly theme: Theme;
+  readonly language: Language;
+  readonly activeTags: Tag[];
+}
+
+export const MOCK_USER: MockUser = {
   userId: "user-mock-001",
   email: "dev@syntonia.app",
   description:
@@ -15,4 +22,6 @@ export const MOCK_USER: UserProfile = {
     "Node.js",
     "Security",
   ],
+  theme: "dark",
+  language: "en",
 };

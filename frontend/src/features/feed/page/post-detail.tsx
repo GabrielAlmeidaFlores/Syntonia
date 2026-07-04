@@ -11,7 +11,7 @@ import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { ShareModal } from "@/components/ui/share-modal";
 import { useTranslation } from "@/hooks/use-translation";
 import { formatRelativeTime } from "@/lib/utils";
-import { api } from "@/services/api";
+import { api, getApiErrorMessage } from "@/services/api";
 import { useSavedStore } from "@/stores/saved";
 import { useToastStore } from "@/stores/toast";
 import type { Post, SavePostResponse, UnsavePostResponse } from "@/types";
@@ -49,8 +49,8 @@ export function PostDetail({
         storeUnsave(post.id);
         addToast({ type: "success", message: t.saved.toastUnsaved });
       })
-      .catch(() => {
-        addToast({ type: "error", message: t.saved.toastUnsaveError });
+      .catch((err: unknown) => {
+        addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });
       })
       .finally(() => {
         setToggling(false);
@@ -70,8 +70,8 @@ export function PostDetail({
         storeSave(post, res.savedAt);
         addToast({ type: "success", message: t.saved.toastSaved });
       })
-      .catch(() => {
-        addToast({ type: "error", message: t.saved.toastSaveError });
+      .catch((err: unknown) => {
+        addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });
       })
       .finally(() => {
         setToggling(false);

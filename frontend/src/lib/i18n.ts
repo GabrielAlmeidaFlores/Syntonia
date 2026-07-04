@@ -1,4 +1,5 @@
 import type { Language } from "@/stores/preferences";
+import type { ApiErrorCode } from "@/types";
 
 /**
  * Master translations interface.
@@ -9,6 +10,7 @@ interface Translations {
   common: {
     close: string;
   };
+  errors: Record<ApiErrorCode, string>;
   nav: {
     feed: string;
     saved: string;
@@ -58,8 +60,6 @@ interface Translations {
     ariaReadCard: (title: string) => string;
     toastSaved: string;
     toastUnsaved: string;
-    toastSaveError: string;
-    toastUnsaveError: string;
   };
   profile: {
     subtitle: string;
@@ -85,7 +85,6 @@ interface Translations {
     saveButton: string;
     savingButton: string;
     toastSuccess: (n: number) => string;
-    toastError: string;
   };
   tagManager: {
     empty: string;
@@ -95,7 +94,6 @@ interface Translations {
     count: (active: number, total: number) => string;
     toastActivated: (tag: string) => string;
     toastDeactivated: (tag: string) => string;
-    toastError: string;
   };
   settings: {
     themeLabel: string;
@@ -106,6 +104,7 @@ interface Translations {
     lightDescription: string;
     languageLabel: string;
     languageHint: string;
+    syncWarning: string;
   };
   tagSelector: {
     ariaDisable: (tag: string) => string;
@@ -119,7 +118,6 @@ interface Translations {
     signinDescription: string;
     signinButton: string;
     signingInButton: string;
-    errorMessage: string;
   };
   onboarding: {
     heading: string;
@@ -129,8 +127,6 @@ interface Translations {
     charHint: (n: number) => string;
     extractButton: string;
     analysing: string;
-    extractError: string;
-    saveError: string;
   };
   extractedTags: {
     status: string;
@@ -154,7 +150,6 @@ interface Translations {
     acceptCheckbox: string;
     acceptButton: string;
     acceptLoading: string;
-    acceptError: string;
   };
 }
 
@@ -167,6 +162,23 @@ export const translations: Record<Language, Translations> = {
   en: {
     common: {
       close: "Close",
+    },
+    errors: {
+      UNAUTHENTICATED: "Your session has expired. Please sign in again.",
+      POST_NOT_FOUND: "Post not found.",
+      POST_NOT_SAVED: "This post is not in your saved list.",
+      LEGAL_DOCUMENT_NOT_FOUND:
+        "Legal document not available. Please try again later.",
+      VALIDATION_ERROR: "Invalid request. Please check your input.",
+      TERMS_VERSION_MISMATCH:
+        "Terms have been updated. Please refresh and try again.",
+      GENERATION_LIMIT_REACHED:
+        "You have too many posts being generated. Please wait a moment.",
+      RATE_LIMIT_EXCEEDED: "Too many requests. Please slow down.",
+      AI_EXTRACTION_FAILED:
+        "AI could not process your profile. Please try again.",
+      INTERNAL_ERROR: "Something went wrong. Please try again.",
+      UNKNOWN_ERROR: "Something went wrong. Please try again.",
     },
     nav: {
       feed: "Feed",
@@ -219,8 +231,6 @@ export const translations: Record<Language, Translations> = {
       ariaReadCard: (title) => `Read: ${title}`,
       toastSaved: "Post saved.",
       toastUnsaved: "Post removed from saved.",
-      toastSaveError: "Failed to save post. Please try again.",
-      toastUnsaveError: "Failed to remove post. Please try again.",
     },
     profile: {
       subtitle: "Syntonia profile",
@@ -248,7 +258,6 @@ export const translations: Record<Language, Translations> = {
       saveButton: "Save & extract tags",
       savingButton: "Extracting…",
       toastSuccess: (n) => `Profile updated — ${String(n)} tags extracted.`,
-      toastError: "Failed to save profile. Please try again.",
     },
     tagManager: {
       empty:
@@ -259,7 +268,6 @@ export const translations: Record<Language, Translations> = {
       count: (active, total) => `${String(active)} of ${String(total)} active`,
       toastActivated: (tag) => `"${tag}" activated.`,
       toastDeactivated: (tag) => `"${tag}" deactivated.`,
-      toastError: "Failed to update tags. Please try again.",
     },
     settings: {
       themeLabel: "Theme",
@@ -270,6 +278,7 @@ export const translations: Record<Language, Translations> = {
       lightDescription: "Light background for bright environments",
       languageLabel: "Language",
       languageHint: "Select the language used for the interface.",
+      syncWarning: "Settings saved locally. Could not sync to server.",
     },
     tagSelector: {
       ariaDisable: (tag) => `Disable ${tag}`,
@@ -284,7 +293,6 @@ export const translations: Record<Language, Translations> = {
         "In production, Cognito handles authentication. This simulates the OAuth redirect via POST /auth/callback intercepted by MSW.",
       signinButton: "Continue with Cognito",
       signingInButton: "Signing in…",
-      errorMessage: "Login failed. Please try again.",
     },
     onboarding: {
       heading: "Set up your profile",
@@ -296,8 +304,6 @@ export const translations: Record<Language, Translations> = {
       charHint: (n) => `Minimum 20 characters · ${String(n)} / 500`,
       extractButton: "Extract my interests",
       analysing: "Analysing your profile with AI…",
-      extractError: "Failed to extract tags. Please try again.",
-      saveError: "Failed to save preferences. Please try again.",
     },
     extractedTags: {
       status: "Tags extracted successfully",
@@ -325,13 +331,29 @@ export const translations: Record<Language, Translations> = {
         "I have read and accept the Terms of Use and Privacy Policy.",
       acceptButton: "Accept and continue",
       acceptLoading: "Saving…",
-      acceptError: "Failed to save acceptance. Please try again.",
     },
   },
 
   "pt-BR": {
     common: {
       close: "Fechar",
+    },
+    errors: {
+      UNAUTHENTICATED: "Sua sessão expirou. Por favor, faça login novamente.",
+      POST_NOT_FOUND: "Post não encontrado.",
+      POST_NOT_SAVED: "Este post não está na sua lista de salvos.",
+      LEGAL_DOCUMENT_NOT_FOUND:
+        "Documento legal não disponível. Tente novamente mais tarde.",
+      VALIDATION_ERROR: "Requisição inválida. Por favor, verifique os dados.",
+      TERMS_VERSION_MISMATCH:
+        "Os termos foram atualizados. Recarregue a página e tente novamente.",
+      GENERATION_LIMIT_REACHED:
+        "Você tem muitos posts sendo gerados. Por favor, aguarde um momento.",
+      RATE_LIMIT_EXCEEDED: "Muitas requisições. Por favor, aguarde.",
+      AI_EXTRACTION_FAILED:
+        "A IA não conseguiu processar seu perfil. Tente novamente.",
+      INTERNAL_ERROR: "Algo deu errado. Por favor, tente novamente.",
+      UNKNOWN_ERROR: "Algo deu errado. Por favor, tente novamente.",
     },
     nav: {
       feed: "Feed",
@@ -384,8 +406,6 @@ export const translations: Record<Language, Translations> = {
       ariaReadCard: (title) => `Ler: ${title}`,
       toastSaved: "Post salvo.",
       toastUnsaved: "Post removido dos salvos.",
-      toastSaveError: "Falha ao salvar o post. Tente novamente.",
-      toastUnsaveError: "Falha ao remover o post. Tente novamente.",
     },
     profile: {
       subtitle: "Perfil Syntonia",
@@ -413,7 +433,6 @@ export const translations: Record<Language, Translations> = {
       saveButton: "Salvar & extrair tags",
       savingButton: "Extraindo…",
       toastSuccess: (n) => `Perfil atualizado — ${String(n)} tags extraídas.`,
-      toastError: "Falha ao salvar o perfil. Por favor, tente novamente.",
     },
     tagManager: {
       empty:
@@ -424,7 +443,6 @@ export const translations: Record<Language, Translations> = {
       count: (active, total) => `${String(active)} de ${String(total)} ativas`,
       toastActivated: (tag) => `"${tag}" ativada.`,
       toastDeactivated: (tag) => `"${tag}" desativada.`,
-      toastError: "Falha ao atualizar tags. Por favor, tente novamente.",
     },
     settings: {
       themeLabel: "Tema",
@@ -435,6 +453,8 @@ export const translations: Record<Language, Translations> = {
       lightDescription: "Fundo claro para ambientes com boa iluminação",
       languageLabel: "Idioma",
       languageHint: "Selecione o idioma da interface.",
+      syncWarning:
+        "Preferências salvas localmente. Não foi possível sincronizar.",
     },
     tagSelector: {
       ariaDisable: (tag) => `Desativar ${tag}`,
@@ -449,7 +469,6 @@ export const translations: Record<Language, Translations> = {
         "Em produção, o Cognito cuida da autenticação. Isso simula o redirecionamento OAuth via POST /auth/callback interceptado pelo MSW.",
       signinButton: "Continuar com Cognito",
       signingInButton: "Entrando…",
-      errorMessage: "Falha no login. Por favor, tente novamente.",
     },
     onboarding: {
       heading: "Configure seu perfil",
@@ -461,8 +480,6 @@ export const translations: Record<Language, Translations> = {
       charHint: (n) => `Mínimo de 20 caracteres · ${String(n)} / 500`,
       extractButton: "Extrair meus interesses",
       analysing: "Analisando seu perfil com IA…",
-      extractError: "Falha ao extrair tags. Por favor, tente novamente.",
-      saveError: "Falha ao salvar preferências. Por favor, tente novamente.",
     },
     extractedTags: {
       status: "Tags extraídas com sucesso",
@@ -490,7 +507,6 @@ export const translations: Record<Language, Translations> = {
         "Li e aceito os Termos de Uso e a Política de Privacidade.",
       acceptButton: "Aceitar e continuar",
       acceptLoading: "Salvando…",
-      acceptError: "Falha ao salvar aceite. Tente novamente.",
     },
   },
 };

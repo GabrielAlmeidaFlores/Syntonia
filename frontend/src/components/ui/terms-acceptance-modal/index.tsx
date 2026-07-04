@@ -8,7 +8,7 @@ import remarkGfm from "remark-gfm";
 import { Spinner } from "@/components/shared/spinner";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/hooks/use-translation";
-import { api } from "@/services/api";
+import { api, getApiErrorMessage } from "@/services/api";
 import { useTermsStore } from "@/stores/terms";
 import { useToastStore } from "@/stores/toast";
 import type { AcceptTermsResponse, LegalDocument } from "@/types";
@@ -69,8 +69,8 @@ export function TermsAcceptanceModal(): React.JSX.Element {
       .then(() => {
         clearAcceptance();
       })
-      .catch(() => {
-        addToast({ type: "error", message: t.legal.acceptError });
+      .catch((err: unknown) => {
+        addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });
         setSubmitting(false);
       });
   }, [

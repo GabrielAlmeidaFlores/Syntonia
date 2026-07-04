@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useTranslation } from "@/hooks/use-translation";
 import { cn } from "@/lib/utils";
-import { api } from "@/services/api";
+import { api, getApiErrorMessage } from "@/services/api";
 import { useSavedStore } from "@/stores/saved";
 import { useToastStore } from "@/stores/toast";
 import type { Post, UnsavePostResponse } from "@/types";
@@ -46,8 +46,8 @@ export function SavedPostCard({
         storeUnsave(post.id);
         addToast({ type: "success", message: t.saved.toastUnsaved });
       })
-      .catch(() => {
-        addToast({ type: "error", message: t.saved.toastUnsaveError });
+      .catch((err: unknown) => {
+        addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });
       })
       .finally(() => {
         setUnsaving(false);

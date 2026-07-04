@@ -13,6 +13,7 @@ import { useTranslation } from "@/hooks/use-translation";
 import { cn } from "@/lib/utils";
 import { api } from "@/services/api";
 import { useAuthStore } from "@/stores/auth";
+import { usePreferencesStore } from "@/stores/preferences";
 import { useUserStore } from "@/stores/user";
 import type { UserPreferences } from "@/types";
 
@@ -35,6 +36,8 @@ export default function ProfilePage(): React.JSX.Element {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const setProfile = useUserStore((s) => s.setProfile);
+  const setTheme = usePreferencesStore((s) => s.setTheme);
+  const setLanguage = usePreferencesStore((s) => s.setLanguage);
   const [activeTab, setActiveTab] = React.useState<Tab>("profile");
   const [slideDirection, setSlideDirection] = React.useState<1 | -1>(1);
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
@@ -59,8 +62,10 @@ export default function ProfilePage(): React.JSX.Element {
       if (prefs.description !== null) {
         setProfile(prefs.description, prefs.activeTags);
       }
+      setTheme(prefs.theme);
+      setLanguage(prefs.language);
     });
-  }, [setProfile]);
+  }, [setProfile, setTheme, setLanguage]);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-surface scrollbar-thin">

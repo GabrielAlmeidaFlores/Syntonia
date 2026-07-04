@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { TagSelector } from "@/components/shared/tag-selector";
 import { useTranslation } from "@/hooks/use-translation";
-import { api } from "@/services/api";
+import { api, getApiErrorMessage } from "@/services/api";
 import { useToastStore } from "@/stores/toast";
 import { useUserStore } from "@/stores/user";
 import type { Tag } from "@/types";
@@ -39,10 +39,12 @@ export function TagManager(): React.JSX.Element {
         : t.tagManager.toastActivated(tag),
     });
 
-    void api.put("/user/preferences", { activeTags: next }).catch(() => {
-      setTags(previous);
-      addToast({ type: "error", message: t.tagManager.toastError });
-    });
+    void api
+      .put("/user/preferences", { activeTags: next })
+      .catch((err: unknown) => {
+        setTags(previous);
+        addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });
+      });
   };
 
   if (extractedTags.length === 0) {

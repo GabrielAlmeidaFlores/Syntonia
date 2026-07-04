@@ -8,7 +8,7 @@ import { ExtractedTags } from "./extracted-tags";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useTranslation } from "@/hooks/use-translation";
-import { api } from "@/services/api";
+import { api, getApiErrorMessage } from "@/services/api";
 import { useUserStore } from "@/stores/user";
 import type { Tag, UpdateProfileResponse } from "@/types";
 
@@ -50,8 +50,8 @@ export default function OnboardingPage(): React.JSX.Element {
       setExtractedTags(response.activeTags);
       setLocalActiveTags(response.activeTags);
       setStep("review");
-    } catch {
-      setError(t.onboarding.extractError);
+    } catch (err) {
+      setError(getApiErrorMessage(err, t.errors));
       setStep("input");
     }
   };
@@ -71,8 +71,8 @@ export default function OnboardingPage(): React.JSX.Element {
       await api.put("/user/preferences", { activeTags: localActiveTags });
       setProfile(description.trim(), localActiveTags);
       navigate("/feed", { replace: true });
-    } catch {
-      setError(t.onboarding.saveError);
+    } catch (err) {
+      setError(getApiErrorMessage(err, t.errors));
       setIsConfirming(false);
     }
   };

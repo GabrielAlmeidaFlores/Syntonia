@@ -13,7 +13,6 @@ interface GenerationRequestBody {
 interface GenerationResponse {
   readonly requestIds: string[];
   readonly status: "PENDING";
-  readonly message: string;
 }
 
 /**
@@ -106,7 +105,6 @@ const postFeedRequestHandler = http.post<
     {
       requestIds,
       status: "PENDING",
-      message: `${String(quantity)} post(s) being generated.`,
     },
     { status: 202 },
   );

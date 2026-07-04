@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/hooks/use-translation";
+import { getApiErrorMessage } from "@/services/api";
 import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
 
@@ -39,8 +40,8 @@ export default function MockCognitoPage(): React.JSX.Element {
       }
 
       navigate(returnTo, { replace: true });
-    } catch {
-      setError(t.auth.errorMessage);
+    } catch (err) {
+      setError(getApiErrorMessage(err, t.errors));
       setLoading(false);
     }
   };

@@ -1,3 +1,5 @@
+import type { Language, Theme } from "@/stores/preferences";
+
 export type Tag =
   | "AWS"
   | "React"
@@ -19,6 +21,23 @@ export type Tag =
   | "Security"
   | "Performance"
   | "Architecture";
+
+/**
+ * Machine-readable error codes returned by the backend on all non-2xx responses.
+ * The frontend maps each code to a translated user-facing message via `t.errors`.
+ */
+export type ApiErrorCode =
+  | "UNAUTHENTICATED"
+  | "POST_NOT_FOUND"
+  | "POST_NOT_SAVED"
+  | "LEGAL_DOCUMENT_NOT_FOUND"
+  | "VALIDATION_ERROR"
+  | "TERMS_VERSION_MISMATCH"
+  | "GENERATION_LIMIT_REACHED"
+  | "RATE_LIMIT_EXCEEDED"
+  | "AI_EXTRACTION_FAILED"
+  | "INTERNAL_ERROR"
+  | "UNKNOWN_ERROR";
 
 /** A single AI-generated post in the user's feed. */
 export interface Post {
@@ -47,9 +66,7 @@ export interface SavePostResponse {
 }
 
 /** Response from DELETE /post/:id/save. */
-export interface UnsavePostResponse {
-  readonly message: string;
-}
+export type UnsavePostResponse = Record<string, never>;
 
 /** Authenticated user profile stored in DynamoDB and synced to the Zustand store. */
 export interface UserProfile {
@@ -70,7 +87,6 @@ export interface FeedResponse {
 export interface GenerationResponse {
   readonly requestIds: string[];
   readonly status: "PENDING";
-  readonly message: string;
 }
 
 /** Response from GET /user/preferences. */
@@ -79,6 +95,8 @@ export interface UserPreferences {
   readonly description: string | null;
   readonly activeTags: Tag[];
   readonly availableTags: Tag[];
+  readonly theme: Theme;
+  readonly language: Language;
 }
 
 /** Response from PUT /user/profile after AI tag extraction. */

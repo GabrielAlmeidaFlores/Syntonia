@@ -4,7 +4,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useTranslation } from "@/hooks/use-translation";
-import { api } from "@/services/api";
+import { api, getApiErrorMessage } from "@/services/api";
 import { useToastStore } from "@/stores/toast";
 import { useUserStore } from "@/stores/user";
 import type { UpdateProfileResponse } from "@/types";
@@ -45,8 +45,8 @@ export function DescriptionForm(): React.JSX.Element {
         type: "success",
         message: t.descriptionForm.toastSuccess(response.activeTags.length),
       });
-    } catch {
-      addToast({ type: "error", message: t.descriptionForm.toastError });
+    } catch (err) {
+      addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });
     } finally {
       setState("idle");
     }

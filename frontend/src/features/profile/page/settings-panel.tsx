@@ -3,8 +3,10 @@ import * as React from "react";
 
 import { useTranslation } from "@/hooks/use-translation";
 import { cn } from "@/lib/utils";
+import { api, getApiErrorMessage } from "@/services/api";
 import { usePreferencesStore } from "@/stores/preferences";
 import type { Language, Theme } from "@/stores/preferences";
+import { useToastStore } from "@/stores/toast";
 
 type IconComponent = React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
@@ -88,15 +90,40 @@ function OptionCard({
 /**
  * Settings panel rendered inside the "Settings" tab of ProfilePage.
  * Provides immediate (no-save-button) selection of visual theme and UI language.
- * Theme changes are applied globally via the `<html>` class synced in app.tsx.
- * Language preference is persisted for future i18n integration.
+ * Changes are applied locally first (optimistic), then persisted via PUT /user/preferences.
+ * On API failure the local change is kept (Option B) and a warning toast is shown.
  */
 export function SettingsPanel(): React.JSX.Element {
   const theme = usePreferencesStore((s) => s.theme);
   const language = usePreferencesStore((s) => s.language);
   const setTheme = usePreferencesStore((s) => s.setTheme);
   const setLanguage = usePreferencesStore((s) => s.setLanguage);
+  const addToast = useToastStore((s) => s.addToast);
   const t = useTranslation();
+
+  const handleThemeChange = (value: Theme): void => {
+    setTheme(value);
+    void api
+      .put("/user/preferences", { theme: value })
+      .catch((err: unknown) => {
+        addToast({
+          type: "warning",
+          message: getApiErrorMessage(err, t.errors),
+        });
+      });
+  };
+
+  const handleLanguageChange = (value: Language): void => {
+    setLanguage(value);
+    void api
+      .put("/user/preferences", { language: value })
+      .catch((err: unknown) => {
+        addToast({
+          type: "warning",
+          message: getApiErrorMessage(err, t.errors),
+        });
+      });
+  };
 
   const themeOptions: ThemeOption[] = [
     {
@@ -146,7 +173,7 @@ export function SettingsPanel(): React.JSX.Element {
               icon={opt.icon}
               selected={theme === opt.value}
               onClick={() => {
-                setTheme(opt.value);
+                handleThemeChange(opt.value);
               }}
             />
           ))}
@@ -171,7 +198,7 @@ export function SettingsPanel(): React.JSX.Element {
               icon={opt.icon}
               selected={language === opt.value}
               onClick={() => {
-                setLanguage(opt.value);
+                handleLanguageChange(opt.value);
               }}
             />
           ))}

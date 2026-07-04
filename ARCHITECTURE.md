@@ -118,7 +118,7 @@ Y-AXIS (vertical scroll — navigates between posts)
 |---|---|
 | **AWS Amplify Hosting** | Frontend hosting (React SPA), automatic CI/CD per branch |
 | **API Gateway (REST)** | HTTP routing, CORS, Cognito Authorizer, throttling |
-| **AWS Lambda** | All business logic (8 functions + 1 Cognito trigger) |
+| **AWS Lambda** | All business logic (11 functions + 1 Cognito trigger) |
 | **DynamoDB** | Primary database (NoSQL, serverless, PAY_PER_REQUEST) |
 | **DynamoDB Streams** | Not used for queue triggering — SQS handles that |
 | **SQS (GenerationQueue)** | Reliable delivery of generation requests to `workerInternal` |
@@ -132,567 +132,167 @@ Y-AXIS (vertical scroll — navigates between posts)
 
 ---
 
-## 3. Frontend — React + AWS Amplify
+## 3. Frontend — React + Vite + MSW
 
-### Full Stack
+> **Status:** Fully mocked frontend (Phase 1 complete). No real API calls leave the browser — MSW (Mock Service Worker) intercepts every `fetch` request and returns deterministic mock data. When the real backend is ready, set `VITE_API_URL` in Amplify Console and remove the MSW initialisation from `main.tsx`. No component changes needed.
 
-```
-React 18 (Vite 5)
-├── TypeScript 5
-├── aws-amplify v6              — Cognito Auth SDK
-├── react-router-dom v6         — SPA routing
-├── zustand v4                  — Global state management
-├── tailwindcss v3              — Utility-first styling
-├── framer-motion v11           — Scroll animations and transitions
-├── react-markdown              — Markdown rendering
-├── rehype-highlight            — Syntax highlighting for code blocks
-├── highlight.js                — Syntax highlight themes
-└── uuid                        — Client-side ID generation
-```
+### Tech Stack
+
+| Technology | Version | Purpose |
+|---|---|---|
+| **React** | 18.3.x | UI framework |
+| **TypeScript** | 5.7.x | Strict mode — zero `any`, full type safety |
+| **Vite** | 6.x | Build tool + dev server |
+| **Tailwind CSS** | 3.4.x | Utility-first styling with CSS variable tokens |
+| **Zustand** | 5.x | Global state — 7 stores (auth, feed, saved, user, preferences, terms, toast) |
+| **React Router** | 6.28.x | Client-side routing — lazy-loaded pages |
+| **Framer Motion** | 11.x | Snap-scroll, swipe transitions, stagger animations |
+| **react-markdown** | 9.x | Renders Markdown post content |
+| **rehype-highlight** | 7.x | Syntax highlighting in code blocks |
+| **remark-gfm** | latest | GitHub Flavored Markdown support |
+| **highlight.js** | 11.x | Syntax highlight themes |
+| **MSW** | 2.x | Mock Service Worker — intercepts all API calls in development |
+| **Radix UI** | various | Accessible headless primitives (Tooltip) |
+| **CVA** | 0.7.x | Class Variance Authority — component variant system |
+| **clsx + tailwind-merge** | latest | Class name merging via `cn()` |
+| **Lucide React** | 0.469.x | Icon set |
+
+**Node version:** 22.15.0 | **Package manager:** yarn 1.22.22
 
 ### Route Structure
 
 ```
-/                     → Redirects to /feed (authenticated) or /login
-/login                → Login screen with email + password
-/signup               → Cognito account creation (email + password + email verification)
-/onboarding           → Post-signup: user writes description → AI extracts tags → confirm → /feed
-/feed                 → Main feed (protected route via RequireAuth)
-/saved                → Saved posts grid — all bookmarked posts (protected)
-/saved/feed           → Snap-scroll feed of saved posts starting at ?from=postId (protected)
-/profile              → Profile page: edit description, enable/disable AI-extracted tags, logout
-/post/:id             → Individual post expanded view (shareable deep link)
+/                     → RootRedirect → /auth/login | /onboarding | /feed
+/auth/login           → MockCognitoPage (mock auth — no real Cognito in dev)
+/onboarding           → OnboardingPage (RequireAuth) — first-time profile setup
+/feed                 → FeedPage (RequireAuth + FeedLayout) — main snap-scroll feed
+/saved                → SavedGridPage (RequireAuth + FeedLayout) — 2-column saved posts grid
+/saved/feed           → SavedFeedPage (RequireAuth, no layout) — snap-scroll saved posts feed
+/profile              → ProfilePage (RequireAuth + FeedLayout) — 3 tabs: Profile, Settings, Legal
+/post/:id             → PostPage (RequireAuth, no layout) — deep-link single post view
 ```
 
-### Application Entry Points (macro)
+**`RootRedirect` logic:**
+1. Not authenticated → `/auth/login`
+2. Authenticated + `description === ''` → `/onboarding`
+3. Authenticated + has description → `/feed`
+
+All pages are `React.lazy` — wrapped in `withSuspense()` which renders a `Spinner` as fallback.
+
+### Application Entry Points
 
 **`src/main.tsx`**
-- Calls `Amplify.configure()` (imports `services/amplify.ts`)
-- Renders `<App />` wrapped in `<BrowserRouter>`
+- Starts MSW ServiceWorker in development (`VITE_MODE === "development"`)
+- Renders `<App />` in `<React.StrictMode>`
 
-**`src/App.tsx`**
-- Defines all routes using React Router v6
-- `RequireAuth` wrapper: redirects unauthenticated users to `/login`
-- On initial authenticated load: calls `GET /user/preferences` and syncs `description` + `activeTags` into the Zustand `userStore` — ensures the server is always the source of truth, overwriting any stale localStorage state
-- Redirect logic after login: if user has no `description` set, redirects to `/onboarding`
+**`src/app/app.tsx`**
+- Syncs `usePreferencesStore.theme` → applies `'dark'` or `'light'` class to `<html>`
+- Renders mesh-gradient outer background (adapts to theme)
+- Checks `GET /legal/terms-status` after every authenticated login
+- If `needsAcceptance: true` → renders `TermsAcceptanceModal` (full-screen blocking portal, z-index 99999)
+- Provides `Tooltip.Provider`, `ToastContainer`, `AppRouter`
 
-### Main Components
+### Mock Architecture (MSW)
 
-**`src/components/FeedContainer.tsx`**
-```tsx
-// Manages the virtualized list of posts.
-// Uses IntersectionObserver to detect the current post
-// and trigger the useJIT hook when needed.
-import { useRef, useEffect } from 'react';
-import PostCard from './PostCard';
-import LoadingSkeleton from './LoadingSkeleton';
-import { useFeed } from '../hooks/useFeed';
-import { useJIT } from '../hooks/useJIT';
-import { useFeedStore } from '../store/feedStore';
+In development, **every** `api.get/post/put/delete` call is intercepted by MSW before reaching the network. The flow:
 
-export default function FeedContainer() {
-  const { posts, isLoading } = useFeed();
-  const { currentIndex, setCurrentIndex } = useFeedStore();
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useJIT(currentIndex, posts.length);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const idx = Number(entry.target.getAttribute('data-index'));
-            setCurrentIndex(idx);
-          }
-        });
-      },
-      { threshold: 0.7 } // 70% visible = active card
-    );
-
-    const cards = containerRef.current?.querySelectorAll('[data-index]');
-    cards?.forEach((card) => observer.observe(card));
-    return () => observer.disconnect();
-  }, [posts.length]);
-
-  return (
-    <div ref={containerRef} className="h-screen overflow-y-scroll snap-y snap-mandatory">
-      {posts.map((post, idx) => (
-        <div
-          key={post.id}
-          data-index={idx}
-          className="h-screen snap-start snap-always flex items-center justify-center"
-        >
-          <PostCard post={post} />
-        </div>
-      ))}
-      {isLoading && <LoadingSkeleton />}
-    </div>
-  );
-}
+```
+Component → api.ts → fetch() → [MSW ServiceWorker] → mock handler → JSON response
 ```
 
-**`src/components/PostCard.tsx`**
-```tsx
-// Summary card (Y-axis). Supports horizontal swipe to PostDetail.
-import { useState } from 'react';
-import { motion, useMotionValue, AnimatePresence } from 'framer-motion';
-import PostDetail from './PostDetail';
-import { Post } from '../types';
+**Handlers:** `src/mocks/handlers/` (auth, feed, legal, saved, user)
+**Mock data:** `src/mocks/data/` (posts, user, legal, saved, tags)
 
-interface Props { post: Post }
+In production: remove MSW init from `main.tsx`, set `VITE_API_URL` → all requests go to real API Gateway. Zero other changes needed.
 
-export default function PostCard({ post }: Props) {
-  const [expanded, setExpanded] = useState(false);
-  const x = useMotionValue(0);
+### Key Page Flows
 
-  const background = `linear-gradient(135deg, ${post.gradient[0]}, ${post.gradient[1]})`;
-
-  return (
-    <div className="relative w-full h-full overflow-hidden">
-      {/* Main card */}
-      <motion.div
-        style={{ x, background }}
-        drag="x"
-        dragConstraints={{ left: -300, right: 0 }}
-        onDragEnd={(_, info) => {
-          if (info.offset.x < -80) setExpanded(true);
-        }}
-        className="absolute inset-0 flex flex-col justify-end p-6 rounded-2xl"
-      >
-        <div className="flex gap-2 mb-3 flex-wrap">
-          {post.tags.map((tag) => (
-            <span key={tag} className="px-3 py-1 bg-white/20 rounded-full text-white text-sm">
-              {tag}
-            </span>
-          ))}
-        </div>
-        <h2 className="text-white text-2xl font-bold mb-2">{post.title}</h2>
-        <p className="text-white/80 text-sm">{post.summary}</p>
-        <p className="text-white/50 text-xs mt-4">← swipe to read more</p>
-      </motion.div>
-
-      {/* PostDetail (X-axis) */}
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25 }}
-            className="absolute inset-0 bg-gray-950 overflow-y-auto"
-          >
-            <PostDetail postId={post.id} onClose={() => setExpanded(false)} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-```
-
-**`src/components/PostDetail.tsx`**
-```tsx
-// Renders the full Markdown content of a post.
-// Performs a lazy fetch of GET /post/:id on first open.
-import { useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import rehypeHighlight from 'rehype-highlight';
-import 'highlight.js/styles/github-dark.css';
-import { api } from '../services/api';
-import { Post } from '../types';
-
-interface Props {
-  postId: string;
-  onClose: () => void;
-}
-
-export default function PostDetail({ postId, onClose }: Props) {
-  const [post, setPost] = useState<Post | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api.get<Post>(`/post/${postId}`)
-      .then(setPost)
-      .finally(() => setLoading(false));
-  }, [postId]);
-
-  if (loading) return <div className="p-6 text-white">Loading...</div>;
-  if (!post) return <div className="p-6 text-red-400">Failed to load post.</div>;
-
-  return (
-    <div className="p-6 text-white">
-      <button onClick={onClose} className="mb-4 text-white/50 text-sm">← back</button>
-      <h1 className="text-2xl font-bold mb-4">{post.title}</h1>
-      <ReactMarkdown
-        rehypePlugins={[rehypeHighlight]}
-        className="prose prose-invert prose-sm max-w-none"
-      >
-        {post.content ?? ''}
-      </ReactMarkdown>
-    </div>
-  );
-}
-```
-
-**`src/components/TagSelector.tsx`**
-```tsx
-// Tag toggle component. Renders the user's AI-extracted tags with enable/disable toggles.
-// Minimum of 1 active tag must remain at all times.
-// Used in OnboardingPage (to review AI-extracted tags) and ProfilePage (to enable/disable).
-interface Props {
-  tags: string[];             // AI-extracted tags to display (from GET /user/preferences)
-  activeTags: string[];       // Currently enabled tags
-  onToggle: (tag: string) => void;
-}
-
-export default function TagSelector({ tags, activeTags, onToggle }: Props) {
-  return (
-    <div className="flex flex-wrap gap-3 p-4">
-      {tags.map((tag) => {
-        const active = activeTags.includes(tag);
-        return (
-          <button
-            key={tag}
-            onClick={() => onToggle(tag)}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all
-              ${active
-                ? 'bg-indigo-600 text-white'
-                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-              }`}
-          >
-            {tag}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-```
-
-**`src/components/LoadingSkeleton.tsx`**
-```tsx
-// Skeleton screen displayed while posts are being generated by the AI.
-export default function LoadingSkeleton() {
-  return (
-    <div className="h-screen snap-start snap-always flex items-center justify-center p-6">
-      <div className="w-full h-full bg-gray-800 rounded-2xl animate-pulse flex flex-col justify-end p-6">
-        <div className="flex gap-2 mb-3">
-          <div className="h-6 w-16 bg-gray-700 rounded-full" />
-          <div className="h-6 w-20 bg-gray-700 rounded-full" />
-        </div>
-        <div className="h-8 w-3/4 bg-gray-700 rounded mb-2" />
-        <div className="h-4 w-full bg-gray-700 rounded mb-1" />
-        <div className="h-4 w-2/3 bg-gray-700 rounded" />
-      </div>
-    </div>
-  );
-}
-```
-
-**`src/components/EmptyFeedScreen.tsx`** (macro — no code required at this stage)
-
-Displayed when `GET /feed` returns `posts: []` and `isLoading` is `false`. Informs the user that no content is available yet and guides them to configure their profile. Contains:
-- Message explaining that posts are generated based on profile description and active tags
-- Link/button to `/profile` to configure description and tags
-- "Reload" button that re-calls `fetchMore()` to check if posts were generated in the background
-
-### Page Flows (macro)
-
-**`SignupPage`** (`/signup`)
-1. User fills in email + password → calls Cognito `signUp`
-2. Cognito sends verification email with 6-digit code
-3. User enters code → calls Cognito `confirmSignUp`
-4. Cognito fires `PostConfirmation` trigger → `onUserSignup` creates profile with default tags
-5. App redirects to `/onboarding`
+**`MockCognitoPage`** (`/auth/login`)
+- Click "Continue with Cognito" → `POST /auth/callback` (MSW) → returns mock user + token
+- Sets auth store, syncs description + activeTags to user store
+- Navigates to `returnTo` param or `/feed`
 
 **`OnboardingPage`** (`/onboarding`)
-1. User fills in a free-text description of their professional background and learning goals
-   - Example: *"Backend developer focused on AWS and Node.js, want to learn about distributed systems and Kubernetes"*
-2. On submit → calls `PUT /user/profile` with `{ description }`
-3. Backend calls Gemini to extract relevant tags from the description (mapped to `AVAILABLE_TAGS`)
-4. Returns `{ description, activeTags: extractedTags }` — all extracted tags start as active
-5. Frontend shows the extracted tags so the user can review
-6. User can disable unwanted tags before confirming
-7. On confirm → calls `PUT /user/preferences` with final `{ activeTags }` → redirect to `/feed`
-
-> The description and active tags are both persisted on the server and used together to generate
-> highly relevant content. Every time the description changes, tags are re-extracted by the AI.
+1. User fills description (min 20, max 500 chars)
+2. `PUT /user/profile` with `{ description }` → Gemini (mocked) extracts `activeTags`
+3. User reviews and optionally deactivates extracted tags
+4. `PUT /user/preferences` with `{ activeTags }` → saves final selection → `/feed`
 
 **`FeedPage`** (`/feed`)
-- On mount: renders `FeedContainer`
-- If `posts.length === 0` and `isLoading === false` after initial fetch → renders `EmptyFeedScreen`
-- `EmptyFeedScreen` shows a message, a link to `/profile`, and a reload button
+- `useFeed` fetches `GET /feed?limit=5&cursor=...` on mount and on pagination
+- `useJIT` triggers `POST /feed/request` when ≤ 2 posts remain in buffer
+- `FeedContainer` renders CSS snap-scroll column of `PostCard`s
+- Swipe left on `PostCard` (or tap "Read") → `PostDetail` slides in from right
+- `EmptyFeedScreen` shown if feed is empty after load
 
-**`ProfilePage`** (`/profile`)
-- Tab bar at the top with two tabs: **Profile** and **Settings**
-- **Profile tab:**
-  - Shows a textarea with the user's current `description`
-  - On description save → calls `PUT /user/profile` → AI re-extracts tags → updates `extractedTags` + `activeTags`
-  - Shows ALL AI-extracted tags (`extractedTags`) as toggleable chips — deactivated tags remain visible with muted style
-  - Toggle immediately calls `PUT /user/preferences` — no save button
-  - Changes to `activeTags` immediately affect the next JIT generation request
-- **Settings tab:**
-  - Theme selector: Dark / Light option cards — change is instant, no save button
-  - Language selector: English / Português (BR) option cards — persisted, future i18n use
-- **Logout button** at the bottom of the page (below both tabs)
+**`PostCard`** (feed + saved feed)
+- Gradient background computed from `post.gradient[0/1]`
+- Swipe detection via `useHorizontalSwipe` hook (native pointer events, not Framer Motion drag)
+- Swipe left → opens `PostDetail` (slide variant: feed / expand variant: saved feed)
+- `PostDetail` has sticky header: Back button + Bookmark toggle + Share button
+
+**`ProfilePage`** (`/profile`) — 3 tabs
+- **Profile tab:** `DescriptionForm` + `TagManager`
+  - Description save → `PUT /user/profile` (2s delay — Gemini extraction)
+  - Tag toggle → `PUT /user/preferences` with `{ activeTags }` (optimistic, rollback on error)
+- **Settings tab:** `SettingsPanel`
+  - Theme + Language option cards — **instant local update + `PUT /user/preferences` to persist to server**
+  - On API failure: local preference is kept (Opção B) + warning toast
+- **Legal tab:** `LegalTab`
+  - Two rows: Terms of Use + Privacy Policy → each opens `LegalDocModal`
 
 **`SavedGridPage`** (`/saved`)
-- 2-column grid of saved post cards
-- Each card shows: gradient background, title, tags chip row
-- Each card has an **unsave button** (bookmark-fill icon) visible in the top-right corner
-  - Tapping unsave calls `DELETE /post/{id}/save` and removes the card from the grid
-- Tapping a card (anywhere except the unsave button) navigates to `/saved/feed?from={postId}`
-- Empty state if no saved posts, with a link back to `/feed`
+- `useSavedPosts` loads `GET /posts/saved` on mount
+- 2-column grid with stagger animation on load
+- Each `SavedPostCard`: tap → opens `ExpandedOverlay` (full-screen portal, swipe right to close)
+- Unsave button → `ConfirmModal` → `DELETE /post/:id/save`
 
-**`SavedFeedPage`** (`/saved/feed?from={postId}`)
-- **Identical snap-scroll feed experience as `/feed`** — same `PostCard` + `PostDetail` components
-- Contains only the user's saved posts fetched from `GET /posts/saved`
-- Starts scrolled to the post matching `?from=postId`
-- Can scroll up/down through all saved posts (snap behaviour)
-- No JIT generation (fixed list — only saved posts, no background requests)
-- Back button (top-left) returns to `/saved`
+**`SavedFeedPage`** (`/saved/feed?start=postId`)
+- Reuses the same `PostCard` component with `detailVariant="expand"`
+- Scrolls to `?start=postId` on mount
+- No JIT generation — fixed list of saved posts
 
-**`PostDetail`** (updated — applies to both feed and saved feed)
-- Bookmark icon button added to the header (next to Share button)
-- Filled bookmark = post is saved; outline bookmark = not saved
-- Tapping:
-  - If not saved → `POST /post/{id}/save` → icon becomes filled, post added to saved store
-  - If saved → `DELETE /post/{id}/save` → icon becomes outline, post removed from saved store
+**`PostPage`** (`/post/:id`)
+- Deep link for sharing — `GET /post/:id` on mount
+- Full Markdown rendering with syntax highlighting
 
-**`src/hooks/useFeed.ts`**
-```typescript
-import { useEffect } from 'react';
-import { useFeedStore } from '../store/feedStore';
-import { api } from '../services/api';
-import { Post, FeedResponse } from '../types';
+### State Management
 
-export function useFeed() {
-  const { posts, cursor, isLoading, hasMore, setPosts, setLoading, setCursor } = useFeedStore();
-
-  const fetchMore = async () => {
-    if (isLoading || !hasMore) return;
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ limit: '5' });
-      if (cursor) params.append('cursor', cursor);
-
-      const data = await api.get<FeedResponse>(`/feed?${params}`);
-
-      setPosts([...posts, ...data.posts]);
-      setCursor(data.cursor);
-    } catch (err) {
-      console.error('Failed to fetch feed:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Initial load
-  useEffect(() => {
-    if (posts.length === 0) fetchMore();
-  }, []);
-
-  return { posts, isLoading, fetchMore };
-}
-```
-
-**`src/hooks/useJIT.ts`**
-```typescript
-import { useRef, useEffect } from 'react';
-import { api } from '../services/api';
-import { useUserStore } from '../store/userStore';
-
-// Threshold: trigger generation when X posts remain in the buffer
-const TRIGGER_THRESHOLD = 2;
-
-export function useJIT(currentIndex: number, totalPosts: number) {
-  const isGenerating = useRef(false);
-  const { activeTags } = useUserStore();
-
-  useEffect(() => {
-    const postsRemaining = totalPosts - currentIndex;
-
-    if (postsRemaining <= TRIGGER_THRESHOLD && !isGenerating.current) {
-      isGenerating.current = true;
-
-      api.post('/feed/request', { tags: activeTags, quantity: 3 })
-        .catch(console.error)
-        .finally(() => {
-          // Allow a new trigger after 10s to prevent request spam
-          setTimeout(() => { isGenerating.current = false; }, 10_000);
-        });
-    }
-  }, [currentIndex, totalPosts]); // re-evaluate only when scroll position or feed length changes
-}
-```
-
-**`src/hooks/useAuth.ts`**
-```typescript
-import { signIn, signOut, signUp, confirmSignUp, getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
-
-export function useAuth() {
-  const login = async (email: string, password: string) => {
-    return signIn({ username: email, password });
-  };
-
-  const register = async (email: string, password: string) => {
-    return signUp({ username: email, password, options: { userAttributes: { email } } });
-  };
-
-  const confirm = async (email: string, code: string) => {
-    return confirmSignUp({ username: email, confirmationCode: code });
-  };
-
-  const logout = async () => {
-    return signOut();
-  };
-
-  const getUser = async () => {
-    return getCurrentUser();
-  };
-
-  // Returns the current idToken for use in HTTP requests
-  const getToken = async (): Promise<string> => {
-    const session = await fetchAuthSession();
-    const token = session.tokens?.idToken?.toString();
-    if (!token) throw new Error('No active session');
-    return token;
-  };
-
-  return { login, register, confirm, logout, getUser, getToken };
-}
-```
-
-### State Management (Zustand)
-
-**`src/store/feedStore.ts`**
-```typescript
-import { create } from 'zustand';
-import { Post } from '../types';
-
-interface FeedState {
-  posts: Post[];
-  currentIndex: number;
-  cursor: string | null;
-  hasMore: boolean;
-  isLoading: boolean;
-  isPostExpanded: boolean;   // true while PostDetail is open — locks snap container scroll
-  setPosts: (posts: Post[]) => void;
-  setCurrentIndex: (index: number) => void;
-  setCursor: (cursor: string | null) => void;
-  setLoading: (loading: boolean) => void;
-  setPostExpanded: (expanded: boolean) => void;
-  reset: () => void;
-}
-
-export const useFeedStore = create<FeedState>((set) => ({
-  posts: [],
-  currentIndex: 0,
-  cursor: null,
-  hasMore: true,
-  isLoading: false,
-  isPostExpanded: false,
-  setPosts: (posts) => set({ posts }),
-  setCurrentIndex: (currentIndex) => set({ currentIndex }),
-  setCursor: (cursor) => set({ cursor, hasMore: cursor !== null }),
-  setLoading: (isLoading) => set({ isLoading }),
-  setPostExpanded: (isPostExpanded) => set({ isPostExpanded }),
-  reset: () => set({ posts: [], currentIndex: 0, cursor: null, hasMore: true }),
-}));
-```
-
-**`src/store/userStore.ts`**
-```typescript
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-
-interface UserState {
-  description: string;          // User's free-text profile description
-  extractedTags: string[];      // All AI-extracted tags — never changes after extraction
-  activeTags: string[];         // Subset the user has enabled — drives feed generation
-  setDescription: (description: string) => void;
-  setTags: (tags: string[]) => void;
-  toggleTag: (tag: string) => void;
-  setProfile: (description: string, tags: string[]) => void;
-}
-
-export const useUserStore = create<UserState>()(
-  persist(
-    (set, get) => ({
-      description: '',
-      extractedTags: [],
-      activeTags: [],
-      setDescription: (description) => set({ description }),
-      setTags: (activeTags) => set({ activeTags }),
-      toggleTag: (tag) => {
-        const current = get().activeTags;
-        const isActive = current.includes(tag);
-        if (isActive && current.length <= 1) return;
-        set({ activeTags: isActive ? current.filter((t) => t !== tag) : [...current, tag] });
-      },
-      setProfile: (description, tags) =>
-        set({ description, extractedTags: tags, activeTags: tags }),
-    }),
-    { name: 'syntonia-user-prefs' }
-  )
-);
-```
-
-**`src/stores/saved/index.ts`** — Persisted set of saved post IDs + ordered post list for the Saved feed. `savedIds` survives page refresh; `posts[]` is populated by `useSavedPosts` on mount.
-
-**`src/stores/preferences/index.ts`**
-```typescript
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-
-export type Theme = 'dark' | 'light';
-export type Language = 'en' | 'pt-BR';
-
-interface PreferencesState {
-  theme: Theme;         // Persisted — dark or light
-  language: Language;   // Persisted — en or pt-BR (ready for i18n)
-  setTheme: (theme: Theme) => void;
-  setLanguage: (language: Language) => void;
-}
-
-export const usePreferencesStore = create<PreferencesState>()(
-  persist(
-    (set) => ({
-      theme: detectSystemTheme(),   // First visit: follows OS preference
-      language: 'en',
-      setTheme: (theme) => set({ theme }),
-      setLanguage: (language) => set({ language }),
-    }),
-    { name: 'syntonia-preferences' }
-  )
-);
-```
+| Store | Key state | Persisted | localStorage key |
+|---|---|---|---|
+| `useAuthStore` | `user`, `isAuthenticated`, `login()`, `logout()` | No | — |
+| `useFeedStore` | `posts[]`, `currentIndex`, `cursor`, `isLoading`, `isPostExpanded` | No | — |
+| `useSavedStore` | `savedIds` (Set), `posts[]`, `isSaved()` | Yes | `syntonia-saved` |
+| `usePreferencesStore` | `theme`, `language` | Yes | `syntonia-preferences` |
+| `useUserStore` | `description`, `extractedTags`, `activeTags` | Yes | `syntonia-user-prefs` |
+| `useTermsStore` | `needsAcceptance`, `termsVersion`, `privacyVersion`, `isChecking` | No | — |
+| `useToastStore` | `toasts[]`, `addToast()`, `removeToast()` | No | — |
 
 ### Theme System
 
-Syntonia supports **Dark** and **Light** themes. The theme engine is CSS-variable-based — no component needs to know the active theme directly.
-
-**Architecture:**
+CSS-variable-based. No component needs to know the active theme — only the CSS variable values change.
 
 ```
 usePreferencesStore.theme ('dark' | 'light')
-         │
-         ▼  [useEffect in App.tsx]
-document.documentElement.classList  →  'dark' or 'light'
-         │
-         ▼  [globals.css]
-:root (dark values)       ←  no class or html.dark
-html.light { ... }        ←  light values override :root
-         │
-         ▼  [tailwind.config.ts]
-surface.DEFAULT  =  rgb(var(--color-surface) / <alpha-value>)
-accent.DEFAULT   =  rgb(var(--color-accent)  / <alpha-value>)
+        │
+        ▼  [useEffect in app.tsx]
+document.documentElement.classList  →  class 'dark' or class 'light'
+        │
+        ▼  [globals.css]
+:root           { --color-surface: 3 7 18; ... }      ← dark default
+html.light      { --color-surface: 248 250 252; ... } ← light override
+        │
+        ▼  [tailwind.config.ts]
+bg-surface = rgb(var(--color-surface) / <alpha-value>)
 ```
 
-**CSS variable tokens:**
+**Semantic text tokens:** `text-content-primary/secondary/muted/subtle` adapt automatically. Use these on surface backgrounds — never `text-white` or `text-gray-*`.
 
-| Token | Dark | Light |
+**First visit:** `detectSystemTheme()` reads `window.matchMedia('(prefers-color-scheme: dark)')`. After the user sets a preference via Settings, it is persisted to localStorage.
+
+**Theme is also persisted to the backend via `PUT /user/preferences`** — synced on login from `GET /user/preferences`.
+
+| CSS Variable | Dark | Light |
 |---|---|---|
 | `--color-surface` | `3 7 18` (#030712) | `248 250 252` (#f8fafc) |
 | `--color-surface-card` | `17 24 39` (#111827) | `255 255 255` (#ffffff) |
@@ -702,171 +302,71 @@ accent.DEFAULT   =  rgb(var(--color-accent)  / <alpha-value>)
 | `--color-accent-light` | `224 231 255` (#e0e7ff) | `55 48 163` (#3730a3) |
 | `--color-accent-muted` | `49 46 129` (#312e81) | `224 231 255` (#e0e7ff) |
 
-All Tailwind surface/accent utility classes (`bg-surface`, `text-accent-light`, `border-surface-border`, etc.) automatically adapt without any component changes. Text color overrides for Tailwind's built-in `text-white`, `text-gray-*` classes are provided via `html.light` selectors in `globals.css`.
+### Language Preference (i18n)
 
-**First-visit behaviour:** `detectSystemTheme()` reads `window.matchMedia('(prefers-color-scheme: dark)').matches` before the persisted value is loaded. After the user sets a preference, it is saved to `syntonia-preferences` in localStorage and takes priority on all subsequent visits.
+Language stored in `usePreferencesStore.language` as `'en' | 'pt-BR'`. **Fully implemented:**
 
-### Language Preference
+- `src/lib/i18n.ts` — single translations file `Record<Language, Translations>` with 80+ strings. TypeScript enforces every language implements every key.
+- `src/hooks/use-translation.ts` — `useTranslation()` reads `language` reactively. UI updates instantly on language switch — no reload.
+- `t.errors: Record<ApiErrorCode, string>` — all API error codes mapped to translated messages.
 
-Language is stored in `usePreferencesStore.language` as `'en' | 'pt-BR'`. The preference is persisted to `syntonia-preferences` in localStorage and **fully implemented** for UI translation.
+**Language is also persisted to the backend via `PUT /user/preferences`** — synced on login from `GET /user/preferences`.
 
-**Current state (implemented):**
-- `src/lib/i18n.ts` — single translations file with `Record<Language, Translations>`. All ~75 UI strings have EN and PT-BR versions. TypeScript enforces that every language implements every key.
-- `src/hooks/use-translation.ts` — `useTranslation()` reads `language` from `usePreferencesStore` reactively. The entire UI updates instantly when the user switches language in Settings — no page reload, no extra state.
-- Dynamic strings are typed as functions: `(n: number) => string`, enforcing signature parity across languages.
+**Phase 4:** Pass `language` to `PUT /user/profile` → Lambda includes it in Gemini prompt → AI generates posts in the user's preferred language.
 
-**Future (Phase 4):**
-- Pass `language` to `PUT /user/profile` → Lambda includes it in Gemini prompt → AI generates posts in the user's preferred language
-- `SintoniaUsers` DynamoDB table will store `language` field alongside `description` and `activeTags`
+### Legal / Terms Acceptance System
 
-**Adding a new language:** Add the code to `Language` type in `stores/preferences` → add a full block to `translations` in `src/lib/i18n.ts` → TypeScript lists every missing key as a compile error.
+On every authenticated session start, `app.tsx` calls `GET /legal/terms-status`. If `needsAcceptance: true`, `TermsAcceptanceModal` renders as a full-screen portal blocking the entire app:
 
-### Services
-
-**`src/services/amplify.ts`**
-```typescript
-import { Amplify } from 'aws-amplify';
-
-Amplify.configure({
-  Auth: {
-    Cognito: {
-      userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
-      userPoolClientId: import.meta.env.VITE_COGNITO_CLIENT_ID,
-      loginWith: {
-        email: true,
-      },
-    },
-  },
-});
+```
+GET /legal/terms-status → needsAcceptance: true
+        │
+        ▼  [TermsAcceptanceModal mounts — z-index 99999]
+Fetches GET /legal/terms + GET /legal/privacy (in parallel)
+Renders both documents in expandable accordions
+User reads, checks acceptance checkbox, clicks "Accept and continue"
+        │
+        ▼
+POST /legal/accept { termsVersion, privacyVersion }
+        │
+        ▼
+Backend writes termsAcceptedVersion/privacyAcceptedVersion to SintoniaUsers
+clearAcceptance() → modal unmounts → user proceeds normally
 ```
 
-**`src/services/api.ts`**
+From the **Legal tab** of ProfilePage, users can review both documents anytime via `LegalDocModal` (bottom-sheet, no blocking).
+
+### Error Handling (ApiErrorCode)
+
+All non-2xx backend responses return `{ code: ApiErrorCode, error: string, message: string }`. The frontend maps `code` → translated message via `t.errors`:
+
 ```typescript
-// HTTP client that automatically injects the Cognito JWT
-// into every request. Token refresh is handled by the Amplify SDK.
-import { fetchAuthSession } from 'aws-amplify/auth';
+.catch((err: unknown) => {
+  addToast({ type: 'error', message: getApiErrorMessage(err, t.errors) });
+})
+```
 
-const BASE_URL = import.meta.env.VITE_API_URL;
+`getApiErrorMessage` is exported from `src/services/api.ts`. `t.errors` is `Record<ApiErrorCode, string>` with translations for all 11 codes in both EN and PT-BR.
 
-async function getAuthHeaders(): Promise<HeadersInit> {
-  const session = await fetchAuthSession();
-  const token = session.tokens?.idToken?.toString();
-  if (!token) throw new Error('Unauthenticated');
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
-}
+### API Client (`src/services/api.ts`)
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers = await getAuthHeaders();
-  const response = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ message: response.statusText }));
-    throw new ApiError(response.status, err.message ?? 'Unknown error');
-  }
-
-  return response.json();
-}
-
+```typescript
 export const api = {
-  get: <T>(path: string) => request<T>('GET', path),
-  post: <T>(path: string, body: unknown) => request<T>('POST', path, body),
-  put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
-  delete: <T>(path: string) => request<T>('DELETE', path),
+  get:    async <T>(path: string): Promise<T>
+  post:   async <T>(path: string, body: unknown): Promise<T>
+  put:    async <T>(path: string, body: unknown): Promise<T>
+  delete: async <T>(path: string): Promise<T>
 };
 
-export class ApiError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
-  }
-}
+export function getApiErrorMessage(
+  err: unknown,
+  errors: Record<ApiErrorCode, string>,
+): string;
 ```
 
-### Types
-
-**`src/types/index.ts`**
-```typescript
-export interface Post {
-  id: string;
-  title: string;
-  summary: string;
-  content?: string;         // Only present after GET /post/:id (lazy load)
-  tags: string[];
-  gradient: [string, string];
-  createdAt: string;        // ISO 8601
-}
-
-export interface UserPreferences {
-  userId: string;
-  description: string | null;   // Free-text profile description
-  activeTags: string[];         // AI-extracted tags the user has enabled
-  availableTags: string[];      // Full list of possible tags (AVAILABLE_TAGS)
-}
-
-export interface UpdateProfileResponse {
-  description: string;
-  activeTags: string[];
-  updatedAt: string;
-}
-
-export interface FeedResponse {
-  posts: Post[];
-  cursor: string | null;
-  hasMore: boolean;
-}
-
-export interface GenerationResponse {
-  requestIds: string[];
-  status: 'PENDING';
-  message: string;
-}
-
-export const AVAILABLE_TAGS = [
-  'AWS', 'React', 'TypeScript', 'Node.js', 'Python',
-  'Docker', 'Kubernetes', 'Linux', 'DynamoDB', 'PostgreSQL',
-  'Redis', 'GraphQL', 'Rust', 'Go', 'CI/CD',
-  'Terraform', 'Serverless', 'Security', 'Performance', 'Architecture',
-] as const;
-
-export type Tag = typeof AVAILABLE_TAGS[number];
-```
+On non-2xx: parses `{ code, message }` from response body, encodes as `"API_ERROR::<CODE>::<message>"` in an `Error` object. `getApiErrorMessage` decodes and returns the translated string.
 
 ### Build Configuration
-
-**`vite.config.ts`**
-```typescript
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import path from 'path';
-
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
-  build: {
-    outDir: 'dist',
-    sourcemap: false,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          amplify: ['aws-amplify'],
-          markdown: ['react-markdown', 'rehype-highlight'],
-        },
-      },
-    },
-  },
-});
-```
 
 **`frontend/.env.example`**
 ```bash
@@ -876,42 +376,25 @@ VITE_COGNITO_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
 VITE_AWS_REGION=sa-east-1
 ```
 
-**`frontend/package.json`**
+**`frontend/package.json`** — key dependencies:
 ```json
 {
-  "name": "syntonia-frontend",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "lint": "eslint src --ext ts,tsx"
-  },
   "dependencies": {
-    "aws-amplify": "^6.0.0",
     "framer-motion": "^11.0.0",
     "highlight.js": "^11.9.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-markdown": "^9.0.0",
-    "react-router-dom": "^6.22.0",
+    "react-router-dom": "^6.28.0",
     "rehype-highlight": "^7.0.0",
-    "uuid": "^9.0.0",
-    "zustand": "^4.5.0"
-  },
-  "devDependencies": {
-    "@types/react": "^18.3.0",
-    "@types/react-dom": "^18.3.0",
-    "@types/uuid": "^9.0.0",
-    "@vitejs/plugin-react": "^4.3.0",
-    "@tailwindcss/typography": "^0.5.0",
-    "autoprefixer": "^10.4.0",
-    "eslint": "^8.57.0",
-    "postcss": "^8.4.0",
-    "tailwindcss": "^3.4.0",
-    "typescript": "^5.4.0",
-    "vite": "^5.2.0"
+    "remark-gfm": "^4.0.0",
+    "zustand": "^5.0.0",
+    "msw": "^2.0.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.0.0",
+    "lucide-react": "^0.469.0",
+    "@radix-ui/react-tooltip": "latest"
   }
 }
 ```
@@ -921,11 +404,11 @@ VITE_AWS_REGION=sa-east-1
 ```
 Amplify Hosting
 ├── Repository:    GitHub (monorepo)
-├── Branch: main   → production environment  (syntonia.app)
-├── Branch: dev    → staging environment     (dev.syntonia.app)
+├── Branch: main   → production (syntonia.app)
+├── Branch: dev    → staging (dev.syntonia.app)
 │
-├── App root:      frontend/           ← monorepo: points to subdirectory
-├── Build command: npm run build
+├── App root:      frontend/
+├── Build command: yarn build
 ├── Output dir:    dist/
 │
 ├── Environment Variables (per branch):
@@ -935,15 +418,10 @@ Amplify Hosting
 │   └── VITE_AWS_REGION
 │
 ├── Custom domain: syntonia.app
-│   ├── www.syntonia.app → redirect to syntonia.app
-│   └── dev.syntonia.app → staging
-│
-└── Rewrites (SPA routing):
-    └── </^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json)$)([^.]+$)/>
-        → /index.html (status 200)
+└── SPA rewrite: all non-asset paths → /index.html (200)
 ```
 
-**`frontend/amplify.yml`** — Build spec for monorepo
+**`frontend/amplify.yml`**
 ```yaml
 version: 1
 applications:
@@ -951,10 +429,10 @@ applications:
       phases:
         preBuild:
           commands:
-            - npm ci
+            - yarn install --frozen-lockfile
         build:
           commands:
-            - npm run build
+            - yarn build
       artifacts:
         baseDirectory: dist
         files:
@@ -1034,11 +512,14 @@ STAGE=dev
 | `savePost` | POST /post/{id}/save | 10s | Default | Sets `savedAt`, removes `ttl` — post persists forever |
 | `unsavePost` | DELETE /post/{id}/save | 10s | Default | Removes `savedAt`, restores `ttl = now + 30d` |
 | `getSavedPosts` | GET /posts/saved | 10s | Default | Returns saved posts via `userId-savedAt-index` GSI |
-| `getPreferences` | GET /user/preferences | 10s | Default | Returns user profile, description, and active tags |
-| `updatePreferences` | PUT /user/preferences | 10s | Default | Enables/disables individual active tags |
+| `getPreferences` | GET /user/preferences | 10s | Default | Returns user profile, description, active tags, theme, and language |
+| `updatePreferences` | PUT /user/preferences | 10s | Default | Patch endpoint — accepts any combination of `activeTags`, `theme`, `language` |
 | `updateProfile` | PUT /user/profile | 29s | Default | Saves description + calls Gemini to extract tags |
 | `health` | GET /health | 5s | Default | Public health check (no auth) |
 | `onUserSignup` | Cognito Post-Confirmation | 10s | Default | Creates user profile in DynamoDB after signup |
+| `getLegalTermsStatus` | GET /legal/terms-status | 5s | Default | Compares user's accepted versions with the latest active versions in `SintoniaLegal` |
+| `getLegalDocument` | GET /legal/terms, GET /legal/privacy | 5s | Default | Queries `SintoniaLegal` with `ScanIndexForward: false, Limit: 1` to return the active document |
+| `acceptLegalTerms` | POST /legal/accept | 5s | Default | Validates sent versions match active versions; writes `termsAcceptedVersion`, `privacyAcceptedVersion`, `termsAcceptedAt` to `SintoniaUsers` |
 
 ### Shared Modules Implementation
 
@@ -2119,6 +1600,11 @@ export const handler = async (event) => {
 | `email` | String | User's email address |
 | `description` | String | Free-text profile description — used by AI for tag extraction and content generation |
 | `activeTags` | List\<String\> | Tags extracted from description, filtered by user enable/disable |
+| `theme` | String | `"dark"` \| `"light"` — user's preferred visual theme. Defaults to `"dark"`. Synced from `PUT /user/preferences` when the user changes theme in Settings. |
+| `language` | String | `"en"` \| `"pt-BR"` — user's preferred UI language. Defaults to `"en"`. Synced from `PUT /user/preferences` when the user changes language in Settings. |
+| `termsAcceptedVersion` | String | Version string of the Terms of Use the user last accepted (e.g. `"1.1"`). Absent until the user completes first acceptance. |
+| `privacyAcceptedVersion` | String | Version string of the Privacy Policy last accepted. |
+| `termsAcceptedAt` | String | ISO 8601 — timestamp of the last terms acceptance via `POST /legal/accept`. |
 | `createdAt` | String | ISO 8601 |
 | `lastActiveAt` | String | ISO 8601 — updated on every PUT /user/profile or PUT /user/preferences |
 
@@ -2147,6 +1633,24 @@ export const handler = async (event) => {
 
 > **No GSI, no Scan** — the fixed-window strategy is a pure `UpdateItem` with atomic `ADD`.
 > A single DynamoDB write handles both the increment and the 429 check in one round-trip.
+
+#### 5.5 `SintoniaLegal` — Legal Documents (Terms of Use & Privacy Policy)
+
+| Attribute | DynamoDB Type | Description |
+|---|---|---|
+| `type` **(PK)** | String | `"terms"` or `"privacy"` |
+| `createdAt` **(SK)** | String | ISO 8601 — creation timestamp. Sort key enables natural ordering: `ScanIndexForward: false, Limit: 1` returns the current active version. |
+| `version` | String | Human-readable version label (e.g. `"1.0"`, `"1.1"`). Used by the frontend in `GET /user/preferences` response comparison and displayed in the UI. |
+| `content` | String | Full document content in Markdown. Served directly by `GET /legal/terms` and `GET /legal/privacy`. |
+| `updatedAt` | String | ISO 8601 — date shown to the user in `LegalDocModal`. |
+
+**Publishing a new version:** Insert a new item with `createdAt = now()` and the new `version` and `content`. No need to update or delete the previous row — the Lambda always queries with `ScanIndexForward: false, Limit: 1` to get the most recent. Old versions are retained for audit purposes.
+
+**`getLegalTermsStatus` logic:**
+1. Query `SintoniaLegal` for latest `terms` → get `version`
+2. Query `SintoniaLegal` for latest `privacy` → get `version`
+3. GetItem from `SintoniaUsers` → read `termsAcceptedVersion` and `privacyAcceptedVersion`
+4. `needsAcceptance = termsLatest !== termsAcceptedVersion || privacyLatest !== privacyAcceptedVersion`
 
 ### Billing Mode
 
@@ -2441,8 +1945,7 @@ the post buffer is about to run out (JIT logic).
     "req-uuid-2",
     "req-uuid-3"
   ],
-  "status": "PENDING",
-  "message": "3 post(s) being generated."
+  "status": "PENDING"
 }
 ```
 
@@ -2459,7 +1962,7 @@ the post buffer is about to run out (JIT logic).
 
 ### `GET /user/preferences` [AUTH]
 
-Returns the user's profile including description and active tags. If the profile does not exist, it is created automatically with default tags and the user experience is never interrupted. The frontend uses this response to sync the Zustand `userStore` on every login.
+Returns the user's profile including description, active tags, and persisted UI preferences (theme and language). If the profile does not exist, it is created automatically with defaults. The frontend uses this response to sync all Zustand stores on login.
 
 **Response 200:**
 ```json
@@ -2472,7 +1975,9 @@ Returns the user's profile including description and active tags. If the profile
     "Docker", "Kubernetes", "Linux", "DynamoDB", "PostgreSQL",
     "Redis", "GraphQL", "Rust", "Go", "CI/CD",
     "Terraform", "Serverless", "Security", "Performance", "Architecture"
-  ]
+  ],
+  "theme": "dark",
+  "language": "en"
 }
 ```
 
@@ -2520,25 +2025,24 @@ Saves the user's free-text description and synchronously calls Gemini to extract
 
 ### `PUT /user/preferences` [AUTH]
 
-Enables or disables individual tags from the user's AI-extracted tag set. Does **not** modify the description or trigger a re-extraction. Use `PUT /user/profile` to change the description and regenerate tags.
+Patch endpoint — updates any combination of `activeTags`, `theme`, and `language`. Only provided fields are written; omitted fields are left unchanged. Called from:
+- `TagManager` component (activeTags only)
+- `SettingsPanel` component (theme only, or language only)
 
-**Request body:**
+**Request body** (all fields optional — at least one required):
 ```json
-{
-  "activeTags": ["AWS", "TypeScript", "Kubernetes", "Docker"]
-}
+{ "activeTags": ["AWS", "TypeScript"] }
+{ "theme": "light" }
+{ "language": "pt-BR" }
+{ "activeTags": ["AWS"], "theme": "dark", "language": "en" }
 ```
 
 **Validations:**
-- `activeTags`: array with a minimum of 1 tag, max 20 — must be a subset of AI-extracted tags
+- `activeTags`: if provided, min 1 tag, max 20
+- `theme`: `"dark"` or `"light"`
+- `language`: `"en"` or `"pt-BR"`
 
-**Response 200:**
-```json
-{
-  "activeTags": ["AWS", "TypeScript", "Kubernetes", "Docker"],
-  "updatedAt": "2026-07-02T10:00:00Z"
-}
-```
+**Response 200:** `{}`
 
 **Possible errors:**
 
@@ -2573,10 +2077,7 @@ Saves a post — sets `savedAt` to now and removes the `ttl` attribute so the po
 
 Unsaves a post — removes `savedAt` and restores `ttl = now + 30 days`.
 
-**Response 200:**
-```json
-{ "message": "Post unsaved. TTL restored to 30 days." }
-```
+**Response 200:** `{}`
 
 **Possible errors:**
 
@@ -2624,6 +2125,133 @@ Returns all saved posts for the authenticated user, ordered by `savedAt` descend
 |---|---|
 | `401 Unauthorized` | Invalid token |
 | `500 Internal Server Error` | DynamoDB failure |
+
+---
+
+### `GET /legal/terms-status` [AUTH]
+
+Called on every authenticated session start. Determines whether the user must accept updated Terms of Use or Privacy Policy before continuing.
+
+**Response 200:**
+```json
+{
+  "needsAcceptance": true,
+  "termsVersion": "1.1",
+  "privacyVersion": "1.0"
+}
+```
+
+`needsAcceptance: false` when both accepted versions in `SintoniaUsers` match the latest active versions in `SintoniaLegal`.
+
+**Possible errors:**
+
+| Status | Code | When |
+|---|---|---|
+| `401 Unauthorized` | `UNAUTHENTICATED` | Invalid token |
+| `500 Internal Server Error` | `INTERNAL_ERROR` | DynamoDB failure |
+
+---
+
+### `GET /legal/terms` [AUTH]
+
+Returns the current active Terms of Use document as Markdown. Called by `TermsAcceptanceModal` (blocking modal at login) and `LegalDocModal` (Legal tab in Profile).
+
+**Response 200:**
+```json
+{
+  "type": "terms",
+  "version": "1.1",
+  "updatedAt": "2026-06-01T00:00:00Z",
+  "content": "## Terms of Use\n\n..."
+}
+```
+
+**Possible errors:**
+
+| Status | Code | When |
+|---|---|---|
+| `401 Unauthorized` | `UNAUTHENTICATED` | Invalid token |
+| `404 Not Found` | `LEGAL_DOCUMENT_NOT_FOUND` | No document found for this type |
+| `500 Internal Server Error` | `INTERNAL_ERROR` | DynamoDB failure |
+
+---
+
+### `GET /legal/privacy` [AUTH]
+
+Returns the current active Privacy Policy document. Same contract as `GET /legal/terms` with `"type": "privacy"`.
+
+**Response 200:**
+```json
+{
+  "type": "privacy",
+  "version": "1.0",
+  "updatedAt": "2026-06-01T00:00:00Z",
+  "content": "## Privacy Policy\n\n..."
+}
+```
+
+**Possible errors:** same as `GET /legal/terms`.
+
+---
+
+### `POST /legal/accept` [AUTH]
+
+Records the user's acceptance of a specific pair of document versions. After success, `GET /legal/terms-status` returns `needsAcceptance: false` for this user.
+
+**Request body:**
+```json
+{
+  "termsVersion": "1.1",
+  "privacyVersion": "1.0"
+}
+```
+
+**Validations:**
+- Both fields required
+- Versions must match the currently active versions in `SintoniaLegal` — rejects stale versions to prevent accepting an outdated document
+
+**Response 200:**
+```json
+{ "acceptedAt": "2026-07-03T12:00:00Z" }
+```
+
+**Possible errors:**
+
+| Status | Code | When |
+|---|---|---|
+| `400 Bad Request` | `TERMS_VERSION_MISMATCH` | Sent versions differ from current active versions |
+| `400 Bad Request` | `VALIDATION_ERROR` | Missing fields or malformed body |
+| `401 Unauthorized` | `UNAUTHENTICATED` | Invalid token |
+| `500 Internal Server Error` | `INTERNAL_ERROR` | DynamoDB failure |
+
+---
+
+### Error Response Format
+
+All non-2xx responses follow a standard format. The `code` is a machine-readable identifier the frontend maps to a translated message via `t.errors[code]`. The `message` is in English and intended for debugging only — never displayed to users.
+
+```json
+{
+  "code": "POST_NOT_FOUND",
+  "error": "Not Found",
+  "message": "The requested post does not exist or belongs to another user."
+}
+```
+
+### Error Code Catalog
+
+| Code | HTTP Status | When |
+|---|---|---|
+| `UNAUTHENTICATED` | 401 | Token absent, expired, or invalid |
+| `POST_NOT_FOUND` | 404 | Post does not exist or belongs to another user |
+| `POST_NOT_SAVED` | 404 | Attempting to unsave a post that is not saved |
+| `LEGAL_DOCUMENT_NOT_FOUND` | 404 | No active document found for the requested type |
+| `VALIDATION_ERROR` | 400 | Malformed body or invalid field values |
+| `TERMS_VERSION_MISMATCH` | 400 | Sent versions don't match current active versions |
+| `GENERATION_LIMIT_REACHED` | 429 | User already has 5 or more pending generations |
+| `RATE_LIMIT_EXCEEDED` | 429 | General API rate limit exceeded |
+| `AI_EXTRACTION_FAILED` | 500 | Gemini failed to extract tags from the description |
+| `INTERNAL_ERROR` | 500 | Uncategorised internal error |
 
 ---
 
