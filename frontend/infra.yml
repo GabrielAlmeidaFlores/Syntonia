@@ -1,0 +1,137 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Syntonia Frontend — AWS Amplify Hosting.
+  Provisions one Amplify App connected to GitHub with two branches:
+    - main        → PRODUCTION  (consumes backend prod stack outputs)
+    - development → DEVELOPMENT (consumes backend dev stack outputs)
+  Prerequisites: backend stacks for both stages must be deployed first.
+
+Parameters:
+
+  GitHubRepository:
+    Type: String
+    Description: >
+      Full HTTPS URL of the GitHub repository.
+      Example: https://github.com/your-user/syntonia
+
+  GitHubOAuthToken:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /syntonia/github-oauth-token
+    NoEcho: true
+    Description: >
+      GitHub personal access token stored in SSM Parameter Store as a SecureString.
+      Required scopes: repo, admin:repo_hook.
+      Create with: aws ssm put-parameter --name /syntonia/github-oauth-token
+                     --value ghp_... --type SecureString --region sa-east-1
+
+  AwsRegion:
+    Type: String
+    Default: sa-east-1
+    Description: AWS region injected as VITE_AWS_REGION into all branches.
+
+Resources:
+
+  # ── Amplify App ──────────────────────────────────────────────────────────────
+
+  AmplifyApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: syntonia-frontend
+      Repository: !Ref GitHubRepository
+      OauthToken: !Ref GitHubOAuthToken
+      Platform: WEB
+
+      BuildSpec: |
+        version: 1
+        applications:
+          - frontend:
+              phases:
+                preBuild:
+                  commands:
+                    - yarn install --frozen-lockfile
+                build:
+                  commands:
+                    - yarn build
+              artifacts:
+                baseDirectory: dist
+                files:
+                  - '**/*'
+              cache:
+                paths:
+                  - node_modules/**/*
+            appRoot: frontend
+
+      # VITE_AWS_REGION is the same across all branches — set at app level.
+      # Branch-specific variables (API URL, Cognito IDs) are set per branch below.
+      EnvironmentVariables:
+        - Name: VITE_AWS_REGION
+          Value: !Ref AwsRegion
+
+      # SPA redirect rule — required for React Router to work on direct URL access.
+      # Any path without a file extension (e.g. /feed/123, /profile) is served
+      # index.html with a 200 so the client-side router handles navigation.
+      CustomRules:
+        - Source: >-
+            </^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json)$)([^.]+$)/>
+          Target: /index.html
+          Status: '200'
+
+  # ── Production branch (main) ─────────────────────────────────────────────────
+
+  AmplifyBranchProd:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt AmplifyApp.AppId
+      BranchName: main
+      Stage: PRODUCTION
+      EnableAutoBuild: true
+      Description: Production — auto-deploys on every push to main
+      EnvironmentVariables:
+        - Name: VITE_API_URL
+          Value: !ImportValue syntonia-api-url-prod
+        - Name: VITE_COGNITO_USER_POOL_ID
+          Value: !ImportValue syntonia-user-pool-id-prod
+        - Name: VITE_COGNITO_CLIENT_ID
+          Value: !ImportValue syntonia-user-pool-client-id-prod
+
+  # ── Homologação branch (development) ─────────────────────────────────────────
+
+  AmplifyBranchHml:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt AmplifyApp.AppId
+      BranchName: development
+      Stage: DEVELOPMENT
+      EnableAutoBuild: true
+      Description: Homologacao — auto-deploys on every push to development
+      EnvironmentVariables:
+        - Name: VITE_API_URL
+          Value: !ImportValue syntonia-api-url-dev
+        - Name: VITE_COGNITO_USER_POOL_ID
+          Value: !ImportValue syntonia-user-pool-id-dev
+        - Name: VITE_COGNITO_CLIENT_ID
+          Value: !ImportValue syntonia-user-pool-client-id-dev
+
+Outputs:
+
+  AmplifyAppId:
+    Description: Amplify App ID — used to trigger manual deployments via AWS CLI
+    Value: !GetAtt AmplifyApp.AppId
+    Export:
+      Name: syntonia-amplify-app-id
+
+  AmplifyDefaultDomain:
+    Description: Amplify default domain (base for all branch URLs)
+    Value: !GetAtt AmplifyApp.DefaultDomain
+
+  ProdUrl:
+    Description: Production URL — active after first push to main
+    Value: !Sub 'https://main.${AmplifyApp.DefaultDomain}'
+    Export:
+      Name: syntonia-frontend-prod-url
+
+  HmlUrl:
+    Description: Homologacao URL — active after first push to development
+    Value: !Sub 'https://development.${AmplifyApp.DefaultDomain}'
+    Export:
+      Name: syntonia-frontend-hml-url
