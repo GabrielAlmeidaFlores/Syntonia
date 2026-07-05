@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { CORS_ORIGINS } from '../core/env.js';
-import type { ApiErrorCode } from '../core/types.js';
+import type { ApiErrorCode } from '../core/types/index.js';
 
 /**
  * Builds CORS response headers based on the `CORS_ORIGINS` environment variable.

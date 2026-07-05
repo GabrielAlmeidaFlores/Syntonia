@@ -3,7 +3,7 @@ import type { SQSEvent, Context } from 'aws-lambda';
 import { putPost, updateRequestStatus, getRecentPostsByTags } from '../shared/db/index.js';
 import { generatePost, GeminiError } from '../shared/ai/gemini.js';
 import { createLogger } from '../shared/core/logger.js';
-import type { GenerationMessage, PostItem, Tag } from '../shared/core/types.js';
+import type { GenerationMessage, PostItem, Tag } from '../shared/core/types/index.js';
 
 const MAX_RETRIES = 3;
 

@@ -1,4 +1,4 @@
-import type { Tag } from './types.js';
+import type { Tag } from './types/index.js';
 
 /**
  * Default content tags applied to every new user profile at signup.

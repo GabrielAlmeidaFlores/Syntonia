@@ -4,7 +4,7 @@ import { getUser, saveUser } from '../shared/db/index.js';
 import { createLogger } from '../shared/core/logger.js';
 import { ok, unauthorized, serverError } from '../shared/http/response.js';
 import { DEFAULT_TAGS } from '../shared/core/default-tags.js';
-import type { UserRecord } from '../shared/core/types.js';
+import type { UserRecord } from '../shared/core/types/index.js';
 
 /**
  * GET /user/preferences

@@ -7,7 +7,7 @@ import { sendGenerationRequest } from '../shared/queue/sqs.js';
 import { checkRateLimit, RateLimitError } from '../shared/http/rateLimit.js';
 import { accepted, badRequest, unauthorized, tooManyRequests, serverError } from '../shared/http/response.js';
 import { validate, feedRequestSchema, ValidationError } from '../shared/http/validators.js';
-import type { RequestItem } from '../shared/core/types.js';
+import type { RequestItem } from '../shared/core/types/index.js';
 
 const MAX_PENDING_PER_USER = 5;
 const AI_RATE_LIMIT = { max: 10, windowSeconds: 3600 };

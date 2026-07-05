@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_API_KEY } from '../core/env.js';
-import type { GeneratedPost, PostSummaryWithLike, Tag } from '../core/types.js';
+import type { GeneratedPost, PostSummaryWithLike, Tag } from '../core/types/index.js';
 
 const PRIMARY_MODEL = 'gemini-1.5-flash';
 const FALLBACK_MODEL = 'gemini-1.5-pro';

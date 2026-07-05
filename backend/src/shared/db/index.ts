@@ -9,7 +9,7 @@ import {
   DeleteCommand,
 } from '@aws-sdk/lib-dynamodb';
 
-import type { LegalDocumentItem, PostItem, PostSummaryWithLike, RequestItem, Tag, UserRecord } from '../core/types.js';
+import type { LegalDocumentItem, PostItem, PostSummaryWithLike, RequestItem, Tag, UserRecord } from '../core/types/index.js';
 import { AWS_REGION } from '../core/env.js';
 import { Tables } from '../core/tables.js';
 

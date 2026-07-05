@@ -1,6 +1,6 @@
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { AWS_REGION, GENERATION_QUEUE_URL } from '../core/env.js';
-import type { GenerationMessage } from '../core/types.js';
+import type { GenerationMessage } from '../core/types/index.js';
 
 const client = new SQSClient({ region: AWS_REGION });
 
