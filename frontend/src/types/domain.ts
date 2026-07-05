@@ -1,26 +1,10 @@
 import type { Language, Theme } from "@/stores/preferences";
 
-export type Tag =
-  | "AWS"
-  | "React"
-  | "TypeScript"
-  | "Node.js"
-  | "Python"
-  | "Docker"
-  | "Kubernetes"
-  | "Linux"
-  | "DynamoDB"
-  | "PostgreSQL"
-  | "Redis"
-  | "GraphQL"
-  | "Rust"
-  | "Go"
-  | "CI/CD"
-  | "Terraform"
-  | "Serverless"
-  | "Security"
-  | "Performance"
-  | "Architecture";
+/**
+ * Content tag — free-form string extracted by the AI from the user's
+ * profile description. Any value is valid; no predefined allow-list.
+ */
+export type Tag = string;
 
 /**
  * Machine-readable error codes returned by the backend on all non-2xx responses.
@@ -30,6 +14,7 @@ export type ApiErrorCode =
   | "UNAUTHENTICATED"
   | "POST_NOT_FOUND"
   | "POST_NOT_SAVED"
+  | "POST_NOT_LIKED"
   | "LEGAL_DOCUMENT_NOT_FOUND"
   | "VALIDATION_ERROR"
   | "TERMS_VERSION_MISMATCH"
@@ -51,6 +36,8 @@ export interface Post {
   readonly createdAt: string;
   /** ISO 8601 — present only when the user has saved this post. */
   readonly savedAt?: string;
+  /** ISO 8601 — present only when the user has liked this post. */
+  readonly likedAt?: string;
 }
 
 /** Paginated response from GET /posts/saved. */
@@ -67,6 +54,14 @@ export interface SavePostResponse {
 
 /** Response from DELETE /post/:id/save. */
 export type UnsavePostResponse = Record<string, never>;
+
+/** Response from POST /post/:id/like. */
+export interface LikePostResponse {
+  readonly likedAt: string;
+}
+
+/** Response from DELETE /post/:id/like. */
+export type UnlikePostResponse = Record<string, never>;
 
 /** Authenticated user profile stored in DynamoDB and synced to the Zustand store. */
 export interface UserProfile {
@@ -94,7 +89,6 @@ export interface UserPreferences {
   readonly userId: string;
   readonly description: string | null;
   readonly activeTags: Tag[];
-  readonly availableTags: Tag[];
   readonly theme: Theme;
   readonly language: Language;
 }

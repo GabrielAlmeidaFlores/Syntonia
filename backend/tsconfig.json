@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    // ── Target & Module ──────────────────────────────────────────────
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    // ── Strict core (enables: noImplicitAny, strictNullChecks,
+    //    strictFunctionTypes, strictBindCallApply, strictPropertyInitialization,
+    //    noImplicitThis, alwaysStrict, useUnknownInCatchVariables) ────
+    "strict": true,
+    "useUnknownInCatchVariables": true,
+
+    // ── Additional strictness ────────────────────────────────────────
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "exactOptionalPropertyTypes": true,
+
+    // ── Module hygiene ───────────────────────────────────────────────
+    "verbatimModuleSyntax": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+
+    // ── Explicit safety disables ─────────────────────────────────────
+    "allowJs": false,
+    "checkJs": false,
+    "suppressExcessPropertyErrors": false,
+    "suppressImplicitAnyIndexErrors": false,
+
+    // ── Output ───────────────────────────────────────────────────────
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["src", "scripts"]
+}

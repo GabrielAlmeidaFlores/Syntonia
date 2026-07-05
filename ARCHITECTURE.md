@@ -445,20 +445,22 @@ applications:
 
 ---
 
-## 4. Backend — AWS Lambda + Serverless Framework
+## 4. Backend — AWS Lambda + Serverless Framework (TypeScript)
 
 ### Full Stack
 
 ```
 Node.js 22.x (AWS Lambda runtime)
-├── Serverless Framework v4
-├── serverless-offline            — Simulates API Gateway + Lambda locally
-├── @google/generative-ai         — Official Gemini SDK
-├── @aws-sdk/client-dynamodb      — AWS SDK v3
-├── @aws-sdk/lib-dynamodb         — DocumentClient (simplifies operations)
-├── @aws-sdk/client-sqs           — SQS client for sending generation requests
-├── zod                           — Input schema validation
-└── uuid                          — Unique ID generation
+├── TypeScript 5.x               — strict mode, zero any, full type safety
+├── Serverless Framework v4      — IaC + deployment
+├── serverless-esbuild           — TypeScript compilation + fast bundling for Lambda
+├── serverless-offline           — Simulates API Gateway + Lambda locally (no AWS needed)
+├── @google/generative-ai        — Official Gemini SDK
+├── @aws-sdk/client-dynamodb     — AWS SDK v3
+├── @aws-sdk/lib-dynamodb        — DocumentClient (simplifies DynamoDB operations)
+├── @aws-sdk/client-sqs          — SQS client for sending generation requests
+├── zod                          — Input schema validation
+└── uuid                         — Unique ID generation
 ```
 
 **`backend/package.json`**
@@ -469,8 +471,10 @@ Node.js 22.x (AWS Lambda runtime)
   "private": true,
   "scripts": {
     "dev": "serverless offline --stage dev",
+    "build": "tsc --noEmit",
     "deploy:dev": "serverless deploy --stage dev",
     "deploy:prod": "serverless deploy --stage prod",
+    "seed:legal": "tsx scripts/seed-legal.ts",
     "logs:worker": "serverless logs -f workerInternal --tail"
   },
   "dependencies": {
@@ -482,8 +486,15 @@ Node.js 22.x (AWS Lambda runtime)
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.0",
+    "@types/node": "^22.0.0",
+    "@types/uuid": "^9.0.0",
+    "esbuild": "^0.23.0",
     "serverless": "^4.0.0",
-    "serverless-offline": "^13.0.0"
+    "serverless-esbuild": "^1.50.0",
+    "serverless-offline": "^13.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0"
   }
 }
 ```
@@ -497,6 +508,7 @@ FEED_TABLE=SintoniaFeed-dev
 REQUESTS_TABLE=SintoniaRequests-dev
 USERS_TABLE=SintoniaUsers-dev
 RATE_LIMIT_TABLE=SintoniaRateLimit-dev
+LEGAL_TABLE=SintoniaLegal-dev
 GENERATION_QUEUE_URL=https://sqs.sa-east-1.amazonaws.com/123456789/syntonia-generation-dev
 STAGE=dev
 ```
@@ -523,21 +535,355 @@ STAGE=dev
 
 ### Shared Modules Implementation
 
-**`src/shared/db.js`**
-```javascript
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand,
-         UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+**`src/shared/types.ts`** — shared type definitions
+```typescript
+export type ApiErrorCode =
+  | 'UNAUTHENTICATED'
+  | 'POST_NOT_FOUND'
+  | 'POST_NOT_SAVED'
+  | 'LEGAL_DOCUMENT_NOT_FOUND'
+  | 'VALIDATION_ERROR'
+  | 'TERMS_VERSION_MISMATCH'
+  | 'GENERATION_LIMIT_REACHED'
+  | 'RATE_LIMIT_EXCEEDED'
+  | 'AI_EXTRACTION_FAILED'
+  | 'INTERNAL_ERROR';
 
-const client = new DynamoDBClient({ region: process.env.AWS_REGION ?? 'sa-east-1' });
-export const db = DynamoDBDocumentClient.from(client);
+export type Tag = 'AWS' | 'React' | 'TypeScript' | 'Node.js' | 'Python'
+  | 'Docker' | 'Kubernetes' | 'Linux' | 'DynamoDB' | 'PostgreSQL'
+  | 'Redis' | 'GraphQL' | 'Rust' | 'Go' | 'CI/CD'
+  | 'Terraform' | 'Serverless' | 'Security' | 'Performance' | 'Architecture';
+
+export type Theme = 'dark' | 'light';
+export type Language = 'en' | 'pt-BR';
+
+export interface Post {
+  id: string;
+  userId: string;
+  title: string;
+  summary: string;
+  content: string;
+  tags: Tag[];
+  gradient: [string, string];
+  createdAt: string;
+  status: 'READY';
+  ttl?: number;
+  savedAt?: string;
+}
+
+export interface UserRecord {
+  userId: string;
+  email: string;
+  description?: string;
+  activeTags: Tag[];
+  theme?: Theme;
+  language?: Language;
+  termsAcceptedVersion?: string;
+  privacyAcceptedVersion?: string;
+  termsAcceptedAt?: string;
+  createdAt: string;
+  lastActiveAt: string;
+}
+
+export interface LegalDocument {
+  type: 'terms' | 'privacy';
+  version: string;
+  updatedAt: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface APIGatewayEvent {
+  body: string | null;
+  pathParameters: Record<string, string> | null;
+  queryStringParameters: Record<string, string> | null;
+  requestContext: {
+    authorizer?: {
+      claims?: {
+        sub?: string;
+        email?: string;
+      };
+    };
+  };
+  headers: Record<string, string>;
+}
+```
+
+**`src/shared/constants.ts`**
+```typescript
+export const AVAILABLE_TAGS = [
+  'AWS', 'React', 'TypeScript', 'Node.js', 'Python',
+  'Docker', 'Kubernetes', 'Linux', 'DynamoDB', 'PostgreSQL',
+  'Redis', 'GraphQL', 'Rust', 'Go', 'CI/CD',
+  'Terraform', 'Serverless', 'Security', 'Performance', 'Architecture',
+] as const;
+
+export const DEFAULT_TAGS = ['AWS', 'TypeScript', 'React'] as const;
 
 export const Tables = {
-  FEED: process.env.FEED_TABLE,
-  REQUESTS: process.env.REQUESTS_TABLE,
-  USERS: process.env.USERS_TABLE,
-  RATE_LIMIT: process.env.RATE_LIMIT_TABLE,
+  FEED: process.env['FEED_TABLE'] ?? 'SintoniaFeed-dev',
+  REQUESTS: process.env['REQUESTS_TABLE'] ?? 'SintoniaRequests-dev',
+  USERS: process.env['USERS_TABLE'] ?? 'SintoniaUsers-dev',
+  RATE_LIMIT: process.env['RATE_LIMIT_TABLE'] ?? 'SintoniaRateLimit-dev',
+  LEGAL: process.env['LEGAL_TABLE'] ?? 'SintoniaLegal-dev',
+} as const;
+```
+
+**`src/shared/auth.ts`**
+```typescript
+import type { APIGatewayEvent } from './types.js';
+
+export class AuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuthError';
+  }
+}
+
+export function getUserId(event: APIGatewayEvent): string {
+  const sub = event.requestContext?.authorizer?.claims?.sub;
+  if (!sub) throw new AuthError('Invalid or missing token');
+  return sub;
+}
+
+export function getUserEmail(event: APIGatewayEvent): string {
+  return event.requestContext?.authorizer?.claims?.email ?? '';
+}
+```
+
+**`src/shared/response.ts`** — all error responses include `{ code, error, message }`
+```typescript
+import type { APIGatewayEvent, ApiErrorCode } from './types.js';
+
+const ALLOWED_ORIGINS = [
+  'https://syntonia.app',
+  'https://www.syntonia.app',
+  'https://dev.syntonia.app',
+  'http://localhost:5173',
+];
+
+function getCorsHeaders(event: APIGatewayEvent): Record<string, string> {
+  const origin = event.headers['origin'] ?? event.headers['Origin'] ?? '';
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : (ALLOWED_ORIGINS[0] ?? '');
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+  };
+}
+
+function build(statusCode: number, body: unknown, event: APIGatewayEvent) {
+  return {
+    statusCode,
+    headers: { 'Content-Type': 'application/json', ...getCorsHeaders(event) },
+    body: JSON.stringify(body),
+  };
+}
+
+export const ok = (event: APIGatewayEvent, body: unknown) => build(200, body, event);
+export const created = (event: APIGatewayEvent, body: unknown) => build(201, body, event);
+export const accepted = (event: APIGatewayEvent, body: unknown) => build(202, body, event);
+
+export const unauthorized = (event: APIGatewayEvent) =>
+  build(401, { code: 'UNAUTHENTICATED', error: 'Unauthorized', message: 'Invalid or missing token' }, event);
+
+export const badRequest = (event: APIGatewayEvent, message: string, code: ApiErrorCode = 'VALIDATION_ERROR') =>
+  build(400, { code, error: 'Bad Request', message }, event);
+
+export const notFound = (event: APIGatewayEvent, message: string, code: ApiErrorCode = 'POST_NOT_FOUND') =>
+  build(404, { code, error: 'Not Found', message }, event);
+
+export const tooManyRequests = (event: APIGatewayEvent, message: string, code: ApiErrorCode = 'RATE_LIMIT_EXCEEDED') =>
+  build(429, { code, error: 'Too Many Requests', message }, event);
+
+export const serverError = (event: APIGatewayEvent, err: unknown) => {
+  console.error('[SERVER ERROR]', err);
+  return build(500, { code: 'INTERNAL_ERROR', error: 'Internal Server Error', message: 'Internal error. Please try again.' }, event);
 };
+```
+
+**`src/shared/validators.ts`**
+```typescript
+import { z } from 'zod';
+
+export class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ValidationError';
+  }
+}
+
+export const feedRequestSchema = z.object({
+  tags: z.array(z.string().min(1)).min(1).max(20),
+  quantity: z.number().int().min(1).max(5).default(3),
+});
+
+export const updatePreferencesSchema = z.object({
+  activeTags: z.array(z.string().min(1)).min(1).max(20).optional(),
+  theme: z.enum(['dark', 'light']).optional(),
+  language: z.enum(['en', 'pt-BR']).optional(),
+}).refine(
+  (d) => d.activeTags !== undefined || d.theme !== undefined || d.language !== undefined,
+  { message: 'At least one field (activeTags, theme, language) must be provided' },
+);
+
+export const updateProfileSchema = z.object({
+  description: z.string().min(20).max(500),
+});
+
+export const acceptLegalTermsSchema = z.object({
+  termsVersion: z.string().min(1),
+  privacyVersion: z.string().min(1),
+});
+
+export function validate<T>(schema: z.ZodSchema<T>, data: unknown): T {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    const message = result.error.errors.map((e) => e.message).join('; ');
+    throw new ValidationError(message);
+  }
+  return result.data;
+}
+```
+
+**`src/shared/db.ts`** — all DynamoDB operations (key sections shown)
+```typescript
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { Tables } from './constants.js';
+import type { Post, UserRecord, LegalDocument } from './types.js';
+
+const client = new DynamoDBClient({ region: process.env['AWS_REGION'] ?? 'sa-east-1' });
+export const db = DynamoDBDocumentClient.from(client);
+
+// ── Feed ──────────────────────────────────────────────────────────────
+
+export const getFeedByUser = async (userId: string, limit = 5, cursor: string | null = null) => {
+  const params: Parameters<typeof db.send>[0] extends { input: infer I } ? I : never = {
+    TableName: Tables.FEED,
+    IndexName: 'userId-createdAt-index',
+    KeyConditionExpression: 'userId = :uid',
+    ExpressionAttributeValues: { ':uid': userId },
+    ScanIndexForward: false,
+    Limit: limit,
+  } as Parameters<typeof QueryCommand>[0];
+  if (cursor !== null) {
+    (params as Record<string, unknown>)['ExclusiveStartKey'] =
+      JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8'));
+  }
+  const result = await db.send(new QueryCommand(params as Parameters<typeof QueryCommand>[0]));
+  const nextCursor = result.LastEvaluatedKey
+    ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64')
+    : null;
+  return { items: (result.Items ?? []) as Post[], cursor: nextCursor };
+};
+
+// ── Users ─────────────────────────────────────────────────────────────
+
+export const getUser = async (userId: string): Promise<UserRecord | null> => {
+  const result = await db.send(new GetCommand({ TableName: Tables.USERS, Key: { userId } }));
+  return (result.Item as UserRecord) ?? null;
+};
+
+export const saveUser = async (user: UserRecord) =>
+  db.send(new PutCommand({ TableName: Tables.USERS, Item: user }));
+
+export const updateUserProfile = async (userId: string, description: string, activeTags: string[]) =>
+  db.send(new UpdateCommand({
+    TableName: Tables.USERS,
+    Key: { userId },
+    UpdateExpression: 'SET #desc = :d, activeTags = :t, lastActiveAt = :ts',
+    ExpressionAttributeNames: { '#desc': 'description' },
+    ExpressionAttributeValues: { ':d': description, ':t': activeTags, ':ts': new Date().toISOString() },
+  }));
+
+export const updateUserPreferences = async (
+  userId: string,
+  patch: { activeTags?: string[]; theme?: string; language?: string },
+) => {
+  const sets: string[] = ['lastActiveAt = :ts'];
+  const names: Record<string, string> = {};
+  const values: Record<string, unknown> = { ':ts': new Date().toISOString() };
+
+  if (patch.activeTags !== undefined) { sets.push('activeTags = :at'); values[':at'] = patch.activeTags; }
+  if (patch.theme !== undefined) { sets.push('#th = :th'); names['#th'] = 'theme'; values[':th'] = patch.theme; }
+  if (patch.language !== undefined) { sets.push('#la = :la'); names['#la'] = 'language'; values[':la'] = patch.language; }
+
+  return db.send(new UpdateCommand({
+    TableName: Tables.USERS,
+    Key: { userId },
+    UpdateExpression: `SET ${sets.join(', ')}`,
+    ...(Object.keys(names).length > 0 && { ExpressionAttributeNames: names }),
+    ExpressionAttributeValues: values,
+  }));
+};
+
+export const acceptUserTerms = async (userId: string, termsVersion: string, privacyVersion: string) =>
+  db.send(new UpdateCommand({
+    TableName: Tables.USERS,
+    Key: { userId },
+    UpdateExpression: 'SET termsAcceptedVersion = :tv, privacyAcceptedVersion = :pv, termsAcceptedAt = :ta',
+    ExpressionAttributeValues: {
+      ':tv': termsVersion,
+      ':pv': privacyVersion,
+      ':ta': new Date().toISOString(),
+    },
+  }));
+
+// ── Legal Documents ────────────────────────────────────────────────────
+
+export const getLatestLegalDocument = async (type: 'terms' | 'privacy'): Promise<LegalDocument | null> => {
+  const result = await db.send(new QueryCommand({
+    TableName: Tables.LEGAL,
+    KeyConditionExpression: '#t = :t',
+    ExpressionAttributeNames: { '#t': 'type' },
+    ExpressionAttributeValues: { ':t': type },
+    ScanIndexForward: false,
+    Limit: 1,
+  }));
+  return ((result.Items ?? [])[0] as LegalDocument) ?? null;
+};
+
+export const putLegalDocument = async (doc: LegalDocument) =>
+  db.send(new PutCommand({ TableName: Tables.LEGAL, Item: doc }));
+
+// ── Deduplication context ─────────────────────────────────────────────
+
+/**
+ * Returns the titles and summaries of the last `limit` posts for a user
+ * that match any of the provided tags. Used by workerInternal to build the
+ * deduplication context for the Gemini prompt.
+ *
+ * Only `id`, `title`, and `summary` are projected — content is not needed
+ * and keeping the payload small is important since up to 30 posts are fetched.
+ */
+export const getRecentPostsByTags = async (
+  userId: string,
+  tags: string[],
+  limit = 30,
+): Promise<Array<{ title: string; summary: string }>> => {
+  const result = await db.send(new QueryCommand({
+    TableName: Tables.FEED,
+    IndexName: 'userId-createdAt-index',
+    KeyConditionExpression: 'userId = :uid',
+    FilterExpression: tags.map((_, i) => `contains(tags, :tag${String(i)})`).join(' OR '),
+    ExpressionAttributeValues: {
+      ':uid': userId,
+      ...Object.fromEntries(tags.map((tag, i) => [`:tag${String(i)}`, tag])),
+    },
+    ProjectionExpression: 'title, summary',
+    ScanIndexForward: false,
+    Limit: limit * 3, // over-fetch to account for FilterExpression client-side filtering
+  }));
+
+  return ((result.Items ?? []) as Array<{ title: string; summary: string }>).slice(0, limit);
+};
+
+// (remaining functions: savePost, markPostSaved, markPostUnsaved, getSavedByUser,
+//  saveRequest, updateRequestStatus, countPendingRequests, getPostById — same logic
+//  as documented, fully typed with proper TypeScript signatures)
+```
 
 // ── Feed ──────────────────────────────────────────────────────────────
 
@@ -695,337 +1041,164 @@ export const updateUserProfile = async (userId, description, activeTags) => {
 };
 ```
 
-**`src/shared/gemini.js`**
-```javascript
+**`src/shared/gemini.ts`**
+```typescript
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AVAILABLE_TAGS } from './constants.js';
+import type { Tag } from './types.js';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+export class GeminiError extends Error {
+  constructor(message: string) { super(message); this.name = 'GeminiError'; }
+}
+
+interface GeneratedPost {
+  title: string;
+  summary: string;
+  content: string;
+  tags: Tag[];
+  gradient: [string, string];
+}
 
 const PRIMARY_MODEL = 'gemini-1.5-flash';
 const FALLBACK_MODEL = 'gemini-1.5-pro';
 
-// ── Post generation ───────────────────────────────────────────────────
-
-export const generatePost = async ({ tags, description = null }) => {
-  let raw;
-
-  // Try with the primary model first
-  try {
-    raw = await callGemini(PRIMARY_MODEL, buildPrompt(tags, description));
-  } catch (primaryErr) {
-    console.warn('Primary model failed, trying fallback:', primaryErr.message);
-    raw = await callGemini(FALLBACK_MODEL, buildPrompt(tags, description));
+export const generatePost = async (
+  { tags, description, recentPosts }: {
+    tags: string[];
+    description: string | null;
+    recentPosts: Array<{ title: string; summary: string }>;
   }
-
-  return parseGeminiResponse(raw);
+): Promise<GeneratedPost> => {
+  const prompt = buildPostPrompt(tags, description, recentPosts);
+  let raw: string;
+  try {
+    raw = await callGemini(PRIMARY_MODEL, prompt);
+  } catch {
+    raw = await callGemini(FALLBACK_MODEL, prompt);
+  }
+  return parseGeminiResponse(raw) as GeneratedPost;
 };
 
-const buildPrompt = (tags, description = null) => `
-You are generating a technical article for a developer.
+export const extractTagsFromDescription = async (description: string): Promise<Tag[]> => {
+  const prompt = buildTagExtractionPrompt(description);
+  let raw: string;
+  try {
+    raw = await callGemini(PRIMARY_MODEL, prompt);
+  } catch {
+    raw = await callGemini(FALLBACK_MODEL, prompt);
+  }
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const extracted: unknown = JSON.parse(cleaned);
+  if (!Array.isArray(extracted)) throw new GeminiError('Expected a JSON array of tags');
+  const validTags = (extracted as unknown[])
+    .filter((t): t is Tag => typeof t === 'string' && (AVAILABLE_TAGS as readonly string[]).includes(t));
+  if (validTags.length === 0) throw new GeminiError('No valid tags extracted');
+  return validTags;
+};
+
+async function callGemini(modelName: string, prompt: string): Promise<string> {
+  const apiKey = process.env['GEMINI_API_KEY'];
+  if (!apiKey) throw new GeminiError('GEMINI_API_KEY not configured');
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: modelName });
+  const result = await model.generateContent(prompt);
+  return result.response.text();
+}
+
+function parseGeminiResponse(raw: string): unknown {
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+  for (const field of ['title', 'summary', 'content', 'tags', 'gradient']) {
+    if (!parsed[field]) throw new GeminiError(`Missing field: ${field}`);
+  }
+  if (!Array.isArray(parsed['gradient']) || parsed['gradient'].length !== 2) {
+    throw new GeminiError('gradient must be a 2-element hex array');
+  }
+  return parsed;
+}
+
+function buildPostPrompt(
+  tags: string[],
+  description: string | null,
+  recentPosts: Array<{ title: string; summary: string }>,
+): string {
+  const recentContext = recentPosts.length > 0
+    ? `\nRecent posts already generated for this user on these tags (DO NOT repeat these topics or close variations):\n${recentPosts.map((p, i) => `${String(i + 1)}. "${p.title}" — ${p.summary}`).join('\n')}\n`
+    : '';
+
+  return `You are generating a technical article for a developer.
 ${description ? `Developer profile: "${description}"\n` : ''}
 Active areas of interest: ${tags.join(', ')}.
-
+${recentContext}
 Generate a UNIQUE, dense, and original technical article about a specific and advanced subtopic
-within these areas of interest.
+within these areas of interest. The article MUST be substantially different from any topic listed above.
 
-Respond EXCLUSIVELY with a valid JSON object (no markdown, no explanations outside the JSON):
+Respond EXCLUSIVELY with a valid JSON object:
 
 {
   "title": "Precise and technical title (max 60 characters)",
-  "summary": "One sentence explaining the practical value of the article (max 120 characters)",
-  "content": "## Title\\n\\nFull content in Markdown with at least 600 words, including real and functional code blocks.",
+  "summary": "One sentence practical value (max 120 characters)",
+  "content": "## Title\\n\\nFull Markdown, at least 600 words, with real code blocks.",
   "tags": ["tag1", "tag2"],
   "gradient": ["#hexcolor1", "#hexcolor2"]
 }
 
-Mandatory rules:
-1. Content must have at least 600 words
-2. Include at least one real, functional, commented code block
-3. Avoid introductory topics — assume the reader is already a professional
-4. The gradient must be coherent with the theme (e.g.: AWS = orange/yellow, Docker = blue, etc.)
-5. Do not include any text before or after the JSON
-`;
+Rules: 600+ words, real functional code, expert-level content, gradient coherent with theme.`;
+}
 
-// ── Tag extraction from description ──────────────────────────────────
-
-/**
- * Uses Gemini to extract relevant tags from the user's profile description.
- * Only returns tags from AVAILABLE_TAGS — guarantees compatibility with the
- * generation prompt and DynamoDB storage.
- *
- * @param {string} description - User's free-text profile description
- * @returns {Promise<string[]>} Array of matched tags from AVAILABLE_TAGS
- */
-export const extractTagsFromDescription = async (description) => {
-  let raw;
-
-  try {
-    raw = await callGemini(PRIMARY_MODEL, buildTagExtractionPrompt(description));
-  } catch (primaryErr) {
-    console.warn('Primary model failed for tag extraction, trying fallback:', primaryErr.message);
-    raw = await callGemini(FALLBACK_MODEL, buildTagExtractionPrompt(description));
-  }
-
-  // Parse and validate extracted tags
-  const cleaned = raw
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
-
-  const extracted = JSON.parse(cleaned);
-
-  if (!Array.isArray(extracted)) throw new Error('Expected a JSON array of tags');
-
-  // Filter to only valid AVAILABLE_TAGS — prevents hallucinated or invalid tags
-  const validTags = extracted.filter((t) => AVAILABLE_TAGS.includes(t));
-
-  if (validTags.length === 0) {
-    throw new Error('No valid tags could be extracted from the description');
-  }
-
-  return validTags;
-};
-
-const buildTagExtractionPrompt = (description) => `
-Given this developer profile description:
+function buildTagExtractionPrompt(description: string): string {
+  return `Given this developer profile description:
 "${description}"
 
-From the following list of available tags, extract the 5 to 10 most relevant ones
-that match the developer's background and learning interests:
-
-Available tags: ${AVAILABLE_TAGS.join(', ')}
+From the list below, extract the 5–10 most relevant tags:
+${AVAILABLE_TAGS.join(', ')}
 
 Rules:
-1. Only return tags from the provided list — do not invent new ones
-2. Return between 5 and 10 tags
-3. Order by relevance (most relevant first)
-4. Respond ONLY with a valid JSON array of strings
+1. Only tags from the list above
+2. 5–10 tags ordered by relevance
+3. Respond ONLY with a JSON string array
 
-Example response: ["AWS", "TypeScript", "Node.js", "Performance", "Serverless"]
-`;
-
-// ── Shared utilities ──────────────────────────────────────────────────
-
-const callGemini = async (modelName, prompt) => {
-  const model = genAI.getGenerativeModel({ model: modelName });
-  const result = await model.generateContent(prompt);
-  return result.response.text();
-};
-
-const parseGeminiResponse = (raw) => {
-  // Remove possible code delimiters the model may add
-  const cleaned = raw
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
-
-  const parsed = JSON.parse(cleaned); // throws SyntaxError if invalid
-
-  const required = ['title', 'summary', 'content', 'tags', 'gradient'];
-  for (const field of required) {
-    if (!parsed[field]) throw new Error(`Missing required field: ${field}`);
-  }
-
-  if (!Array.isArray(parsed.gradient) || parsed.gradient.length !== 2) {
-    throw new Error('gradient must be an array of 2 hex colors');
-  }
-
-  return parsed;
-};
-```
-
-**`src/shared/auth.js`**
-```javascript
-// Extracts the userId (Cognito sub) from the API Gateway event context.
-// The JWT has already been validated by API Gateway before reaching the Lambda.
-export const getUserId = (event) => {
-  const claims = event.requestContext?.authorizer?.claims;
-  if (!claims?.sub) {
-    throw new AuthError('Invalid or missing token');
-  }
-  return claims.sub;
-};
-
-export class AuthError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'AuthError';
-  }
+Example: ["AWS", "TypeScript", "Node.js"]`;
 }
 ```
 
-**`src/shared/response.js`**
-```javascript
-// Helpers for standardized HTTP responses from the API.
-const ALLOWED_ORIGINS = [
-  'https://syntonia.app',
-  'https://www.syntonia.app',
-  'https://dev.syntonia.app',
-  'http://localhost:5173', // local development
-];
-
-const getCorsHeaders = (event) => {
-  const origin = event?.headers?.origin ?? event?.headers?.Origin ?? '';
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-  };
-};
-
-export const ok = (event, body) => ({
-  statusCode: 200,
-  headers: { 'Content-Type': 'application/json', ...getCorsHeaders(event) },
-  body: JSON.stringify(body),
-});
-
-export const created = (event, body) => ({
-  statusCode: 201,
-  headers: { 'Content-Type': 'application/json', ...getCorsHeaders(event) },
-  body: JSON.stringify(body),
-});
-
-export const accepted = (event, body) => ({
-  statusCode: 202,
-  headers: { 'Content-Type': 'application/json', ...getCorsHeaders(event) },
-  body: JSON.stringify(body),
-});
-
-export const badRequest = (event, message) => ({
-  statusCode: 400,
-  headers: { 'Content-Type': 'application/json', ...getCorsHeaders(event) },
-  body: JSON.stringify({ error: 'Bad Request', message }),
-});
-
-export const unauthorized = (event) => ({
-  statusCode: 401,
-  headers: { 'Content-Type': 'application/json', ...getCorsHeaders(event) },
-  body: JSON.stringify({ error: 'Unauthorized', message: 'Invalid or missing token' }),
-});
-
-export const notFound = (event, message = 'Resource not found') => ({
-  statusCode: 404,
-  headers: { 'Content-Type': 'application/json', ...getCorsHeaders(event) },
-  body: JSON.stringify({ error: 'Not Found', message }),
-});
-
-export const tooManyRequests = (event, message = 'Too many requests. Please wait.') => ({
-  statusCode: 429,
-  headers: { 'Content-Type': 'application/json', ...getCorsHeaders(event) },
-  body: JSON.stringify({ error: 'Too Many Requests', message }),
-});
-
-export const serverError = (event, err) => {
-  console.error('[SERVER ERROR]', err);
-  return {
-    statusCode: 500,
-    headers: { 'Content-Type': 'application/json', ...getCorsHeaders(event) },
-    body: JSON.stringify({ error: 'Internal Server Error', message: 'Internal error. Please try again.' }),
-  };
-};
-```
-
-**`src/shared/validators.js`**
-```javascript
-import { z } from 'zod';
-
-export const feedRequestSchema = z.object({
-  tags: z.array(z.string().min(1)).min(1).max(20),
-  quantity: z.number().int().min(1).max(5).default(3),
-});
-
-export const updatePreferencesSchema = z.object({
-  activeTags: z.array(z.string().min(1)).min(1, 'Select at least 1 tag').max(20),
-});
-
-export const updateProfileSchema = z.object({
-  description: z.string()
-    .min(20, 'Description must be at least 20 characters')
-    .max(500, 'Description must be at most 500 characters'),
-});
-
-export const validate = (schema, data) => {
-  const result = schema.safeParse(data);
-  if (!result.success) {
-    const message = result.error.errors.map((e) => e.message).join('; ');
-    throw new ValidationError(message);
-  }
-  return result.data;
-};
-
-export class ValidationError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'ValidationError';
-  }
-}
-```
-
-**`src/shared/constants.js`**
-```javascript
-export const AVAILABLE_TAGS = [
-  'AWS', 'React', 'TypeScript', 'Node.js', 'Python',
-  'Docker', 'Kubernetes', 'Linux', 'DynamoDB', 'PostgreSQL',
-  'Redis', 'GraphQL', 'Rust', 'Go', 'CI/CD',
-  'Terraform', 'Serverless', 'Security', 'Performance', 'Architecture',
-];
-
-// Default tags applied to new users at signup.
-// Users are redirected to /onboarding to replace these with their real interests.
-export const DEFAULT_TAGS = ['AWS', 'TypeScript', 'React'];
-```
-
-**`src/shared/sqs.js`**
-```javascript
+**`src/shared/sqs.ts`**
+```typescript
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 
-const client = new SQSClient({ region: process.env.AWS_REGION ?? 'sa-east-1' });
+const client = new SQSClient({ region: process.env['AWS_REGION'] ?? 'sa-east-1' });
 
-/**
- * Sends a generation request to the SQS queue.
- * The message body contains everything the workerInternal Lambda needs
- * to process the request without an extra DynamoDB read (Option A).
- *
- * @returns {Promise<string>} The SQS MessageId — stored in DynamoDB as sqsMessageId
- */
-export const sendGenerationRequest = async ({ requestId, userId, tags, description }) => {
+export const sendGenerationRequest = async (params: {
+  requestId: string;
+  userId: string;
+  tags: string[];
+  description: string | null;
+}): Promise<string> => {
+  const queueUrl = process.env['GENERATION_QUEUE_URL'];
+  if (!queueUrl) throw new Error('GENERATION_QUEUE_URL not configured');
   const result = await client.send(new SendMessageCommand({
-    QueueUrl: process.env.GENERATION_QUEUE_URL,
-    // description is included so workerInternal can enrich the Gemini prompt
-    // without an extra DynamoDB read
-    MessageBody: JSON.stringify({ requestId, userId, tags, description }),
+    QueueUrl: queueUrl,
+    MessageBody: JSON.stringify(params),
   }));
-  return result.MessageId;
+  return result.MessageId ?? '';
 };
 ```
 
-**`src/shared/rateLimit.js`**
-```javascript
-import { db, Tables } from './db.js';
+**`src/shared/rateLimit.ts`**
+```typescript
 import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { db, Tables } from './db.js';
 
-/**
- * Fixed-window rate limiter backed by DynamoDB.
- *
- * Key format: "{type}#{identifier}"
- *   e.g. "AI_GENERATION#cognito-sub-uuid"
- *        "API_REQUEST#cognito-sub-uuid"
- *
- * Strategy:
- *   - The window is identified by flooring the current Unix timestamp
- *     to the nearest windowSeconds bucket.
- *   - The DynamoDB key includes the bucket, so each window is a separate item.
- *   - Atomic ADD increments the counter. No read-before-write needed.
- *   - TTL is set to windowEnd + 60s to guarantee eventual cleanup.
- */
-export const checkRateLimit = async (key, { max, windowSeconds }) => {
+export class RateLimitError extends Error {
+  constructor(message: string) { super(message); this.name = 'RateLimitError'; }
+}
+
+export const checkRateLimit = async (
+  key: string,
+  { max, windowSeconds }: { max: number; windowSeconds: number },
+): Promise<void> => {
   const now = Math.floor(Date.now() / 1000);
-  const bucket = Math.floor(now / windowSeconds); // current time bucket
+  const bucket = Math.floor(now / windowSeconds);
   const windowKey = `${key}#${bucket}`;
   const windowEnd = (bucket + 1) * windowSeconds;
 
@@ -1033,55 +1206,34 @@ export const checkRateLimit = async (key, { max, windowSeconds }) => {
     TableName: Tables.RATE_LIMIT,
     Key: { key: windowKey },
     UpdateExpression: 'ADD #count :one SET #ttl = if_not_exists(#ttl, :expiry)',
-    ExpressionAttributeNames: {
-      '#count': 'count',
-      '#ttl': 'ttl',
-    },
-    ExpressionAttributeValues: {
-      ':one': 1,
-      ':expiry': windowEnd + 60, // 60s grace after window ends
-    },
+    ExpressionAttributeNames: { '#count': 'count', '#ttl': 'ttl' },
+    ExpressionAttributeValues: { ':one': 1, ':expiry': windowEnd + 60 },
     ReturnValues: 'ALL_NEW',
   }));
 
-  const count = result.Attributes?.count ?? 1;
-
-  if (count > max) {
-    throw new RateLimitError(
-      `Rate limit exceeded: ${key} — ${count}/${max} requests in ${windowSeconds}s window`
-    );
-  }
+  const count = (result.Attributes?.['count'] as number | undefined) ?? 1;
+  if (count > max) throw new RateLimitError(`Rate limit exceeded: ${key}`);
 };
-
-export class RateLimitError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'RateLimitError';
-  }
-}
 ```
 
 ### Lambda Handler Implementations
 
-**`src/functions/getFeed.js`**
-```javascript
-import { getUserId, AuthError } from '../shared/auth.js';
+> All handlers are TypeScript (`.ts`). Each follows the same structure: extract userId from JWT, validate input with Zod, call DynamoDB/SQS/Gemini helpers, return typed response.
+
+**`src/functions/getFeed.ts`**
+```typescript
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { AuthError, getUserId } from '../shared/auth.js';
 import { getFeedByUser } from '../shared/db.js';
 import { ok, unauthorized, serverError } from '../shared/response.js';
 
-export const handler = async (event) => {
+export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
     const userId = getUserId(event);
-    const limit = Math.min(Number(event.queryStringParameters?.limit ?? 5), 10);
-    const cursor = event.queryStringParameters?.cursor ?? null;
-
+    const limit = Math.min(Number(event.queryStringParameters?.['limit'] ?? 5), 10);
+    const cursor = event.queryStringParameters?.['cursor'] ?? null;
     const { items, cursor: nextCursor } = await getFeedByUser(userId, limit, cursor);
-
-    return ok(event, {
-      posts: items,
-      cursor: nextCursor,
-      hasMore: nextCursor !== null,
-    });
+    return ok(event, { posts: items, cursor: nextCursor, hasMore: nextCursor !== null });
   } catch (err) {
     if (err instanceof AuthError) return unauthorized(event);
     return serverError(event, err);
@@ -1089,412 +1241,121 @@ export const handler = async (event) => {
 };
 ```
 
-**`src/functions/requestPost.js`**
-```javascript
-import { v4 as uuidv4 } from 'uuid';
-import { getUserId, AuthError } from '../shared/auth.js';
-import { saveRequest, countPendingRequests, getUser } from '../shared/db.js';
-import { sendGenerationRequest } from '../shared/sqs.js';
-import { checkRateLimit, RateLimitError } from '../shared/rateLimit.js';
-import { accepted, badRequest, unauthorized, tooManyRequests, serverError } from '../shared/response.js';
-import { validate, feedRequestSchema, ValidationError } from '../shared/validators.js';
+**`src/functions/requestPost.ts`** — same logic as §4 specification; sends to SQS + persists to DynamoDB; returns `202 { requestIds, status }` (no `message` field).
 
-const MAX_PENDING_PER_USER = 5;
+**`src/functions/workerInternal.ts`** — SQS trigger; fetches last 30 recent posts by active tags for deduplication context; calls `generatePost()` with context; saves post with 90-day TTL; exponential backoff 3×; marks PROCESSING → COMPLETED | FAILED.
 
-// Rate limit: max 10 AI generation requests per hour per user
-const AI_RATE_LIMIT = { max: 10, windowSeconds: 3600 };
+**`src/functions/getPost.ts`** — `GET /post/:id`; verifies `post.userId === userId` before returning.
 
-// Rate limit: max 100 general API requests per 15 minutes per user
-const API_RATE_LIMIT = { max: 100, windowSeconds: 900 };
+**`src/functions/savePost.ts`** — `POST /post/:id/save`; sets `savedAt`, removes `ttl`.
 
-export const handler = async (event) => {
-  try {
-    const userId = getUserId(event);
+**`src/functions/unsavePost.ts`** — `DELETE /post/:id/save`; removes `savedAt`, restores `ttl = now + 30d`; returns `200 {}`.
 
-    // General API rate limit — checked first (cheapest check)
-    await checkRateLimit(`API_REQUEST#${userId}`, API_RATE_LIMIT);
+**`src/functions/getSavedPosts.ts`** — `GET /posts/saved`; queries `userId-savedAt-index` GSI; cursor pagination.
 
-    // AI generation rate limit — checked before the PENDING count query
-    await checkRateLimit(`AI_GENERATION#${userId}`, AI_RATE_LIMIT);
+**`src/functions/getPreferences.ts`** — `GET /user/preferences`; upsert fallback if profile missing; returns `theme` and `language` from user record (defaults: `'dark'`, `'en'`).
 
-    const body = JSON.parse(event.body ?? '{}');
-    const { tags, quantity } = validate(feedRequestSchema, body);
+**`src/functions/updatePreferences.ts`** — `PUT /user/preferences`; patch semantics via `updateUserPreferences()`; any combination of `activeTags`, `theme`, `language`.
 
-    // Prevent a user from accumulating too many pending requests
-    const pendingCount = await countPendingRequests(userId);
-    if (pendingCount >= MAX_PENDING_PER_USER) {
-      return tooManyRequests(event, `Please wait: you have ${pendingCount} generations in progress.`);
-    }
+**`src/functions/updateProfile.ts`** — `PUT /user/profile`; calls `extractTagsFromDescription()`; updates `description` + `activeTags` in `SintoniaUsers`; returns `{ description, activeTags, updatedAt }`.
 
-    // Fetch user profile to include description in the generation context.
-    // The description enriches the Gemini prompt for more relevant content.
-    const user = await getUser(userId);
-    const description = user?.description ?? null;
+**`src/functions/health.ts`** — `GET /health`; no auth; returns `{ status: 'ok', timestamp }`.
 
-    // Create N requests in parallel:
-    // 1. Send to SQS first → get MessageId
-    // 2. Persist to DynamoDB with sqsMessageId linked — provides audit trail + throttle source
-    const requests = await Promise.all(
-      Array.from({ length: quantity }, async () => {
-        const requestId = uuidv4();
+**`src/functions/onUserSignup.ts`** — Cognito Post-Confirmation trigger; creates user record with `DEFAULT_TAGS`; errors caught and logged (never thrown — would block signup).
 
-        // Include description in SQS message — worker uses it to enrich the generation prompt
-        const sqsMessageId = await sendGenerationRequest({ requestId, userId, tags, description });
-
-        const request = {
-          id: requestId,
-          userId,
-          tags,
-          sqsMessageId,          // links this DynamoDB record to the SQS message
-          status: 'PENDING',
-          createdAt: new Date().toISOString(),
-          ttl: Math.floor(Date.now() / 1000) + 259200, // safety net: auto-delete after 3 days
-        };
-
-        await saveRequest(request);
-        return request;
-      })
-    );
-
-    return accepted(event, {
-      requestIds: requests.map((r) => r.id),
-      status: 'PENDING',
-      message: `${quantity} post(s) being generated.`,
-    });
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(event);
-    if (err instanceof RateLimitError) return tooManyRequests(event, err.message);
-    if (err instanceof ValidationError) return badRequest(event, err.message);
-    return serverError(event, err);
-  }
-};
-```
-
-**`src/functions/workerInternal.js`**
-```javascript
-import { v4 as uuidv4 } from 'uuid';
-import { generatePost } from '../shared/gemini.js';
-import { savePost, updateRequestStatus } from '../shared/db.js';
-
-const MAX_RETRIES = 3;
-
-export const handler = async (event) => {
-  // SQS trigger — batchSize: 1 guarantees exactly one record per invocation.
-  // Clean JSON body — no DynamoDB typed format to parse.
-  for (const record of event.Records) {
-    const { requestId, userId, tags, description } = JSON.parse(record.body);
-
-    console.log(`[workerInternal] Processing request ${requestId} for user ${userId}`);
-
-    // Mark as PROCESSING to prevent double-processing on visibility timeout retry
-    await updateRequestStatus(requestId, 'PROCESSING', {
-      processingAt: new Date().toISOString(),
-    });
-
-    let attempt = 0;
-    while (attempt < MAX_RETRIES) {
-      try {
-        const postData = await generatePost({ tags, description });
-
-        const post = {
-          id: uuidv4(),
-          userId,
-          title: postData.title,
-          summary: postData.summary,
-          content: postData.content,
-          tags: postData.tags,
-          gradient: postData.gradient,
-          createdAt: new Date().toISOString(),
-          status: 'READY',
-          ttl: Math.floor(Date.now() / 1000) + 7776000, // 90 days — removed when post is saved
-        };
-
-        await savePost(post);
-        await updateRequestStatus(requestId, 'COMPLETED', {
-          completedAt: new Date().toISOString(),
-          postId: post.id,
-          ttl: Math.floor(Date.now() / 1000) + 2592000, // retain for 30 days then auto-delete
-        });
-
-        console.log(`[workerInternal] Post ${post.id} created successfully`);
-        break; // success — SQS auto-deletes the message on Lambda return
-      } catch (err) {
-        attempt++;
-        console.error(`[workerInternal] Attempt ${attempt} failed:`, err.message);
-
-        if (attempt >= MAX_RETRIES) {
-          await updateRequestStatus(requestId, 'FAILED', {
-            failedAt: new Date().toISOString(),
-            errorMessage: err.message,
-            ttl: Math.floor(Date.now() / 1000) + 604800, // retain for 7 days then auto-delete
-          });
-          // Throwing causes SQS to make the message visible again for retry.
-          // After maxReceiveCount (3) retries, SQS routes it to the DLQ.
-          throw err;
-        }
-
-        // Exponential backoff before next in-process retry
-        await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
-      }
-    }
-  }
-};
-```
-
-**`src/functions/getPost.js`**
-```javascript
-import { getUserId, AuthError } from '../shared/auth.js';
-import { getPostById } from '../shared/db.js';
-import { ok, unauthorized, notFound, serverError } from '../shared/response.js';
-
-export const handler = async (event) => {
-  try {
-    const userId = getUserId(event);
-    const postId = event.pathParameters?.id;
-
-    if (!postId) return notFound(event);
-
-    const post = await getPostById(postId);
-
-    if (!post) return notFound(event, 'Post not found');
-
-    // Ensure the user can only access their own posts
-    if (post.userId !== userId) return notFound(event, 'Post not found');
-
-    return ok(event, post);
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(event);
-    return serverError(event, err);
-  }
-};
-```
-
-**`src/functions/getPreferences.js`**
-```javascript
-import { getUserId, AuthError } from '../shared/auth.js';
-import { getUser, saveUser } from '../shared/db.js';
-import { ok, unauthorized, serverError } from '../shared/response.js';
-import { AVAILABLE_TAGS, DEFAULT_TAGS } from '../shared/constants.js';
-
-export const handler = async (event) => {
-  try {
-    const userId = getUserId(event);
-    const claims = event.requestContext?.authorizer?.claims;
-    let user = await getUser(userId);
-
-    if (!user) {
-      // onUserSignup may have failed silently (DynamoDB was unavailable at signup time).
-      // Recreate the profile now with default tags so the user experience is never broken.
-      // The user will be redirected to /onboarding to set their real tags.
-      console.warn(`[getPreferences] Profile missing for ${userId} — recreating with defaults`);
-      user = {
-        userId,
-        email: claims?.email ?? '',
-        activeTags: DEFAULT_TAGS,
-        createdAt: new Date().toISOString(),
-        lastActiveAt: new Date().toISOString(),
-      };
-      await saveUser(user);
-    }
-
-    return ok(event, {
-      userId: user.userId,
-      description: user.description ?? null,
-      activeTags: user.activeTags,
-      availableTags: AVAILABLE_TAGS,
-    });
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(event);
-    return serverError(event, err);
-  }
-};
-```
-
-**`src/functions/updatePreferences.js`**
-```javascript
-import { getUserId, AuthError } from '../shared/auth.js';
-import { updateUserTags } from '../shared/db.js';
-import { ok, badRequest, unauthorized, serverError } from '../shared/response.js';
-import { validate, updatePreferencesSchema, ValidationError } from '../shared/validators.js';
-
-export const handler = async (event) => {
-  try {
-    const userId = getUserId(event);
-    const body = JSON.parse(event.body ?? '{}');
-    const { activeTags } = validate(updatePreferencesSchema, body);
-
-    await updateUserTags(userId, activeTags);
-
-    return ok(event, {
-      activeTags,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(event);
-    if (err instanceof ValidationError) return badRequest(event, err.message);
-    return serverError(event, err);
-  }
-};
-```
-
-**`src/functions/updateProfile.js`**
-```javascript
-import { getUserId, AuthError } from '../shared/auth.js';
-import { updateUserProfile } from '../shared/db.js';
-import { extractTagsFromDescription } from '../shared/gemini.js';
-import { ok, badRequest, unauthorized, serverError } from '../shared/response.js';
-import { validate, updateProfileSchema, ValidationError } from '../shared/validators.js';
-
-export const handler = async (event) => {
-  try {
-    const userId = getUserId(event);
-    const body = JSON.parse(event.body ?? '{}');
-    const { description } = validate(updateProfileSchema, body);
-
-    // Call Gemini synchronously to extract relevant tags from the description.
-    // Only returns tags from AVAILABLE_TAGS — guaranteed to be valid for generation.
-    const activeTags = await extractTagsFromDescription(description);
-
-    // Persist description + AI-extracted tags in a single DynamoDB write
-    await updateUserProfile(userId, description, activeTags);
-
-    console.log(`[updateProfile] Extracted ${activeTags.length} tags for user ${userId}: ${activeTags.join(', ')}`);
-
-    return ok(event, {
-      description,
-      activeTags,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(event);
-    if (err instanceof ValidationError) return badRequest(event, err.message);
-    return serverError(event, err);
-  }
-};
-```
-
-**`src/functions/onUserSignup.js`** — Cognito Post-Confirmation Trigger
-```javascript
-// Executed automatically by Cognito when a user confirms their email.
-// Creates the user profile in DynamoDB with default tags.
-// The user will be redirected to /onboarding to set their real interests.
-import { saveUser } from '../shared/db.js';
-import { DEFAULT_TAGS } from '../shared/constants.js';
-
-export const handler = async (event) => {
-  // event.request.userAttributes.sub = Cognito sub (our userId)
-  const userId = event.request.userAttributes.sub;
-  const email = event.request.userAttributes.email;
-
-  try {
-    const user = {
-      userId,
-      email,
-      activeTags: DEFAULT_TAGS,
-      createdAt: new Date().toISOString(),
-      lastActiveAt: new Date().toISOString(),
-    };
-
-    await saveUser(user);
-    console.log(`[onUserSignup] Profile created for ${userId} (${email})`);
-  } catch (err) {
-    // Log the error but do NOT rethrow — if we throw here, Cognito will
-    // block the user's signup entirely.
-    // If saveUser fails, getPreferences has an upsert fallback that recreates the profile.
-    console.error(`[onUserSignup] Failed to create profile for ${userId}:`, err.message);
-  }
-
-  // Required: return the event intact so Cognito continues the confirmation flow
-  return event;
-};
-```
-
-**`src/functions/health.js`**
-```javascript
-// Public health check endpoint — no authentication required.
-// Used by external monitors (UptimeRobot, Pingdom, etc.) and AWS Route 53 health checks.
-import { ok } from '../shared/response.js';
-
-export const handler = async (event) => {
-  return ok(event, {
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    stage: process.env.STAGE ?? 'unknown',
-  });
-};
-```
-
-**`src/functions/savePost.js`**
-```javascript
-import { getUserId, AuthError } from '../shared/auth.js';
-import { markPostSaved } from '../shared/db.js';
-import { ok, unauthorized, notFound, serverError } from '../shared/response.js';
-
-export const handler = async (event) => {
-  try {
-    const userId = getUserId(event);
-    const postId = event.pathParameters?.id;
-    if (!postId) return notFound(event);
-
-    await markPostSaved(postId, userId);
-
-    return ok(event, {
-      savedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(event);
-    return serverError(event, err);
-  }
-};
-```
-
-**`src/functions/unsavePost.js`**
-```javascript
-import { getUserId, AuthError } from '../shared/auth.js';
-import { markPostUnsaved } from '../shared/db.js';
-import { ok, unauthorized, notFound, serverError } from '../shared/response.js';
-
-export const handler = async (event) => {
-  try {
-    const userId = getUserId(event);
-    const postId = event.pathParameters?.id;
-    if (!postId) return notFound(event);
-
-    await markPostUnsaved(postId, userId);
-
-    return ok(event, { message: 'Post unsaved. TTL restored to 30 days.' });
-  } catch (err) {
-    if (err instanceof AuthError) return unauthorized(event);
-    return serverError(event, err);
-  }
-};
-```
-
-**`src/functions/getSavedPosts.js`**
-```javascript
-import { getUserId, AuthError } from '../shared/auth.js';
-import { getSavedByUser } from '../shared/db.js';
+**`src/functions/getLegalTermsStatus.ts`**
+```typescript
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { AuthError, getUserId } from '../shared/auth.js';
+import { getLatestLegalDocument, getUser } from '../shared/db.js';
 import { ok, unauthorized, serverError } from '../shared/response.js';
 
-export const handler = async (event) => {
+export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
     const userId = getUserId(event);
-    const limit = Math.min(Number(event.queryStringParameters?.limit ?? 20), 50);
-    const cursor = event.queryStringParameters?.cursor ?? null;
 
-    const { items, cursor: nextCursor } = await getSavedByUser(userId, limit, cursor);
+    const [termsDoc, privacyDoc, user] = await Promise.all([
+      getLatestLegalDocument('terms'),
+      getLatestLegalDocument('privacy'),
+      getUser(userId),
+    ]);
 
-    return ok(event, {
-      posts: items,
-      cursor: nextCursor,
-      hasMore: nextCursor !== null,
-    });
+    const termsVersion = termsDoc?.version ?? '';
+    const privacyVersion = privacyDoc?.version ?? '';
+    const termsAccepted = user?.termsAcceptedVersion ?? '';
+    const privacyAccepted = user?.privacyAcceptedVersion ?? '';
+
+    const needsAcceptance = termsVersion !== termsAccepted || privacyVersion !== privacyAccepted;
+
+    return ok(event, { needsAcceptance, termsVersion, privacyVersion });
   } catch (err) {
     if (err instanceof AuthError) return unauthorized(event);
     return serverError(event, err);
   }
 };
 ```
+
+**`src/functions/getLegalDocument.ts`**
+```typescript
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { AuthError, getUserId } from '../shared/auth.js';
+import { getLatestLegalDocument } from '../shared/db.js';
+import { ok, unauthorized, notFound, serverError } from '../shared/response.js';
+
+export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  try {
+    getUserId(event);
+    const rawType = event.pathParameters?.['type'];
+    if (rawType !== 'terms' && rawType !== 'privacy') {
+      return notFound(event, 'Document type must be "terms" or "privacy"', 'LEGAL_DOCUMENT_NOT_FOUND');
+    }
+    const doc = await getLatestLegalDocument(rawType);
+    if (!doc) return notFound(event, 'No active document found', 'LEGAL_DOCUMENT_NOT_FOUND');
+    return ok(event, doc);
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(event);
+    return serverError(event, err);
+  }
+};
+```
+
+**`src/functions/acceptLegalTerms.ts`**
+```typescript
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { AuthError, getUserId } from '../shared/auth.js';
+import { getLatestLegalDocument, acceptUserTerms } from '../shared/db.js';
+import { ok, unauthorized, badRequest, serverError } from '../shared/response.js';
+import { validate, acceptLegalTermsSchema, ValidationError } from '../shared/validators.js';
+
+export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  try {
+    const userId = getUserId(event);
+    const body = JSON.parse(event.body ?? '{}') as unknown;
+    const { termsVersion, privacyVersion } = validate(acceptLegalTermsSchema, body);
+
+    const [termsDoc, privacyDoc] = await Promise.all([
+      getLatestLegalDocument('terms'),
+      getLatestLegalDocument('privacy'),
+    ]);
+
+    if (termsDoc?.version !== termsVersion || privacyDoc?.version !== privacyVersion) {
+      return badRequest(
+        event,
+        'Provided versions do not match current active versions. Please refresh and try again.',
+        'TERMS_VERSION_MISMATCH',
+      );
+    }
+
+    await acceptUserTerms(userId, termsVersion, privacyVersion);
+    return ok(event, { acceptedAt: new Date().toISOString() });
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized(event);
+    if (err instanceof ValidationError) return badRequest(event, err.message);
+    return serverError(event, err);
+  }
+};
+```
+
 
 ---
 
@@ -1624,8 +1485,8 @@ export const handler = async (event) => {
 
 | Key | Limit | Window | Applied in |
 |---|---|---|---|
-| `AI_GENERATION#{userId}#{bucket}` | 10 requests | 1 hour | `requestPost.js` |
-| `API_REQUEST#{userId}#{bucket}` | 100 requests | 15 min | `requestPost.js` |
+| `AI_GENERATION#{userId}#{bucket}` | 10 requests | 1 hour | `requestPost.ts` |
+| `API_REQUEST#{userId}#{bucket}` | 100 requests | 15 min | `requestPost.ts` |
 
 > **Design:** The time bucket is embedded in the key (`floor(now / windowSeconds)`), so each
 > time window is a separate item. No GSI needed — rate checks are always direct `GetItem`/`UpdateItem`
@@ -2419,21 +2280,22 @@ POST /feed/request
 [Lambda: workerInternal] (reservedConcurrency: 5)
   1. JSON.parse(record.body) → { requestId, userId, tags, description }
   2. UpdateItem SintoniaRequests[requestId] → status: PROCESSING
-  3. Tries callGemini(PRIMARY_MODEL, buildPrompt(tags, description))
-     └── fails? → callGemini(FALLBACK_MODEL)
+  3. getRecentPostsByTags(userId, tags, 30) → recentPosts  ← deduplication context
+  4. Tries callGemini(PRIMARY_MODEL, buildPostPrompt(tags, description, recentPosts))
+     └── fails? → callGemini(FALLBACK_MODEL, ...)
      └── fails again? → in-process retry with backoff (max 3x)
      └── definitive failure?
            → UpdateItem: status → FAILED
            → throw err → SQS makes message visible → retries
            → after 3 SQS deliveries → routes to GenerationDLQ
-  4. parseGeminiResponse(raw) — validates JSON + required fields
-  5. PutItem SintoniaFeed:
+  5. parseGeminiResponse(raw) — validates JSON + required fields
+  6. PutItem SintoniaFeed:
      { id (new UUID), userId, title, summary, content, tags, gradient,
        createdAt, status: 'READY',
        ttl: now + 90 days }   ← auto-deleted unless user saves the post
-  6. UpdateItem SintoniaRequests[requestId]:
+  7. UpdateItem SintoniaRequests[requestId]:
      { status: 'COMPLETED', completedAt, postId }
-  7. Lambda returns without error → SQS auto-deletes the message
+  8. Lambda returns without error → SQS auto-deletes the message
       │
       ▼
 [SintoniaFeed — new posts available]
@@ -2544,6 +2406,26 @@ service: syntonia-backend
 
 frameworkVersion: '4'
 
+plugins:
+  - serverless-esbuild      # TypeScript compilation + bundling (MUST be first)
+  - serverless-offline      # Local simulation (npm run dev)
+
+custom:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    target: node22
+    platform: node
+    format: cjs              # CommonJS — most compatible with Lambda Node.js runtime
+    external:
+      - '@aws-sdk/*'         # Pre-installed on Lambda runtime; do NOT bundle
+    packager: npm
+
+  serverless-offline:
+    httpPort: 3000
+    lambdaPort: 3002
+
 provider:
   name: aws
   runtime: nodejs22.x
@@ -2556,47 +2438,14 @@ provider:
     FEED_TABLE: SintoniaFeed-${self:provider.stage}
     REQUESTS_TABLE: SintoniaRequests-${self:provider.stage}
     USERS_TABLE: SintoniaUsers-${self:provider.stage}
-    GENERATION_QUEUE_URL: !Ref GenerationQueue
     RATE_LIMIT_TABLE: SintoniaRateLimit-${self:provider.stage}
+    LEGAL_TABLE: SintoniaLegal-${self:provider.stage}
+    GENERATION_QUEUE_URL: !Ref GenerationQueue
     # Secret read from SSM Parameter Store at deploy time
     GEMINI_API_KEY: ${ssm:/syntonia/${self:provider.stage}/gemini-api-key}
 
-  # Shared IAM role across all Lambda functions (least privilege)
-  iam:
-    role:
-      statements:
-        - Effect: Allow
-          Action:
-            - dynamodb:PutItem
-            - dynamodb:GetItem
-            - dynamodb:UpdateItem
-            - dynamodb:Query
-          Resource:
-            - arn:aws:dynamodb:${self:provider.region}:*:table/SintoniaFeed-${self:provider.stage}
-            - arn:aws:dynamodb:${self:provider.region}:*:table/SintoniaFeed-${self:provider.stage}/index/*
-            - arn:aws:dynamodb:${self:provider.region}:*:table/SintoniaRequests-${self:provider.stage}
-            - arn:aws:dynamodb:${self:provider.region}:*:table/SintoniaRequests-${self:provider.stage}/index/*
-            - arn:aws:dynamodb:${self:provider.region}:*:table/SintoniaUsers-${self:provider.stage}
-            - arn:aws:dynamodb:${self:provider.region}:*:table/SintoniaRateLimit-${self:provider.stage}
-        - Effect: Allow
-          Action:
-            - ssm:GetParameter
-          Resource:
-            - arn:aws:ssm:${self:provider.region}:*:parameter/syntonia/${self:provider.stage}/*
-        # Note: Cognito invokes onUserSignup via AWS::Lambda::Permission (Resource Policy),
-        # not via IAM role. No lambda:InvokeFunction permission needed here.
-        - Effect: Allow
-          Action:
-            - sqs:SendMessage           # requestPost sends generation requests
-          Resource:
-            - !GetAtt GenerationQueue.Arn
-        - Effect: Allow
-          Action:
-            - sqs:ReceiveMessage        # workerInternal consumes messages
-            - sqs:DeleteMessage
-            - sqs:GetQueueAttributes
-          Resource:
-            - !GetAtt GenerationQueue.Arn
+  # IAM: no shared role — each Lambda uses its own least-privilege role
+  # (defined in resources: section below, referenced via role: on each function)
 
   # API Gateway global throttling
   apiGateway:
@@ -2613,6 +2462,7 @@ functions:
 
   getFeed:
     handler: src/functions/getFeed.handler
+    role: !GetAtt GetFeedLambdaRole.Arn
     timeout: 10
     description: "Returns paginated posts from the user's feed"
     events:
@@ -2629,6 +2479,7 @@ functions:
 
   requestPost:
     handler: src/functions/requestPost.handler
+    role: !GetAtt RequestPostLambdaRole.Arn
     timeout: 10
     description: "Queues a content generation request (JIT trigger)"
     events:
@@ -2645,6 +2496,7 @@ functions:
 
   getPost:
     handler: src/functions/getPost.handler
+    role: !GetAtt GetPostLambdaRole.Arn
     timeout: 10
     description: "Returns full post by ID (lazy load of Markdown)"
     events:
@@ -2661,6 +2513,7 @@ functions:
 
   getPreferences:
     handler: src/functions/getPreferences.handler
+    role: !GetAtt GetPreferencesLambdaRole.Arn
     timeout: 10
     description: "Returns active tags and user profile"
     events:
@@ -2677,6 +2530,7 @@ functions:
 
   updatePreferences:
     handler: src/functions/updatePreferences.handler
+    role: !GetAtt UpdatePreferencesLambdaRole.Arn
     timeout: 10
     description: "Enables/disables individual tags from the user's AI-extracted tag set"
     events:
@@ -2693,6 +2547,7 @@ functions:
 
   updateProfile:
     handler: src/functions/updateProfile.handler
+    role: !GetAtt UpdateProfileLambdaRole.Arn
     timeout: 29                  # API Gateway REST has a hard 29s max integration timeout
     description: "Saves user description + calls Gemini to extract active tags"
     events:
@@ -2709,6 +2564,7 @@ functions:
 
   health:
     handler: src/functions/health.handler
+    role: !GetAtt HealthLambdaRole.Arn
     timeout: 5
     description: "Public health check endpoint"
     events:
@@ -2719,6 +2575,7 @@ functions:
 
   savePost:
     handler: src/functions/savePost.handler
+    role: !GetAtt SavePostLambdaRole.Arn
     timeout: 10
     description: "Saves a post — sets savedAt, removes TTL so post persists indefinitely"
     events:
@@ -2735,6 +2592,7 @@ functions:
 
   unsavePost:
     handler: src/functions/unsavePost.handler
+    role: !GetAtt UnsavePostLambdaRole.Arn
     timeout: 10
     description: "Unsaves a post — removes savedAt, restores TTL to now + 30 days"
     events:
@@ -2751,6 +2609,7 @@ functions:
 
   getSavedPosts:
     handler: src/functions/getSavedPosts.handler
+    role: !GetAtt GetSavedPostsLambdaRole.Arn
     timeout: 10
     description: "Returns the authenticated user's saved posts via userId-savedAt-index GSI"
     events:
@@ -2769,6 +2628,7 @@ functions:
 
   workerInternal:
     handler: src/functions/workerInternal.handler
+    role: !GetAtt WorkerInternalLambdaRole.Arn
     timeout: 60
     reservedConcurrency: 5   # limits unexpected Gemini API spending
     description: "Consumes SQS queue and generates content with Gemini"
@@ -2782,12 +2642,403 @@ functions:
 
   onUserSignup:
     handler: src/functions/onUserSignup.handler
+    role: !GetAtt OnUserSignupLambdaRole.Arn
     timeout: 10
     description: "Creates user profile in DynamoDB after email confirmation"
     # No HTTP event — invoked directly by Cognito
 
+  # ── Legal / Terms ──────────────────────────────────────────────────
+
+  getLegalTermsStatus:
+    handler: src/functions/getLegalTermsStatus.handler
+    role: !GetAtt GetLegalTermsStatusLambdaRole.Arn
+    timeout: 5
+    description: "Returns whether user needs to accept updated terms"
+    events:
+      - http:
+          path: /legal/terms-status
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  getLegalDocument:
+    handler: src/functions/getLegalDocument.handler
+    role: !GetAtt GetLegalDocumentLambdaRole.Arn
+    timeout: 5
+    description: "Returns the active legal document (terms or privacy) from SintoniaLegal"
+    events:
+      - http:
+          path: /legal/{type}
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  acceptLegalTerms:
+    handler: src/functions/acceptLegalTerms.handler
+    role: !GetAtt AcceptLegalTermsLambdaRole.Arn
+    timeout: 5
+    description: "Records user acceptance of current terms and privacy policy versions"
+    events:
+      - http:
+          path: /legal/accept
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
 resources:
   Resources:
+
+    # ── IAM Roles (per Lambda — least privilege) ───────────────────────
+    #
+    # Each Lambda has its own IAM role with only the permissions it needs.
+    # All roles include the minimum CloudWatch Logs permissions for Lambda to write logs.
+    # SSM access is only on roles that need GEMINI_API_KEY at runtime.
+    #
+    # Naming convention: {FunctionName}LambdaRole
+    # Referenced in functions: section via role: !GetAtt {Name}LambdaRole.Arn
+
+    # Shared helper: CloudWatch Logs policy (all Lambdas need this)
+    # Inlined into each role rather than shared to maintain full isolation.
+
+    HealthLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-health-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Logs
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+
+    GetFeedLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-getFeed-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}/index/userId-createdAt-index'
+
+    GetPostLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-getPost-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:GetItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}'
+
+    SavePostLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-savePost-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}'
+
+    UnsavePostLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-unsavePost-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}'
+
+    GetSavedPostsLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-getSavedPosts-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}/index/userId-savedAt-index'
+
+    GetPreferencesLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-getPreferences-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:GetItem, dynamodb:PutItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
+
+    UpdatePreferencesLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-updatePreferences-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:UpdateItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
+
+    UpdateProfileLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-updateProfile-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:UpdateItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [ssm:GetParameter]
+                  Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/syntonia/${self:provider.stage}/*'
+
+    RequestPostLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-requestPost-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:GetItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [dynamodb:PutItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaRequests-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaRequests-${self:provider.stage}/index/userId-status-index'
+                - Effect: Allow
+                  Action: [dynamodb:UpdateItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaRateLimit-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [sqs:SendMessage]
+                  Resource: !GetAtt GenerationQueue.Arn
+                - Effect: Allow
+                  Action: [ssm:GetParameter]
+                  Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/syntonia/${self:provider.stage}/*'
+
+    WorkerInternalLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-workerInternal-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}/index/userId-createdAt-index'
+                - Effect: Allow
+                  Action: [dynamodb:PutItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [dynamodb:UpdateItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaRequests-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes]
+                  Resource: !GetAtt GenerationQueue.Arn
+                - Effect: Allow
+                  Action: [ssm:GetParameter]
+                  Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/syntonia/${self:provider.stage}/*'
+
+    OnUserSignupLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-onUserSignup-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:PutItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
+
+    GetLegalTermsStatusLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-getLegalTermsStatus-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaLegal-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [dynamodb:GetItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
+
+    GetLegalDocumentLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-getLegalDocument-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaLegal-${self:provider.stage}'
+
+    AcceptLegalTermsLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-acceptLegalTerms-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaLegal-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [dynamodb:UpdateItem]
+                  Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
 
     # ── Cognito ────────────────────────────────────────────────────────
 
@@ -2948,6 +3199,25 @@ resources:
           - AttributeName: key
             KeyType: HASH
 
+    SintoniaLegalTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: SintoniaLegal-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        # No TTL — legal documents are permanent records.
+        # PK: type ('terms' | 'privacy'), SK: createdAt (ISO 8601)
+        # Querying with ScanIndexForward: false, Limit: 1 returns the active document.
+        AttributeDefinitions:
+          - AttributeName: type
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: type
+            KeyType: HASH
+          - AttributeName: createdAt
+            KeyType: RANGE
+
     # ── SQS Queues ────────────────────────────────────────────────────
 
     GenerationQueue:
@@ -3045,6 +3315,7 @@ resources:
         Name: syntonia-generation-dlq-url-${self:provider.stage}
 
 plugins:
+  - serverless-esbuild
   - serverless-offline
 ```
 
@@ -3106,35 +3377,42 @@ syntonia-app/
 │       └── types/
 │           └── index.ts               # Post, Tag, Theme, Language, UserPreferencesLocal + AVAILABLE_TAGS
 │
-└── backend/                           # Serverless Framework
-    ├── package.json
-    ├── serverless.yml                 # Complete IaC
+└── backend/                           # Serverless Framework + TypeScript
+    ├── package.json                   # TypeScript, serverless-esbuild, @types/aws-lambda
+    ├── tsconfig.json                  # strict: true, target: ES2022, module: NodeNext
+    ├── serverless.yml                 # Complete IaC — all tables, functions, queues, Cognito
     ├── .env.local                     # GEMINI_API_KEY for local dev (NEVER committed)
     ├── .env.example                   # Variable template (committed)
     ├── .gitignore
+    ├── scripts/
+    │   └── seed-legal.ts              # PutItem: Terms of Use + Privacy Policy v1.0 into SintoniaLegal
     └── src/
-        ├── functions/
-        │   ├── getFeed.js             # GET /feed
-        │   ├── requestPost.js         # POST /feed/request (fetches description for SQS payload)
-        │   ├── getPost.js             # GET /post/{id}
-        │   ├── savePost.js            # POST /post/{id}/save
-        │   ├── unsavePost.js          # DELETE /post/{id}/save
-        │   ├── getSavedPosts.js       # GET /posts/saved
-        │   ├── getPreferences.js      # GET /user/preferences (with upsert fallback)
-        │   ├── updatePreferences.js   # PUT /user/preferences (tag enable/disable)
-        │   ├── updateProfile.js       # PUT /user/profile (description → AI tag extraction)
-        │   ├── health.js              # GET /health (public)
-        │   ├── workerInternal.js      # SQS trigger → Gemini → DynamoDB
-        │   └── onUserSignup.js        # Cognito Post-Confirmation Trigger
-        └── shared/
-            ├── db.js                  # DynamoDB client + all operations
-            ├── gemini.js              # Gemini client + prompt builder + parser
-            ├── sqs.js                 # SQS client + sendGenerationRequest
-            ├── rateLimit.js           # Fixed-window rate limiter (DynamoDB-backed)
-            ├── auth.js                # userId extraction from JWT
-            ├── response.js            # HTTP response helpers + CORS
-            ├── validators.js          # Zod schemas
-            └── constants.js           # AVAILABLE_TAGS and other constants
+        ├── functions/                 # 15 Lambda handlers (.ts)
+        │   ├── getFeed.ts             # GET /feed
+        │   ├── requestPost.ts         # POST /feed/request
+        │   ├── getPost.ts             # GET /post/{id}
+        │   ├── savePost.ts            # POST /post/{id}/save
+        │   ├── unsavePost.ts          # DELETE /post/{id}/save
+        │   ├── getSavedPosts.ts       # GET /posts/saved
+        │   ├── getPreferences.ts      # GET /user/preferences (upsert fallback + returns theme/language)
+        │   ├── updatePreferences.ts   # PUT /user/preferences (patch: activeTags? + theme? + language?)
+        │   ├── updateProfile.ts       # PUT /user/profile (description → Gemini tag extraction)
+        │   ├── health.ts              # GET /health (public, no auth)
+        │   ├── workerInternal.ts      # SQS trigger → Gemini → DynamoDB (reservedConcurrency: 5)
+        │   ├── onUserSignup.ts        # Cognito Post-Confirmation Trigger
+        │   ├── getLegalTermsStatus.ts # GET /legal/terms-status
+        │   ├── getLegalDocument.ts    # GET /legal/{type} (terms | privacy)
+        │   └── acceptLegalTerms.ts   # POST /legal/accept
+        └── shared/                   # Reusable TypeScript modules
+            ├── types.ts               # ApiErrorCode, Tag, UserRecord, LegalDocument, etc.
+            ├── constants.ts           # AVAILABLE_TAGS, DEFAULT_TAGS, Tables
+            ├── db.ts                  # DynamoDB client + all operations
+            ├── gemini.ts              # Gemini client + prompt builder + response parser
+            ├── sqs.ts                 # SQS client + sendGenerationRequest
+            ├── rateLimit.ts           # Fixed-window rate limiter (DynamoDB-backed)
+            ├── auth.ts                # getUserId() + getUserEmail() from JWT claims
+            ├── response.ts            # HTTP response helpers + CORS + error codes
+            └── validators.ts          # Zod schemas + validate() helper
 ```
 
 ### Auxiliary Configuration Files

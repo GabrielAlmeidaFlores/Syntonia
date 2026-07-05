@@ -41,6 +41,7 @@ export default function ProfilePage(): React.JSX.Element {
   const [activeTab, setActiveTab] = React.useState<Tab>("profile");
   const [slideDirection, setSlideDirection] = React.useState<1 | -1>(1);
   const [showLogoutModal, setShowLogoutModal] = React.useState(false);
+  const [isExtractingTags, setIsExtractingTags] = React.useState(false);
   const t = useTranslation();
 
   const TABS: Array<{ value: Tab; label: string; icon: typeof User }> = [
@@ -136,9 +137,11 @@ export default function ProfilePage(): React.JSX.Element {
             >
               {activeTab === "profile" && (
                 <>
-                  <DescriptionForm />
+                  <DescriptionForm
+                    onExtractionStateChange={setIsExtractingTags}
+                  />
                   <div className="border-t border-surface-border pt-6">
-                    <TagManager />
+                    <TagManager isExtracting={isExtractingTags} />
                   </div>
                 </>
               )}

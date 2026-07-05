@@ -1,0 +1,953 @@
+service: syntonia-backend
+
+frameworkVersion: '4'
+
+plugins:
+  - serverless-esbuild
+  - serverless-offline
+
+custom:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    target: node22
+    platform: node
+    format: cjs
+    external:
+      - '@aws-sdk/*'
+    packager: npm
+
+  serverless-offline:
+    httpPort: 3000
+    lambdaPort: 3002
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  region: sa-east-1
+  stage: ${opt:stage, 'dev'}
+
+  environment:
+    STAGE: ${self:provider.stage}
+    FEED_TABLE: SintoniaFeed-${self:provider.stage}
+    REQUESTS_TABLE: SintoniaRequests-${self:provider.stage}
+    USERS_TABLE: SintoniaUsers-${self:provider.stage}
+    RATE_LIMIT_TABLE: SintoniaRateLimit-${self:provider.stage}
+    LEGAL_TABLE: SintoniaLegal-${self:provider.stage}
+    GENERATION_QUEUE_URL: !Ref GenerationQueue
+    GEMINI_API_KEY: ${ssm:/syntonia/${self:provider.stage}/gemini-api-key}
+    # Override to restrict origins in production:
+    # CORS_ORIGINS: 'https://syntonia.app,https://dev.syntonia.app'
+    CORS_ORIGINS: ${env:CORS_ORIGINS, '*'}
+
+  apiGateway:
+    throttle:
+      burstLimit: 1000
+      rateLimit: 500
+
+  logRetentionInDays: 14
+
+  # IAM: no shared role — each Lambda uses its own least-privilege role
+  # (defined in resources: section, referenced via role: on each function)
+
+functions:
+
+  # ── Public ─────────────────────────────────────────────────────────
+
+  health:
+    handler: src/functions/health.handler
+    role: !GetAtt HealthLambdaRole.Arn
+    timeout: 5
+    description: "Public health check — no auth required"
+    events:
+      - http:
+          path: health
+          method: get
+          cors: true
+
+  # ── Feed ───────────────────────────────────────────────────────────
+
+  getFeed:
+    handler: src/functions/getFeed.handler
+    role: !GetAtt GetFeedLambdaRole.Arn
+    timeout: 10
+    description: "Returns paginated posts for the authenticated user"
+    events:
+      - http:
+          path: feed
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  requestPost:
+    handler: src/functions/requestPost.handler
+    role: !GetAtt RequestPostLambdaRole.Arn
+    timeout: 10
+    description: "Queues JIT content generation request via SQS"
+    events:
+      - http:
+          path: feed/request
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  getPost:
+    handler: src/functions/getPost.handler
+    role: !GetAtt GetPostLambdaRole.Arn
+    timeout: 10
+    description: "Returns a single post with full Markdown content"
+    events:
+      - http:
+          path: post/{id}
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  savePost:
+    handler: src/functions/savePost.handler
+    role: !GetAtt SavePostLambdaRole.Arn
+    timeout: 10
+    description: "Bookmarks a post — sets savedAt, removes TTL"
+    events:
+      - http:
+          path: post/{id}/save
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  unsavePost:
+    handler: src/functions/unsavePost.handler
+    role: !GetAtt UnsavePostLambdaRole.Arn
+    timeout: 10
+    description: "Removes bookmark — clears savedAt, restores TTL to now+30d"
+    events:
+      - http:
+          path: post/{id}/save
+          method: delete
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  likePost:
+    handler: src/functions/likePost.handler
+    role: !GetAtt LikePostLambdaRole.Arn
+    timeout: 10
+    description: "Likes a post — sets likedAt for AI preference feedback"
+    events:
+      - http:
+          path: post/{id}/like
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  unlikePost:
+    handler: src/functions/unlikePost.handler
+    role: !GetAtt UnlikePostLambdaRole.Arn
+    timeout: 10
+    description: "Removes like — clears likedAt"
+    events:
+      - http:
+          path: post/{id}/like
+          method: delete
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  getSavedPosts:
+    handler: src/functions/getSavedPosts.handler
+    role: !GetAtt GetSavedPostsLambdaRole.Arn
+    timeout: 10
+    description: "Returns paginated saved posts via userId-savedAt-index GSI"
+    events:
+      - http:
+          path: posts/saved
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  # ── User ───────────────────────────────────────────────────────────
+
+  getPreferences:
+    handler: src/functions/getPreferences.handler
+    role: !GetAtt GetPreferencesLambdaRole.Arn
+    timeout: 10
+    description: "Returns user profile, tags, theme and language (upserts profile if missing)"
+    events:
+      - http:
+          path: user/preferences
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  updatePreferences:
+    handler: src/functions/updatePreferences.handler
+    role: !GetAtt UpdatePreferencesLambdaRole.Arn
+    timeout: 10
+    description: "Patch endpoint — updates any of: activeTags, theme, language"
+    events:
+      - http:
+          path: user/preferences
+          method: put
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  updateProfile:
+    handler: src/functions/updateProfile.handler
+    role: !GetAtt UpdateProfileLambdaRole.Arn
+    timeout: 29
+    description: "Saves description and calls Gemini to extract active tags (sync, up to 29s)"
+    events:
+      - http:
+          path: user/profile
+          method: put
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  # ── Legal / Terms ──────────────────────────────────────────────────
+
+  getLegalTermsStatus:
+    handler: src/functions/getLegalTermsStatus.handler
+    role: !GetAtt GetLegalTermsStatusLambdaRole.Arn
+    timeout: 5
+    description: "Returns whether user needs to accept updated terms"
+    events:
+      - http:
+          path: legal/terms-status
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  getLegalDocument:
+    handler: src/functions/getLegalDocument.handler
+    role: !GetAtt GetLegalDocumentLambdaRole.Arn
+    timeout: 5
+    description: "Returns the active Terms of Use or Privacy Policy document"
+    events:
+      - http:
+          path: legal/{type}
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  acceptLegalTerms:
+    handler: src/functions/acceptLegalTerms.handler
+    role: !GetAtt AcceptLegalTermsLambdaRole.Arn
+    timeout: 5
+    description: "Records user acceptance of the current terms and privacy policy versions"
+    events:
+      - http:
+          path: legal/accept
+          method: post
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId: !Ref ApiGatewayAuthorizer
+
+  # ── Async Worker ───────────────────────────────────────────────────
+
+  workerInternal:
+    handler: src/functions/workerInternal.handler
+    role: !GetAtt WorkerInternalLambdaRole.Arn
+    timeout: 60
+    reservedConcurrency: 5
+    description: "Consumes SQS queue and generates content with Gemini (includes dedup context)"
+    events:
+      - sqs:
+          arn: !GetAtt GenerationQueue.Arn
+          batchSize: 1
+          functionResponseType: ReportBatchItemFailures
+
+  # ── Cognito Trigger ────────────────────────────────────────────────
+
+  onUserSignup:
+    handler: src/functions/onUserSignup.handler
+    role: !GetAtt OnUserSignupLambdaRole.Arn
+    timeout: 10
+    description: "Creates user profile in DynamoDB after email confirmation"
+
+resources:
+  Resources:
+
+    # ── IAM Roles (per Lambda — least privilege) ───────────────────────
+
+    HealthLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-health-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Logs
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+
+    GetFeedLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-getFeed-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}/index/userId-createdAt-index'
+
+    GetPostLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-getPost-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:GetItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}'
+
+    SavePostLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-savePost-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}'
+
+    UnsavePostLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-unsavePost-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}'
+
+    LikePostLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-likePost-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}'
+
+    UnlikePostLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-unlikePost-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}'
+
+    GetSavedPostsLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-getSavedPosts-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}/index/userId-savedAt-index'
+
+    GetPreferencesLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-getPreferences-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:GetItem, dynamodb:PutItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
+
+    UpdatePreferencesLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-updatePreferences-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:UpdateItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
+
+    UpdateProfileLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-updateProfile-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:UpdateItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [ssm:GetParameter]
+                  Resource:
+                    - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/syntonia/${self:provider.stage}/*'
+
+    RequestPostLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-requestPost-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:GetItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [dynamodb:PutItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaRequests-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaRequests-${self:provider.stage}/index/userId-status-index'
+                - Effect: Allow
+                  Action: [dynamodb:UpdateItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaRateLimit-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [sqs:SendMessage]
+                  Resource:
+                    - !GetAtt GenerationQueue.Arn
+                - Effect: Allow
+                  Action: [ssm:GetParameter]
+                  Resource:
+                    - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/syntonia/${self:provider.stage}/*'
+
+    WorkerInternalLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-workerInternal-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}/index/userId-createdAt-index'
+                - Effect: Allow
+                  Action: [dynamodb:PutItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [dynamodb:UpdateItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaRequests-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes]
+                  Resource:
+                    - !GetAtt GenerationQueue.Arn
+                - Effect: Allow
+                  Action: [ssm:GetParameter]
+                  Resource:
+                    - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/syntonia/${self:provider.stage}/*'
+
+    OnUserSignupLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-onUserSignup-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:PutItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
+
+    GetLegalTermsStatusLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-getLegalTermsStatus-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaLegal-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [dynamodb:GetItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
+
+    GetLegalDocumentLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-getLegalDocument-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaLegal-${self:provider.stage}'
+
+    AcceptLegalTermsLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: syntonia-acceptLegalTerms-${self:provider.stage}
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: { Service: lambda.amazonaws.com }
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: Policy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: arn:aws:logs:*:*:*
+                - Effect: Allow
+                  Action: [dynamodb:Query]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaLegal-${self:provider.stage}'
+                - Effect: Allow
+                  Action: [dynamodb:UpdateItem]
+                  Resource:
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaUsers-${self:provider.stage}'
+
+    # ── Cognito ────────────────────────────────────────────────────────
+
+    CognitoUserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: syntonia-users-${self:provider.stage}
+        UsernameAttributes: [email]
+        AutoVerifiedAttributes: [email]
+        EmailVerificationMessage: "Your Syntonia verification code: {####}"
+        EmailVerificationSubject: "Confirm your email — Syntonia"
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 8
+            RequireUppercase: false
+            RequireNumbers: true
+            RequireSymbols: false
+        LambdaConfig:
+          PostConfirmation: !GetAtt OnUserSignupLambdaFunction.Arn
+
+    CognitoLambdaPermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        Action: lambda:InvokeFunction
+        FunctionName: !GetAtt OnUserSignupLambdaFunction.Arn
+        Principal: cognito-idp.amazonaws.com
+        SourceArn: !GetAtt CognitoUserPool.Arn
+
+    CognitoUserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: syntonia-web-client
+        UserPoolId: !Ref CognitoUserPool
+        GenerateSecret: false
+        ExplicitAuthFlows:
+          - ALLOW_USER_SRP_AUTH
+          - ALLOW_USER_PASSWORD_AUTH
+          - ALLOW_REFRESH_TOKEN_AUTH
+        PreventUserExistenceErrors: ENABLED
+        IdTokenValidity: 1
+        AccessTokenValidity: 1
+        RefreshTokenValidity: 30
+        TokenValidityUnits:
+          IdToken: hours
+          AccessToken: hours
+          RefreshToken: days
+
+    ApiGatewayAuthorizer:
+      Type: AWS::ApiGateway::Authorizer
+      Properties:
+        Name: SyntoniaCognitoAuthorizer
+        Type: COGNITO_USER_POOLS
+        IdentitySource: method.request.header.Authorization
+        RestApiId: !Ref ApiGatewayRestApi
+        ProviderARNs:
+          - !GetAtt CognitoUserPool.Arn
+
+    # ── DynamoDB Tables ────────────────────────────────────────────────
+
+    SintoniaFeedTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: SintoniaFeed-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+          - AttributeName: savedAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: userId-createdAt-index
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+          - IndexName: userId-savedAt-index
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: savedAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+    SintoniaRequestsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: SintoniaRequests-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: status
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: userId-status-index
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: status
+                KeyType: RANGE
+            Projection:
+              ProjectionType: KEYS_ONLY
+
+    SintoniaUsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: SintoniaUsers-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+
+    SintoniaRateLimitTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: SintoniaRateLimit-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+        AttributeDefinitions:
+          - AttributeName: key
+            AttributeType: S
+        KeySchema:
+          - AttributeName: key
+            KeyType: HASH
+
+    SintoniaLegalTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: SintoniaLegal-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: type
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: type
+            KeyType: HASH
+          - AttributeName: createdAt
+            KeyType: RANGE
+
+    # ── SQS ────────────────────────────────────────────────────────────
+
+    GenerationQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: syntonia-generation-${self:provider.stage}
+        VisibilityTimeout: 120
+        MessageRetentionPeriod: 86400
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt GenerationDLQ.Arn
+          maxReceiveCount: 3
+
+    GenerationDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: syntonia-generation-dlq-${self:provider.stage}
+        MessageRetentionPeriod: 1209600
+
+    # ── CloudWatch Alarms ──────────────────────────────────────────────
+
+    WorkerErrorAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: syntonia-worker-errors-${self:provider.stage}
+        AlarmDescription: "workerInternal Lambda errors >= 3 in 5 minutes"
+        MetricName: Errors
+        Namespace: AWS/Lambda
+        Dimensions:
+          - Name: FunctionName
+            Value: syntonia-backend-${self:provider.stage}-workerInternal
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 3
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+
+    ApiHighLatencyAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: syntonia-api-latency-${self:provider.stage}
+        AlarmDescription: "getFeed p95 latency above 3000ms"
+        MetricName: Duration
+        Namespace: AWS/Lambda
+        Dimensions:
+          - Name: FunctionName
+            Value: syntonia-backend-${self:provider.stage}-getFeed
+        ExtendedStatistic: p95
+        Period: 60
+        EvaluationPeriods: 3
+        Threshold: 3000
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+
+    DLQMessageAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: syntonia-dlq-messages-${self:provider.stage}
+        AlarmDescription: "Messages in GenerationDLQ — generation permanently failed"
+        MetricName: ApproximateNumberOfMessagesVisible
+        Namespace: AWS/SQS
+        Dimensions:
+          - Name: QueueName
+            Value: !GetAtt GenerationDLQ.QueueName
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+
+  Outputs:
+    ServiceEndpoint:
+      Value: !Sub 'https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}'
+      Export:
+        Name: syntonia-api-url-${self:provider.stage}
+    UserPoolId:
+      Value: !Ref CognitoUserPool
+      Export:
+        Name: syntonia-user-pool-id-${self:provider.stage}
+    UserPoolClientId:
+      Value: !Ref CognitoUserPoolClient
+      Export:
+        Name: syntonia-user-pool-client-id-${self:provider.stage}
+    GenerationQueueUrl:
+      Value: !Ref GenerationQueue
+      Export:
+        Name: syntonia-generation-queue-url-${self:provider.stage}

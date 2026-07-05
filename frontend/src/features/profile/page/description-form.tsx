@@ -11,6 +11,11 @@ import type { UpdateProfileResponse } from "@/types";
 
 type ExtractionState = "idle" | "extracting";
 
+interface DescriptionFormProps {
+  /** Called with `true` when extraction starts and `false` when it ends (success or error). */
+  readonly onExtractionStateChange: (isExtracting: boolean) => void;
+}
+
 /**
  * Description editing form on the ProfilePage.
  *
@@ -18,9 +23,13 @@ type ExtractionState = "idle" | "extracting";
  * runs mockExtractTags() to simulate Gemini AI tag extraction, and returns the
  * new activeTags after a 2s delay that mirrors real API latency.
  * Both the description and extracted tags are then synced to the user store.
- * Result feedback is shown via toast only — no inline label.
+ *
+ * Signals extraction state changes to the parent via `onExtractionStateChange`
+ * so the TagManager can show a loading skeleton while the API is in flight.
  */
-export function DescriptionForm(): React.JSX.Element {
+export function DescriptionForm({
+  onExtractionStateChange,
+}: DescriptionFormProps): React.JSX.Element {
   const description = useUserStore((s) => s.description);
   const setProfile = useUserStore((s) => s.setProfile);
   const addToast = useToastStore((s) => s.addToast);
@@ -34,6 +43,7 @@ export function DescriptionForm(): React.JSX.Element {
 
   const handleSave = async (): Promise<void> => {
     setState("extracting");
+    onExtractionStateChange(true);
 
     try {
       const response = await api.put<UpdateProfileResponse>("/user/profile", {
@@ -49,6 +59,7 @@ export function DescriptionForm(): React.JSX.Element {
       addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });
     } finally {
       setState("idle");
+      onExtractionStateChange(false);
     }
   };
 

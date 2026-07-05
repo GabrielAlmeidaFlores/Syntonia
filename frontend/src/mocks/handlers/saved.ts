@@ -78,7 +78,8 @@ const unsavePostHandler = http.delete<
  * GET /posts/saved
  *
  * Returns the user's saved posts ordered by savedAt descending.
- * Supports cursor-based pagination using a numeric offset cursor.
+ * Cursor is a base64-encoded JSON object `{ offset: number }` — identical
+ * structure to the production DynamoDB LastEvaluatedKey encoding.
  *
  * The 400ms delay simulates a DynamoDB GSI Query on userId-savedAt-index.
  */
@@ -92,7 +93,10 @@ const getSavedPostsHandler = http.get<never, never, SavedPostsResponse>(
     const limitParam = url.searchParams.get("limit");
 
     const limit = limitParam !== null ? Math.min(Number(limitParam), 50) : 12;
-    const offset = cursorParam !== null ? Number(cursorParam) : 0;
+    const offset =
+      cursorParam !== null
+        ? (JSON.parse(atob(cursorParam)) as { offset: number }).offset
+        : 0;
 
     const allSaved = getMockSavedPosts(savedIds, runtimeSavedAt).map((p) => ({
       ...p,
@@ -101,7 +105,10 @@ const getSavedPostsHandler = http.get<never, never, SavedPostsResponse>(
 
     const slice = allSaved.slice(offset, offset + limit);
     const nextOffset = offset + slice.length;
-    const nextCursor = nextOffset < allSaved.length ? String(nextOffset) : null;
+    const nextCursor =
+      nextOffset < allSaved.length
+        ? btoa(JSON.stringify({ offset: nextOffset }))
+        : null;
 
     return HttpResponse.json({
       posts: slice,

@@ -1,4 +1,4 @@
-import { ArrowLeft, Bookmark, BookmarkCheck, Share2 } from "lucide-react";
+import { ArrowLeft, Bookmark, BookmarkCheck, Heart, Share2 } from "lucide-react";
 import * as React from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
@@ -12,9 +12,16 @@ import { ShareModal } from "@/components/ui/share-modal";
 import { useTranslation } from "@/hooks/use-translation";
 import { formatRelativeTime } from "@/lib/utils";
 import { api, getApiErrorMessage } from "@/services/api";
+import { useLikedStore } from "@/stores/liked";
 import { useSavedStore } from "@/stores/saved";
 import { useToastStore } from "@/stores/toast";
-import type { Post, SavePostResponse, UnsavePostResponse } from "@/types";
+import type {
+  LikePostResponse,
+  Post,
+  SavePostResponse,
+  UnlikePostResponse,
+  UnsavePostResponse,
+} from "@/types";
 
 interface PostDetailProps {
   readonly post: Post;
@@ -24,7 +31,7 @@ interface PostDetailProps {
 /**
  * Full-screen post detail panel that slides in from the right.
  * Renders the post's Markdown content with syntax-highlighted code blocks.
- * Includes a save/unsave bookmark toggle that calls POST|DELETE /post/:id/save.
+ * Header contains: Back · ❤️ Like · 🔖 Bookmark · Share
  */
 export function PostDetail({
   post,
@@ -33,15 +40,19 @@ export function PostDetail({
   const isSaved = useSavedStore((s) => s.isSaved(post.id));
   const storeSave = useSavedStore((s) => s.save);
   const storeUnsave = useSavedStore((s) => s.unsave);
+  const isLiked = useLikedStore((s) => s.isLiked(post.id));
+  const storeLike = useLikedStore((s) => s.like);
+  const storeUnlike = useLikedStore((s) => s.unlike);
   const addToast = useToastStore((s) => s.addToast);
-  const [toggling, setToggling] = React.useState(false);
+  const [togglingBookmark, setTogglingBookmark] = React.useState(false);
+  const [togglingLike, setTogglingLike] = React.useState(false);
   const [showUnsaveConfirm, setShowUnsaveConfirm] = React.useState(false);
   const [showShare, setShowShare] = React.useState(false);
   const t = useTranslation();
 
   const doUnsave = React.useCallback((): void => {
-    if (toggling) return;
-    setToggling(true);
+    if (togglingBookmark) return;
+    setTogglingBookmark(true);
     setShowUnsaveConfirm(false);
     void api
       .delete<UnsavePostResponse>(`/post/${post.id}/save`)
@@ -53,17 +64,17 @@ export function PostDetail({
         addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });
       })
       .finally(() => {
-        setToggling(false);
+        setTogglingBookmark(false);
       });
-  }, [toggling, post.id, storeUnsave, addToast, t]);
+  }, [togglingBookmark, post.id, storeUnsave, addToast, t]);
 
   const handleToggleSave = React.useCallback((): void => {
-    if (toggling) return;
+    if (togglingBookmark) return;
     if (isSaved) {
       setShowUnsaveConfirm(true);
       return;
     }
-    setToggling(true);
+    setTogglingBookmark(true);
     void api
       .post<SavePostResponse>(`/post/${post.id}/save`, {})
       .then((res) => {
@@ -74,9 +85,42 @@ export function PostDetail({
         addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });
       })
       .finally(() => {
-        setToggling(false);
+        setTogglingBookmark(false);
       });
-  }, [toggling, isSaved, post, storeSave, addToast, t]);
+  }, [togglingBookmark, isSaved, post, storeSave, addToast, t]);
+
+  const handleToggleLike = React.useCallback((): void => {
+    if (togglingLike) return;
+    setTogglingLike(true);
+
+    if (isLiked) {
+      void api
+        .delete<UnlikePostResponse>(`/post/${post.id}/like`)
+        .then(() => {
+          storeUnlike(post.id);
+          addToast({ type: "success", message: t.postDetail.toastUnliked });
+        })
+        .catch((err: unknown) => {
+          addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });
+        })
+        .finally(() => {
+          setTogglingLike(false);
+        });
+    } else {
+      void api
+        .post<LikePostResponse>(`/post/${post.id}/like`, {})
+        .then(() => {
+          storeLike(post.id);
+          addToast({ type: "success", message: t.postDetail.toastLiked });
+        })
+        .catch((err: unknown) => {
+          addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });
+        })
+        .finally(() => {
+          setTogglingLike(false);
+        });
+    }
+  }, [togglingLike, isLiked, post.id, storeLike, storeUnlike, addToast, t]);
 
   return (
     <div className="flex min-h-full flex-col bg-surface">
@@ -95,18 +139,31 @@ export function PostDetail({
           <Button
             variant="ghost"
             size="sm"
+            onClick={handleToggleLike}
+            disabled={togglingLike}
+            aria-label={isLiked ? t.postDetail.ariaUnlike : t.postDetail.ariaLike}
+            aria-pressed={isLiked}
+          >
+            <Heart
+              className={
+                isLiked
+                  ? "h-4 w-4 fill-red-500 text-red-500"
+                  : "h-4 w-4 text-content-muted"
+              }
+              aria-hidden
+            />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={handleToggleSave}
-            disabled={toggling}
-            aria-label={
-              isSaved ? t.postDetail.ariaUnsave : t.postDetail.ariaSave
-            }
+            disabled={togglingBookmark}
+            aria-label={isSaved ? t.postDetail.ariaUnsave : t.postDetail.ariaSave}
             aria-pressed={isSaved}
           >
             {isSaved ? (
-              <BookmarkCheck
-                className="h-4 w-4 text-accent-light"
-                aria-hidden
-              />
+              <BookmarkCheck className="h-4 w-4 text-accent-light" aria-hidden />
             ) : (
               <Bookmark className="h-4 w-4" aria-hidden />
             )}

@@ -18,9 +18,10 @@ interface GenerationResponse {
 /**
  * GET /feed
  *
- * Returns a paginated slice of MOCK_POSTS. The cursor is a base-10 numeric
- * string representing the start offset. Mirrors the real API contract:
- * { posts, cursor, hasMore }.
+ * Returns a paginated slice of MOCK_POSTS. The cursor is a base64-encoded JSON
+ * object `{ offset: number }` — identical structure to the production DynamoDB
+ * LastEvaluatedKey encoding, ensuring cursor behaviour is consistent between
+ * the mock and the real backend.
  *
  * The 400ms delay simulates a real DynamoDB GSI query via API Gateway + Lambda.
  */
@@ -33,14 +34,19 @@ const getFeedHandler = http.get<never, never, FeedResponse>(
     const cursorParam = url.searchParams.get("cursor");
     const limitParam = url.searchParams.get("limit");
 
-    const offset = cursorParam !== null ? Number(cursorParam) : 0;
+    const offset =
+      cursorParam !== null
+        ? (JSON.parse(atob(cursorParam)) as { offset: number }).offset
+        : 0;
     const limit =
       limitParam !== null ? Math.min(Number(limitParam), 10) : FEED_PAGE_SIZE;
 
     const slice = MOCK_POSTS.slice(offset, offset + limit);
     const nextOffset = offset + slice.length;
     const nextCursor =
-      nextOffset < MOCK_POSTS.length ? String(nextOffset) : null;
+      nextOffset < MOCK_POSTS.length
+        ? btoa(JSON.stringify({ offset: nextOffset }))
+        : null;
 
     return HttpResponse.json({
       posts: slice,

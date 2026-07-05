@@ -32,6 +32,10 @@ interface Translations {
     shareCopied: string;
     ariaSave: string;
     ariaUnsave: string;
+    ariaLike: string;
+    ariaUnlike: string;
+    toastLiked: string;
+    toastUnliked: string;
   };
   post: {
     notFound: string;
@@ -94,6 +98,7 @@ interface Translations {
     count: (active: number, total: number) => string;
     toastActivated: (tag: string) => string;
     toastDeactivated: (tag: string) => string;
+    extractingLabel: string;
   };
   settings: {
     themeLabel: string;
@@ -167,6 +172,7 @@ export const translations: Record<Language, Translations> = {
       UNAUTHENTICATED: "Your session has expired. Please sign in again.",
       POST_NOT_FOUND: "Post not found.",
       POST_NOT_SAVED: "This post is not in your saved list.",
+      POST_NOT_LIKED: "This post has not been liked.",
       LEGAL_DOCUMENT_NOT_FOUND:
         "Legal document not available. Please try again later.",
       VALIDATION_ERROR: "Invalid request. Please check your input.",
@@ -201,6 +207,10 @@ export const translations: Record<Language, Translations> = {
       shareCopied: "Copied!",
       ariaSave: "Save post",
       ariaUnsave: "Remove from saved",
+      ariaLike: "Like post",
+      ariaUnlike: "Remove like",
+      toastLiked: "Post liked.",
+      toastUnliked: "Like removed.",
     },
     post: {
       notFound: "Post not found",
@@ -268,6 +278,7 @@ export const translations: Record<Language, Translations> = {
       count: (active, total) => `${String(active)} of ${String(total)} active`,
       toastActivated: (tag) => `"${tag}" activated.`,
       toastDeactivated: (tag) => `"${tag}" deactivated.`,
+      extractingLabel: "Extracting your areas of interest with AI…",
     },
     settings: {
       themeLabel: "Theme",
@@ -342,6 +353,7 @@ export const translations: Record<Language, Translations> = {
       UNAUTHENTICATED: "Sua sessão expirou. Por favor, faça login novamente.",
       POST_NOT_FOUND: "Post não encontrado.",
       POST_NOT_SAVED: "Este post não está na sua lista de salvos.",
+      POST_NOT_LIKED: "Este post não foi curtido.",
       LEGAL_DOCUMENT_NOT_FOUND:
         "Documento legal não disponível. Tente novamente mais tarde.",
       VALIDATION_ERROR: "Requisição inválida. Por favor, verifique os dados.",
@@ -376,6 +388,10 @@ export const translations: Record<Language, Translations> = {
       shareCopied: "Copiado!",
       ariaSave: "Salvar post",
       ariaUnsave: "Remover dos salvos",
+      ariaLike: "Curtir post",
+      ariaUnlike: "Remover curtida",
+      toastLiked: "Post curtido.",
+      toastUnliked: "Curtida removida.",
     },
     post: {
       notFound: "Post não encontrado",
@@ -443,6 +459,7 @@ export const translations: Record<Language, Translations> = {
       count: (active, total) => `${String(active)} de ${String(total)} ativas`,
       toastActivated: (tag) => `"${tag}" ativada.`,
       toastDeactivated: (tag) => `"${tag}" desativada.`,
+      extractingLabel: "Extraindo suas áreas de interesse com IA…",
     },
     settings: {
       themeLabel: "Tema",

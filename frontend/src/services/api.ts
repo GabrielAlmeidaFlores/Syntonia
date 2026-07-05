@@ -30,6 +30,7 @@ function isApiErrorCode(value: unknown): value is ApiErrorCode {
     value === "UNAUTHENTICATED" ||
     value === "POST_NOT_FOUND" ||
     value === "POST_NOT_SAVED" ||
+    value === "POST_NOT_LIKED" ||
     value === "LEGAL_DOCUMENT_NOT_FOUND" ||
     value === "VALIDATION_ERROR" ||
     value === "TERMS_VERSION_MISMATCH" ||
@@ -100,6 +101,8 @@ export function getApiErrorMessage(
       return errors.POST_NOT_FOUND;
     case "POST_NOT_SAVED":
       return errors.POST_NOT_SAVED;
+    case "POST_NOT_LIKED":
+      return errors.POST_NOT_LIKED;
     case "LEGAL_DOCUMENT_NOT_FOUND":
       return errors.LEGAL_DOCUMENT_NOT_FOUND;
     case "VALIDATION_ERROR":

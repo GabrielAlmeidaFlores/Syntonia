@@ -651,6 +651,22 @@ Keyword-matching function that simulates Gemini's `extractTagsFromDescription`.
 Used by the `PUT /user/profile` MSW handler. Always returns at least 3 tags.
 Source: `src/mocks/data/tags.ts`.
 
+### Cursor format — mock matches production
+
+Both `GET /feed` and `GET /posts/saved` cursors use **base64-encoded JSON** to match the production DynamoDB `LastEvaluatedKey` encoding:
+
+```typescript
+// Encoding (in MSW handler)
+const nextCursor = btoa(JSON.stringify({ offset: nextOffset }));
+
+// Decoding (in MSW handler)
+const offset = cursorParam !== null
+  ? (JSON.parse(atob(cursorParam)) as { offset: number }).offset
+  : 0;
+```
+
+This ensures cursor behaviour is identical between mock and production — swapping MSW for the real backend requires zero frontend changes.
+
 ### Mock delays
 
 Always simulate realistic latency using `sleep()` from `@/lib/utils`:
@@ -772,12 +788,20 @@ Never hardcode tag strings in components — always import from `@/lib/constants
 ### Description → Tags flow
 
 1. User writes description in `DescriptionForm` (min 20, max 500 chars).
-2. On save → `PUT /user/profile` → `mockExtractTags(description)` simulates Gemini API.
-3. Returns `Tag[]` → `useUserStore.setProfile(description, extractedTags)`.
-4. `setProfile` sets both `extractedTags = tags` and `activeTags = tags` — all start active.
-5. `extractedTags` never changes after this point (immutable from user's perspective).
-6. User can toggle individual tags in `TagManager` — only `activeTags` changes.
-7. Deactivated tags stay visible in `TagSelector` (muted style) and can be re-enabled.
+2. On save → calls `onExtractionStateChange(true)` → `ProfilePage` sets `isExtractingTags = true` → `TagManager` renders skeleton chips.
+3. `PUT /user/profile` → `mockExtractTags(description)` simulates Gemini API (2s delay).
+4. Returns `Tag[]` → `useUserStore.setProfile(description, extractedTags)`.
+5. `setProfile` sets both `extractedTags = tags` and `activeTags = tags` — all start active.
+6. `onExtractionStateChange(false)` → `ProfilePage` sets `isExtractingTags = false` → `TagManager` renders real tags.
+7. `extractedTags` never changes after this point (immutable from user's perspective).
+8. User can toggle individual tags in `TagManager` — only `activeTags` changes.
+9. Deactivated tags stay visible in `TagSelector` (muted style) and can be re-enabled.
+
+**Tag loading state wiring:**
+- `ProfilePage` holds `isExtractingTags: boolean` state
+- `DescriptionForm` receives `onExtractionStateChange: (isExtracting: boolean) => void` prop
+- `TagManager` receives `isExtracting: boolean` prop
+- When `isExtracting` is true, `TagManager` renders 5 skeleton chips + animated label instead of the real tags
 
 ### Onboarding vs Profile
 
