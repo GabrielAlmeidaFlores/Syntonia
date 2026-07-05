@@ -55,12 +55,14 @@ backend/
 ├── scripts/
 │   └── seed-legal.ts         # Seeds SintoniaLegal table with v1.0 Terms + Privacy docs
 └── src/
-    ├── functions/            # 15 Lambda handlers
+    ├── functions/            # 17 Lambda handlers
     │   ├── getFeed.ts               # GET /feed
     │   ├── requestPost.ts           # POST /feed/request
     │   ├── getPost.ts               # GET /post/{id}
     │   ├── savePost.ts              # POST /post/{id}/save
     │   ├── unsavePost.ts            # DELETE /post/{id}/save
+    │   ├── likePost.ts              # POST /post/{id}/like
+    │   ├── unlikePost.ts            # DELETE /post/{id}/like
     │   ├── getSavedPosts.ts         # GET /posts/saved
     │   ├── getPreferences.ts        # GET /user/preferences
     │   ├── updatePreferences.ts     # PUT /user/preferences (patch)
@@ -143,7 +145,7 @@ These rules are enforced by `tsconfig.json`. **Never relax them.**
 ```typescript
 // ✓ correct
 import { getUserId } from '../shared/http/auth.js';
-import type { UserRecord } from '../shared/core/types.js';
+import type { UserRecord } from '../shared/core/types/index.js';
 
 // ✗ wrong — missing .js extension
 import { getUserId } from '../shared/http/auth';
@@ -306,7 +308,7 @@ All non-2xx responses MUST follow this exact format:
 { "code": "POST_NOT_FOUND", "error": "Not Found", "message": "English description for debugging." }
 ```
 
-The `code` field maps to `ApiErrorCode` in `src/shared/core/types.ts`. The frontend maps `code` → translated user-facing message via `t.errors[code]`. The `message` is for debugging/logs only — never shown to users.
+The `code` field maps to `ApiErrorCode` in `src/shared/core/types/index.ts`. The frontend maps `code` → translated user-facing message via `t.errors[code]`. The `message` is for debugging/logs only — never shown to users.
 
 ### ApiErrorCode values
 
@@ -315,6 +317,7 @@ The `code` field maps to `ApiErrorCode` in `src/shared/core/types.ts`. The front
 | `UNAUTHENTICATED` | 401 | All authenticated handlers | Token absent, expired, or invalid |
 | `POST_NOT_FOUND` | 404 | `getPost`, `savePost` | Post not found or belongs to another user |
 | `POST_NOT_SAVED` | 404 | `unsavePost` | Post exists but is not in the user's saved list |
+| `POST_NOT_LIKED` | 404 | `unlikePost` | Post exists but has not been liked by this user |
 | `LEGAL_DOCUMENT_NOT_FOUND` | 404 | `getLegalDocument`, `acceptLegalTerms` | No active document in SintoniaLegal for the requested type |
 | `VALIDATION_ERROR` | 400 | All handlers with body validation | Zod schema validation failed |
 | `TERMS_VERSION_MISMATCH` | 400 | `acceptLegalTerms` | Body versions ≠ current active versions in SintoniaLegal |
@@ -406,8 +409,8 @@ updateRequestStatus(id, status, extra?)  → void
 countPendingRequests(userId)             → number
 
 // Legal
-getLatestLegalDocument(type)             → LegalDocument | null   // ScanIndexForward: false, Limit: 1
-putLegalDocument(doc)                    → void
+getLatestLegalDocument(type, language?)   → LegalDocumentItem | null   // language defaults to 'en'; ScanIndexForward: false, Limit: 1 on typeLanguage PK
+putLegalDocument(doc)                     → void
 
 // Deduplication context
 getRecentPostsByTags(userId, tags, limit?) → Array<{ title: string; summary: string }>
@@ -590,7 +593,7 @@ Both functions try the primary model first; on failure automatically retry with 
 
 If the key is absent, `callGemini` throws `GeminiError('GEMINI_API_KEY not configured')`.
 
-**Tag extraction contract:** filters to only `AVAILABLE_TAGS`. Hallucinated tags are silently dropped. If 0 valid tags remain after filtering, throws `GeminiError`.
+**Tag extraction contract:** Returns any non-empty string values extracted by Gemini — free-form, no predefined allow-list. `Tag = string` in `src/shared/core/types/tag.ts`. If Gemini returns 0 valid tags (all empty/null), throws `GeminiError`.
 
 **Post generation contract:** validates JSON structure before returning. Required fields: `title`, `summary`, `content`, `tags`, `gradient`. `gradient` must be `[hexColor, hexColor]`.
 
@@ -611,19 +614,23 @@ getUserEmail(event) → string   // returns '' if email claim missing (non-throw
 
 ## §16 — SintoniaLegal Table
 
-Stores versioned legal documents (Terms of Use, Privacy Policy).
+Stores versioned legal documents (Terms of Use, Privacy Policy) per language.
 
 | Attribute | Type | Description |
 |---|---|---|
-| `type` (PK) | String | `"terms"` or `"privacy"` |
-| `createdAt` (SK) | String | ISO 8601 — newest item = currently active |
-| `version` | String | Human-readable: `"1.0"`, `"1.1"` |
-| `content` | String | Full Markdown document |
-| `updatedAt` | String | ISO 8601 — displayed to users in the UI |
+| `typeLanguage` **(PK)** | String | Composite key: `"{type}#{language}"` e.g. `"terms#en"`, `"privacy#pt-BR"` |
+| `createdAt` **(SK)** | String | ISO 8601 — newest item = currently active for that type+language |
+| `type` | String | `"terms"` or `"privacy"` — non-key attribute stored for filtering/display |
+| `language` | String | `"en"` or `"pt-BR"` — document language |
+| `version` | String | Human-readable: `"1.0"`, `"1.1"` — **same across all languages** for a given publish event |
+| `content` | String | Full Markdown document in the given language |
+| `updatedAt` | String | ISO 8601 — displayed to users in `LegalDocModal` |
 
-**Active document** = most recent item per type. Always query with `ScanIndexForward: false, Limit: 1`.
+**Active document** = most recent item for a `typeLanguage` key. Always query with `ScanIndexForward: false, Limit: 1`.
 
-**Publishing new terms:** `npm run seed:legal` (or a targeted `PutItem`). No migration needed — old rows are retained as audit trail.
+**Publishing new terms:** insert 2 new items per publish event — one per language — with `createdAt = now()`. Use the same `version` string across languages. Previous versions are retained as audit trail.
+
+**English fallback:** `getLegalDocument.ts` falls back to `'en'` if the requested language returns `null`.
 
 ### `getLegalTermsStatus` logic
 
@@ -713,7 +720,7 @@ try {
   const user: UserRecord = {
     userId,
     email,
-    activeTags: DEFAULT_TAGS,        // ['AWS', 'TypeScript', 'React']
+    activeTags: DEFAULT_TAGS,        // ['technology', 'travel', 'health & fitness', 'science', 'productivity', 'business & entrepreneurship', 'personal finance']
     createdAt: new Date().toISOString(),
     lastActiveAt: new Date().toISOString(),
     // theme and language NOT stored at signup — getPreferences returns defaults
@@ -755,7 +762,6 @@ return ok(event, {
   userId: user.userId,
   description: user.description ?? null,
   activeTags: user.activeTags,
-  availableTags: AVAILABLE_TAGS,
   theme: user.theme ?? 'dark',      // default if not yet stored
   language: user.language ?? 'en',  // default if not yet stored
 });
@@ -860,7 +866,7 @@ resources:
                   Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/SintoniaFeed-${self:provider.stage}/index/userId-createdAt-index'
 ```
 
-All 15 role definitions are in ARCHITECTURE.md §12. The pattern is identical for each — only the `PolicyDocument` statements differ.
+All 17 role definitions are in ARCHITECTURE.md §12. The pattern is identical for each — only the `PolicyDocument` statements differ.
 
 **Every role includes `logs:*` statements.** Without these, the Lambda function silently discards all log output.
 
@@ -927,7 +933,7 @@ npm run logs:worker   # serverless logs -f workerInternal --tail
 2. Add entry to `serverless.yml` under `functions:` with `handler`, `timeout`, `description`, and `events`.
 3. If it needs a new DynamoDB operation, add it to `src/shared/db/index.ts` (see §24).
 4. If it needs new input validation, add schema to `src/shared/http/validators.ts` (see §9).
-5. If it returns a new error code, add to `ApiErrorCode` in `src/shared/core/types.ts` AND to the table in §7.
+5. If it returns a new error code, add to `ApiErrorCode` in `src/shared/core/types/api-error-code.ts` AND to the table in §7.
 6. Update §3 directory tree in this file.
 7. Run `npm run build` → zero TypeScript errors.
 
@@ -946,13 +952,7 @@ npm run logs:worker   # serverless logs -f workerInternal --tail
 
 ## §25 — Monitoring & Structured Logs
 
-All handlers use structured console logs:
-
-```typescript
-console.log(`[functionName] message`);
-console.warn(`[functionName] warning message`);
-console.error(`[functionName] error message`, err);
-```
+All handlers use the structured logger from `src/shared/core/logger.ts`. See §4b for the full logger API and output format. `console.log` is forbidden in handlers — always use `createLogger`.
 
 CloudWatch log groups (auto-created by Serverless Framework):
 
@@ -963,6 +963,8 @@ CloudWatch log groups (auto-created by Serverless Framework):
 /aws/lambda/syntonia-backend-{stage}-getPost
 /aws/lambda/syntonia-backend-{stage}-savePost
 /aws/lambda/syntonia-backend-{stage}-unsavePost
+/aws/lambda/syntonia-backend-{stage}-likePost
+/aws/lambda/syntonia-backend-{stage}-unlikePost
 /aws/lambda/syntonia-backend-{stage}-getSavedPosts
 /aws/lambda/syntonia-backend-{stage}-getPreferences
 /aws/lambda/syntonia-backend-{stage}-updatePreferences
@@ -989,40 +991,18 @@ provider:
 
 ## §26 — seed-legal.ts (scripts/seed-legal.ts)
 
-The seed script inserts the initial Terms of Use and Privacy Policy documents into the `SintoniaLegal` table. Must be run once after first deploy.
+The seed script inserts the initial Terms of Use and Privacy Policy documents into the `SintoniaLegal` table for all supported languages (EN + PT-BR). Must be run once after first deploy.
 
 ```typescript
-// scripts/seed-legal.ts
-// Usage: npx tsx scripts/seed-legal.ts [stage]
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
-
-const stage = process.argv[2] ?? 'dev';
-const TABLE = `SintoniaLegal-${stage}`;
-
-const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-const now = new Date().toISOString();
-
 const documents = [
-  {
-    type: 'terms',
-    version: '1.0',
-    createdAt: now,
-    updatedAt: now,
-    content: `# Terms of Use\n\n...`,  // full Markdown
-  },
-  {
-    type: 'privacy',
-    version: '1.0',
-    createdAt: now,
-    updatedAt: now,
-    content: `# Privacy Policy\n\n...`,  // full Markdown
-  },
+  { typeLanguage: 'terms#en',    type: 'terms',   language: 'en',    version: '1.0', createdAt: now, updatedAt: now, content: TERMS_EN },
+  { typeLanguage: 'terms#pt-BR', type: 'terms',   language: 'pt-BR', version: '1.0', createdAt: now, updatedAt: now, content: TERMS_PT },
+  { typeLanguage: 'privacy#en',    type: 'privacy', language: 'en',    version: '1.0', createdAt: now, updatedAt: now, content: PRIVACY_EN },
+  { typeLanguage: 'privacy#pt-BR', type: 'privacy', language: 'pt-BR', version: '1.0', createdAt: now, updatedAt: now, content: PRIVACY_PT },
 ];
 
 for (const doc of documents) {
   await client.send(new PutCommand({ TableName: TABLE, Item: doc }));
-  console.log(`[seed-legal] Seeded ${doc.type} v${doc.version} into ${TABLE}`);
 }
 ```
 
@@ -1032,9 +1012,7 @@ npm run seed:legal              # targets dev stage
 npx tsx scripts/seed-legal.ts prod   # explicit stage
 ```
 
-**Content:** Use the Markdown content from `frontend/src/mocks/data/legal.ts` as a starting point. Update before production launch with real legal text.
-
-**Publishing new terms:** Insert a new item (PutItem). The previous version remains in the table as audit history. `getLatestLegalDocument` always returns the most recent.
+**Publishing new versions:** insert 4 new items (one per type+language) with a new `createdAt` and incremented `version`. Old items remain as audit history. `getLatestLegalDocument` always returns the most recent per `typeLanguage` key.
 
 ---
 
@@ -1134,9 +1112,10 @@ TTL by status (Unix seconds added to `Math.floor(Date.now() / 1000)`):
 ### SintoniaLegal (active document query)
 
 ```typescript
-// Always use this pattern — never query by version
-await getLatestLegalDocument('terms');   // most recent Terms of Use
-await getLatestLegalDocument('privacy'); // most recent Privacy Policy
+// Always pass the user's language; falls back to 'en' if not available
+await getLatestLegalDocument('terms', 'pt-BR');   // most recent PT-BR Terms
+await getLatestLegalDocument('privacy');           // most recent EN Privacy (default)
+// PK queried: typeLanguage = 'terms#pt-BR' | 'privacy#en'
 ```
 
 ---
@@ -1150,6 +1129,8 @@ await getLatestLegalDocument('privacy'); // most recent Privacy Policy
 | `getPost.ts` | GET | `/post/{id}` | ✓ | Full `Post` object |
 | `savePost.ts` | POST | `/post/{id}/save` | ✓ | `{ savedAt }` |
 | `unsavePost.ts` | DELETE | `/post/{id}/save` | ✓ | `{}` |
+| `likePost.ts` | POST | `/post/{id}/like` | ✓ | `{ likedAt }` |
+| `unlikePost.ts` | DELETE | `/post/{id}/like` | ✓ | `{}` |
 | `getSavedPosts.ts` | GET | `/posts/saved` | ✓ | `{ posts, cursor, hasMore }` |
 | `getPreferences.ts` | GET | `/user/preferences` | ✓ | `{ userId, description, activeTags, availableTags, theme, language }` |
 | `updatePreferences.ts` | PUT | `/user/preferences` | ✓ | `{}` |
@@ -1158,7 +1139,7 @@ await getLatestLegalDocument('privacy'); // most recent Privacy Policy
 | `workerInternal.ts` | SQS | — | — | void (SQS trigger) |
 | `onUserSignup.ts` | Cognito | — | — | event (Cognito PostConfirmation trigger) |
 | `getLegalTermsStatus.ts` | GET | `/legal/terms-status` | ✓ | `{ needsAcceptance, termsVersion, privacyVersion }` |
-| `getLegalDocument.ts` | GET | `/legal/{type}` | ✓ | `{ type, version, updatedAt, content, createdAt }` |
+| `getLegalDocument.ts` | GET | `/legal/{type}?lang={en\|pt-BR}` | ✓ | Full `LegalDocumentItem` (typeLanguage, type, language, version, createdAt, updatedAt, content) |
 | `acceptLegalTerms.ts` | POST | `/legal/accept` | ✓ | `{ acceptedAt }` |
 
 ---
@@ -1173,7 +1154,7 @@ The master architecture document lives at `../ARCHITECTURE.md`. The backend-rele
 | **§5** | DynamoDB table schemas, GSIs, TTL strategies, full access patterns table |
 | **§6** | Cognito authentication flow, JWT validation, token refresh |
 | **§7** | Gemini model config, prompt strategy, cost estimates |
-| **§8** | REST API contract — all 14 endpoints with request/response shapes and error codes |
+| **§8** | REST API contract — all 17 endpoints with request/response shapes and error codes |
 | **§9** | TypeScript data models |
 | **§10** | JIT content generation complete flow diagram |
 | **§12** | Full `serverless.yml` IaC |

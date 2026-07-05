@@ -1,20 +1,34 @@
-import type { LegalDocument, TermsStatus } from "@/types";
+/**
+ * Seed script — inserts Terms of Use and Privacy Policy documents into the
+ * SintoniaLegal DynamoDB table for all supported languages (en, pt-BR).
+ *
+ * Safe to re-run: each invocation inserts a new item with a fresh `createdAt`
+ * timestamp, which becomes the active document. Previous versions are retained
+ * as audit history and are never overwritten.
+ *
+ * Usage:
+ *   npm run seed:legal                       — targets dev stage
+ *   npx tsx scripts/seed-legal.ts prod       — targets prod stage
+ *
+ * Prerequisites: AWS credentials configured and the backend stack deployed.
+ *
+ * IMPORTANT: Replace the placeholder content below with real legal text
+ * reviewed by a qualified legal professional before the production launch.
+ */
 
-/** In-memory state for the mock session. */
-export let mockTermsStatus: TermsStatus = {
-  needsAcceptance: true,
-  termsVersion: "1.0",
-  privacyVersion: "1.0",
-};
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 
-/** Simulates the backend updating needsAcceptance after the user accepts. */
-export function mockAcceptTerms(): void {
-  mockTermsStatus = { ...mockTermsStatus, needsAcceptance: false };
-}
+const stage = process.argv[2] ?? 'dev';
+const TABLE = `SintoniaLegal-${stage}`;
+
+const client = DynamoDBDocumentClient.from(new DynamoDBClient({ region: 'sa-east-1' }));
+const now = new Date().toISOString();
+const date = now.slice(0, 10);
 
 const TERMS_EN = `# Terms of Use
 
-**Version 1.0 — Effective July 5, 2026**
+**Version 1.0 — Effective ${date}**
 
 ## 1. Acceptance of Terms
 
@@ -58,7 +72,7 @@ For questions about these terms, contact legal@syntonia.app.
 
 const TERMS_PT = `# Termos de Uso
 
-**Versão 1.0 — Vigente a partir de 5 de julho de 2026**
+**Versão 1.0 — Vigente a partir de ${date}**
 
 ## 1. Aceitação dos Termos
 
@@ -102,7 +116,7 @@ Para dúvidas sobre estes termos, entre em contato pelo e-mail legal@syntonia.ap
 
 const PRIVACY_EN = `# Privacy Policy
 
-**Version 1.0 — Effective July 5, 2026**
+**Version 1.0 — Effective ${date}**
 
 ## 1. Information We Collect
 
@@ -156,7 +170,7 @@ For privacy-related requests, contact privacy@syntonia.app.
 
 const PRIVACY_PT = `# Política de Privacidade
 
-**Versão 1.0 — Vigente a partir de 5 de julho de 2026**
+**Versão 1.0 — Vigente a partir de ${date}**
 
 ## 1. Informações que Coletamos
 
@@ -208,25 +222,16 @@ Notificaremos você sobre mudanças materiais nesta política através do aplica
 Para solicitações relacionadas à privacidade, entre em contato pelo e-mail privacy@syntonia.app.
 `;
 
-const CONTENT: Record<string, Record<string, string>> = {
-  terms:   { en: TERMS_EN,   'pt-BR': TERMS_PT },
-  privacy: { en: PRIVACY_EN, 'pt-BR': PRIVACY_PT },
-};
+const documents = [
+  { typeLanguage: 'terms#en',    type: 'terms',   language: 'en',    version: '1.0', createdAt: now, updatedAt: now, content: TERMS_EN },
+  { typeLanguage: 'terms#pt-BR', type: 'terms',   language: 'pt-BR', version: '1.0', createdAt: now, updatedAt: now, content: TERMS_PT },
+  { typeLanguage: 'privacy#en',    type: 'privacy', language: 'en',    version: '1.0', createdAt: now, updatedAt: now, content: PRIVACY_EN },
+  { typeLanguage: 'privacy#pt-BR', type: 'privacy', language: 'pt-BR', version: '1.0', createdAt: now, updatedAt: now, content: PRIVACY_PT },
+];
 
-/**
- * Returns the mock legal document for the given type and language.
- * Falls back to English if the requested language is not available.
- * In production, the backend returns localised content based on the `lang` query param.
- */
-export function getMockLegalDocument(
-  type: 'terms' | 'privacy',
-  lang: 'en' | 'pt-BR' = 'en',
-): LegalDocument {
-  const content = CONTENT[type]?.[lang] ?? CONTENT[type]?.['en'] ?? '';
-  return {
-    type,
-    version: '1.0',
-    updatedAt: '2026-07-05T00:00:00Z',
-    content,
-  };
+for (const doc of documents) {
+  await client.send(new PutCommand({ TableName: TABLE, Item: doc }));
+  console.log(`[seed-legal] Seeded ${doc.typeLanguage} v${doc.version} into ${TABLE}`);
 }
+
+console.log(`[seed-legal] Done — ${documents.length} documents written to ${TABLE}`);

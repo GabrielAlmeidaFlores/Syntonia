@@ -853,12 +853,12 @@ resources:
         TableName: SintoniaLegal-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
-          - AttributeName: type
+          - AttributeName: typeLanguage
             AttributeType: S
           - AttributeName: createdAt
             AttributeType: S
         KeySchema:
-          - AttributeName: type
+          - AttributeName: typeLanguage
             KeyType: HASH
           - AttributeName: createdAt
             KeyType: RANGE

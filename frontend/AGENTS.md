@@ -122,18 +122,20 @@ src/
 ├── mocks/
 │   ├── browser.ts                   Configures and exports the MSW ServiceWorker instance.
 │   ├── handlers/
-│   │   ├── index.ts                 Barrel: [...authHandlers, ...feedHandlers, ...legalHandlers, ...savedHandlers, ...userHandlers].
+│   │   ├── index.ts                 Barrel: [...authHandlers, ...feedHandlers, ...legalHandlers, ...likeHandlers, ...savedHandlers, ...userHandlers].
 │   │   ├── auth.ts                  POST /auth/callback → returns MOCK_USER + fake token (800ms).
 │   │   ├── feed.ts                  GET /feed, GET /post/:id, POST /feed/request.
-│   │   ├── legal.ts                 GET /legal/terms-status, GET /legal/terms, GET /legal/privacy,
-│   │   │                            POST /legal/accept. In-memory state: mockTermsStatus.
+│   │   ├── legal.ts                 GET /legal/terms-status, GET /legal/terms?lang=, GET /legal/privacy?lang=,
+│   │   │                            POST /legal/accept. In-memory state: mockTermsStatus. Reads ?lang param.
+│   │   ├── likes.ts                 POST /post/:id/like, DELETE /post/:id/like.
 │   │   ├── saved.ts                 POST /post/:id/save, DELETE /post/:id/save, GET /posts/saved.
 │   │   └── user.ts                  GET /user/preferences, PUT /user/preferences, PUT /user/profile.
 │   └── data/
 │       ├── index.ts                 Barrel: exports MOCK_POSTS, MOCK_USER, mockExtractTags, TAG_COLORS,
-│       │                            MOCK_SAVED_AT, getMockSavedPosts, getMockLegalDocument, mockTermsStatus.
-│       ├── legal.ts                 mockTermsStatus + mockAcceptTerms() + getMockLegalDocument().
-│       │                            Terms of Use and Privacy Policy content in Markdown.
+│       │                            MOCK_SAVED_AT, getMockSavedPosts, getMockLegalDocument, mockTermsStatus,
+│       │                            mockAcceptTerms.
+│       ├── legal.ts                 mockTermsStatus + mockAcceptTerms() + getMockLegalDocument(type, lang?).
+│       │                            Full Terms of Use and Privacy Policy in EN + PT-BR.
 │       ├── posts.ts                 15 mock posts (5 topics × 3) with Markdown content.
 │       ├── saved.ts                 MOCK_SAVED_AT map + getMockSavedPosts() helper.
 │       ├── user.ts                  MOCK_USER — single source of truth for the mock authenticated user.
@@ -167,6 +169,9 @@ src/
 │   │                                immutable after extraction), activeTags (enabled subset),
 │   │                                setProfile(), setTags(), toggleTag().
 │   │                                Persisted to localStorage: syntonia-user-prefs.
+│   ├── liked/
+│   │   └── index.ts                 useLikedStore — likedIds (Set, persisted), like(), unlike(), isLiked().
+│   │                                Persisted to localStorage: syntonia-liked.
 │   └── toast/
 │       └── index.ts                 useToastStore — toasts[], addToast, removeToast.
 ├── styles/
@@ -535,6 +540,7 @@ export const useMyStore = create<MyState>((set) => ({
 | `useAuthStore`        | `user`, `isAuthenticated`                                          | No         | —                      |
 | `useFeedStore`        | `posts[]`, `currentIndex`, `cursor`, `isLoading`, `isPostExpanded` | No         | —                      |
 | `useSavedStore`       | `savedIds` (Set), `posts[]`, `isSaved()`                           | Yes        | `syntonia-saved`       |
+| `useLikedStore`       | `likedIds` (Set), `isLiked()`                                      | Yes        | `syntonia-liked`       |
 | `usePreferencesStore` | `theme`, `language`                                                | Yes        | `syntonia-preferences` |
 | `useUserStore`        | `description`, `extractedTags`, `activeTags`                       | Yes        | `syntonia-user-prefs`  |
 | `useToastStore`       | `toasts[]`                                                         | No         | —                      |
@@ -593,6 +599,7 @@ All non-2xx backend responses carry `{ code: ApiErrorCode, error: string, messag
 | `UNAUTHENTICATED`          | Token absent, expired, or invalid                     |
 | `POST_NOT_FOUND`           | Post not found or belongs to another user             |
 | `POST_NOT_SAVED`           | Unsaving a post that is not saved                     |
+| `POST_NOT_LIKED`           | Unliking a post that has not been liked               |
 | `LEGAL_DOCUMENT_NOT_FOUND` | No active legal document for the type                 |
 | `VALIDATION_ERROR`         | Malformed body or invalid fields                      |
 | `TERMS_VERSION_MISMATCH`   | Accepted versions don't match current active versions |

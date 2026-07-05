@@ -23,26 +23,31 @@ const getTermsStatusHandler = http.get<never, never, TermsStatus>(
 
 /**
  * GET /legal/terms
- * Returns the current Terms of Use document.
- * Supports optional `?lang=pt-BR` query param (mock returns same content for both).
+ * Returns the current Terms of Use document in the requested language.
+ * Supports `?lang=en` (default) and `?lang=pt-BR` query params.
  */
 const getTermsHandler = http.get<never, never, LegalDocument>(
   "/legal/terms",
-  async () => {
+  async ({ request }) => {
     await delay(500);
-    return HttpResponse.json(getMockLegalDocument("terms"));
+    const url = new URL(request.url);
+    const lang = url.searchParams.get("lang") === "pt-BR" ? "pt-BR" : "en";
+    return HttpResponse.json(getMockLegalDocument("terms", lang));
   },
 );
 
 /**
  * GET /legal/privacy
- * Returns the current Privacy Policy document.
+ * Returns the current Privacy Policy document in the requested language.
+ * Supports `?lang=en` (default) and `?lang=pt-BR` query params.
  */
 const getPrivacyHandler = http.get<never, never, LegalDocument>(
   "/legal/privacy",
-  async () => {
+  async ({ request }) => {
     await delay(500);
-    return HttpResponse.json(getMockLegalDocument("privacy"));
+    const url = new URL(request.url);
+    const lang = url.searchParams.get("lang") === "pt-BR" ? "pt-BR" : "en";
+    return HttpResponse.json(getMockLegalDocument("privacy", lang));
   },
 );
 

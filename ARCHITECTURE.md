@@ -118,7 +118,7 @@ Y-AXIS (vertical scroll — navigates between posts)
 |---|---|
 | **AWS Amplify Hosting** | Frontend hosting (React SPA), automatic CI/CD per branch |
 | **API Gateway (REST)** | HTTP routing, CORS, Cognito Authorizer, throttling |
-| **AWS Lambda** | All business logic (11 functions + 1 Cognito trigger) |
+| **AWS Lambda** | All business logic (17 functions: 15 HTTP/SQS handlers + 1 Cognito trigger + 1 async worker) |
 | **DynamoDB** | Primary database (NoSQL, serverless, PAY_PER_REQUEST) |
 | **DynamoDB Streams** | Not used for queue triggering — SQS handles that |
 | **SQS (GenerationQueue)** | Reliable delivery of generation requests to `workerInternal` |
@@ -263,6 +263,7 @@ In production: remove MSW init from `main.tsx`, set `VITE_API_URL` → all reque
 | `useAuthStore` | `user`, `isAuthenticated`, `login()`, `logout()` | No | — |
 | `useFeedStore` | `posts[]`, `currentIndex`, `cursor`, `isLoading`, `isPostExpanded` | No | — |
 | `useSavedStore` | `savedIds` (Set), `posts[]`, `isSaved()` | Yes | `syntonia-saved` |
+| `useLikedStore` | `likedIds` (Set), `isLiked()` | Yes | `syntonia-liked` |
 | `usePreferencesStore` | `theme`, `language` | Yes | `syntonia-preferences` |
 | `useUserStore` | `description`, `extractedTags`, `activeTags` | Yes | `syntonia-user-prefs` |
 | `useTermsStore` | `needsAcceptance`, `termsVersion`, `privacyVersion`, `isChecking` | No | — |
@@ -404,8 +405,8 @@ VITE_AWS_REGION=sa-east-1
 ```
 Amplify Hosting
 ├── Repository:    GitHub (monorepo)
-├── Branch: main   → production (syntonia.app)
-├── Branch: dev    → staging (dev.syntonia.app)
+├── Branch: main          → production (syntonia.app)
+├── Branch: development   → staging (dev.syntonia.app)
 │
 ├── App root:      frontend/
 ├── Build command: yarn build
@@ -523,6 +524,8 @@ STAGE=dev
 | `getPost` | GET /post/{id} | 10s | Default | Returns a full post by ID |
 | `savePost` | POST /post/{id}/save | 10s | Default | Sets `savedAt`, removes `ttl` — post persists forever |
 | `unsavePost` | DELETE /post/{id}/save | 10s | Default | Removes `savedAt`, restores `ttl = now + 30d` |
+| `likePost` | POST /post/{id}/like | 10s | Default | Sets `likedAt` — used as positive AI feedback signal |
+| `unlikePost` | DELETE /post/{id}/like | 10s | Default | Removes `likedAt` |
 | `getSavedPosts` | GET /posts/saved | 10s | Default | Returns saved posts via `userId-savedAt-index` GSI |
 | `getPreferences` | GET /user/preferences | 10s | Default | Returns user profile, description, active tags, theme, and language |
 | `updatePreferences` | PUT /user/preferences | 10s | Default | Patch endpoint — accepts any combination of `activeTags`, `theme`, `language` |
@@ -533,688 +536,115 @@ STAGE=dev
 | `getLegalDocument` | GET /legal/terms, GET /legal/privacy | 5s | Default | Queries `SintoniaLegal` with `ScanIndexForward: false, Limit: 1` to return the active document |
 | `acceptLegalTerms` | POST /legal/accept | 5s | Default | Validates sent versions match active versions; writes `termsAcceptedVersion`, `privacyAcceptedVersion`, `termsAcceptedAt` to `SintoniaUsers` |
 
-### Shared Modules Implementation
+### Shared Modules
 
-**`src/shared/types.ts`** — shared type definitions
+> **Note:** The shared module layer is organised into domain subfolders — not flat files.
+> The authoritative reference for all file paths and function signatures is `backend/AGENTS.md`.
+
+```
+src/shared/
+├── core/
+│   ├── types/            # One file per type — import via types/index.js barrel
+│   │   ├── index.ts      # Re-exports all 11 types
+│   │   ├── api-error-code.ts   # ApiErrorCode (11 codes incl. POST_NOT_LIKED)
+│   │   ├── tag.ts              # Tag = string  (free-form — NO allow-list)
+│   │   ├── theme.ts            # Theme = 'dark' | 'light'
+│   │   ├── language.ts         # Language = 'en' | 'pt-BR'
+│   │   ├── post-item.ts        # PostItem (SintoniaFeed DynamoDB shape, incl. likedAt)
+│   │   ├── user-record.ts      # UserRecord (SintoniaUsers DynamoDB shape)
+│   │   ├── legal-document-item.ts  # LegalDocumentItem (typeLanguage PK, multi-language)
+│   │   ├── request-item.ts         # RequestItem (SintoniaRequests DynamoDB shape)
+│   │   ├── post-summary-with-like.ts  # Deduplication context for Gemini
+│   │   ├── generation-message.ts      # SQS GenerationQueue message body
+│   │   └── generated-post.ts          # Gemini post generation response
+│   ├── env.ts            # ALL process.env access centralised here
+│   ├── tables.ts         # Tables.FEED / .REQUESTS / .USERS / .RATE_LIMIT / .LEGAL
+│   ├── default-tags.ts   # DEFAULT_TAGS (7 broad tags) + DEFAULT_DESCRIPTION
+│   └── logger.ts         # createLogger(fn, ctx) — structured JSON logs (CloudWatch)
+├── http/
+│   ├── auth.ts           # getUserId(), getUserEmail(), AuthError
+│   ├── response.ts       # ok/badRequest/notFound/tooManyRequests/serverError(code?)
+│   │                     # CORS controlled via CORS_ORIGINS env var (default: '*')
+│   ├── validators.ts     # Zod schemas + validate() + ValidationError
+│   └── rateLimit.ts      # checkRateLimit() + RateLimitError
+├── db/
+│   └── index.ts          # All DynamoDB operations (see AGENTS.md §8)
+├── ai/
+│   └── gemini.ts         # generatePost(), extractTagsFromDescription(), GeminiError
+└── queue/
+    └── sqs.ts            # sendGenerationRequest() → GenerationQueue
+```
+
+**Key types (actual code):**
+
 ```typescript
+// Tag is free-form string — AI extracts whatever is relevant
+export type Tag = string;
+
+// 11 machine-readable error codes (frontend maps these to translated messages)
 export type ApiErrorCode =
-  | 'UNAUTHENTICATED'
-  | 'POST_NOT_FOUND'
-  | 'POST_NOT_SAVED'
-  | 'LEGAL_DOCUMENT_NOT_FOUND'
-  | 'VALIDATION_ERROR'
-  | 'TERMS_VERSION_MISMATCH'
-  | 'GENERATION_LIMIT_REACHED'
-  | 'RATE_LIMIT_EXCEEDED'
-  | 'AI_EXTRACTION_FAILED'
+  | 'UNAUTHENTICATED' | 'POST_NOT_FOUND' | 'POST_NOT_SAVED' | 'POST_NOT_LIKED'
+  | 'LEGAL_DOCUMENT_NOT_FOUND' | 'VALIDATION_ERROR' | 'TERMS_VERSION_MISMATCH'
+  | 'GENERATION_LIMIT_REACHED' | 'RATE_LIMIT_EXCEEDED' | 'AI_EXTRACTION_FAILED'
   | 'INTERNAL_ERROR';
 
-export type Tag = 'AWS' | 'React' | 'TypeScript' | 'Node.js' | 'Python'
-  | 'Docker' | 'Kubernetes' | 'Linux' | 'DynamoDB' | 'PostgreSQL'
-  | 'Redis' | 'GraphQL' | 'Rust' | 'Go' | 'CI/CD'
-  | 'Terraform' | 'Serverless' | 'Security' | 'Performance' | 'Architecture';
-
-export type Theme = 'dark' | 'light';
-export type Language = 'en' | 'pt-BR';
-
-export interface Post {
-  id: string;
-  userId: string;
-  title: string;
-  summary: string;
-  content: string;
-  tags: Tag[];
-  gradient: [string, string];
-  createdAt: string;
-  status: 'READY';
-  ttl?: number;
-  savedAt?: string;
+// SintoniaLegal item — PK is typeLanguage composite key; supports multi-language docs
+export interface LegalDocumentItem {
+  readonly typeLanguage: string;       // PK: 'terms#en', 'privacy#pt-BR', etc.
+  readonly type: 'terms' | 'privacy';
+  readonly language: 'en' | 'pt-BR';
+  readonly version: string;            // Same across languages per publish event
+  readonly createdAt: string;          // ISO 8601 — SK
+  readonly updatedAt: string;
+  readonly content: string;
 }
 
-export interface UserRecord {
-  userId: string;
-  email: string;
-  description?: string;
-  activeTags: Tag[];
-  theme?: Theme;
-  language?: Language;
-  termsAcceptedVersion?: string;
-  privacyAcceptedVersion?: string;
-  termsAcceptedAt?: string;
-  createdAt: string;
-  lastActiveAt: string;
-}
-
-export interface LegalDocument {
-  type: 'terms' | 'privacy';
-  version: string;
-  updatedAt: string;
-  content: string;
-  createdAt: string;
-}
-
-export interface APIGatewayEvent {
-  body: string | null;
-  pathParameters: Record<string, string> | null;
-  queryStringParameters: Record<string, string> | null;
-  requestContext: {
-    authorizer?: {
-      claims?: {
-        sub?: string;
-        email?: string;
-      };
-    };
-  };
-  headers: Record<string, string>;
+// SintoniaFeed item — likedAt is the like feedback signal for Gemini
+export interface PostItem {
+  readonly id: string;         // PK
+  readonly userId: string;
+  readonly title: string;
+  readonly summary: string;
+  readonly content: string;
+  readonly tags: Tag[];
+  readonly gradient: [string, string];
+  readonly createdAt: string;
+  readonly status: 'READY';
+  readonly ttl?: number;
+  readonly savedAt?: string;
+  readonly likedAt?: string;   // Set when liked — used by Gemini as positive signal
 }
 ```
 
-**`src/shared/constants.ts`**
+**CORS — env-var controlled, NOT hardcoded:**
+
 ```typescript
-export const AVAILABLE_TAGS = [
-  'AWS', 'React', 'TypeScript', 'Node.js', 'Python',
-  'Docker', 'Kubernetes', 'Linux', 'DynamoDB', 'PostgreSQL',
-  'Redis', 'GraphQL', 'Rust', 'Go', 'CI/CD',
-  'Terraform', 'Serverless', 'Security', 'Performance', 'Architecture',
-] as const;
-
-export const DEFAULT_TAGS = ['AWS', 'TypeScript', 'React'] as const;
-
-export const Tables = {
-  FEED: process.env['FEED_TABLE'] ?? 'SintoniaFeed-dev',
-  REQUESTS: process.env['REQUESTS_TABLE'] ?? 'SintoniaRequests-dev',
-  USERS: process.env['USERS_TABLE'] ?? 'SintoniaUsers-dev',
-  RATE_LIMIT: process.env['RATE_LIMIT_TABLE'] ?? 'SintoniaRateLimit-dev',
-  LEGAL: process.env['LEGAL_TABLE'] ?? 'SintoniaLegal-dev',
-} as const;
+// response.ts reads CORS_ORIGINS from env.ts
+// CORS_ORIGINS='*' (default) → wildcard header, no credentials
+// CORS_ORIGINS='https://a.com,...' → echoes matching origin + credentials: true
 ```
 
-**`src/shared/auth.ts`**
+**`getLatestLegalDocument` — language-aware:**
+
 ```typescript
-import type { APIGatewayEvent } from './types.js';
-
-export class AuthError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'AuthError';
-  }
-}
-
-export function getUserId(event: APIGatewayEvent): string {
-  const sub = event.requestContext?.authorizer?.claims?.sub;
-  if (!sub) throw new AuthError('Invalid or missing token');
-  return sub;
-}
-
-export function getUserEmail(event: APIGatewayEvent): string {
-  return event.requestContext?.authorizer?.claims?.email ?? '';
-}
+// Queries: typeLanguage = `${type}#${language}`, ScanIndexForward: false, Limit: 1
+export async function getLatestLegalDocument(
+  type: 'terms' | 'privacy',
+  language: 'en' | 'pt-BR' = 'en',
+): Promise<LegalDocumentItem | null>
 ```
 
-**`src/shared/response.ts`** — all error responses include `{ code, error, message }`
+**`serverError` accepts optional error code:**
+
 ```typescript
-import type { APIGatewayEvent, ApiErrorCode } from './types.js';
-
-const ALLOWED_ORIGINS = [
-  'https://syntonia.app',
-  'https://www.syntonia.app',
-  'https://dev.syntonia.app',
-  'http://localhost:5173',
-];
-
-function getCorsHeaders(event: APIGatewayEvent): Record<string, string> {
-  const origin = event.headers['origin'] ?? event.headers['Origin'] ?? '';
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : (ALLOWED_ORIGINS[0] ?? '');
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-  };
-}
-
-function build(statusCode: number, body: unknown, event: APIGatewayEvent) {
-  return {
-    statusCode,
-    headers: { 'Content-Type': 'application/json', ...getCorsHeaders(event) },
-    body: JSON.stringify(body),
-  };
-}
-
-export const ok = (event: APIGatewayEvent, body: unknown) => build(200, body, event);
-export const created = (event: APIGatewayEvent, body: unknown) => build(201, body, event);
-export const accepted = (event: APIGatewayEvent, body: unknown) => build(202, body, event);
-
-export const unauthorized = (event: APIGatewayEvent) =>
-  build(401, { code: 'UNAUTHENTICATED', error: 'Unauthorized', message: 'Invalid or missing token' }, event);
-
-export const badRequest = (event: APIGatewayEvent, message: string, code: ApiErrorCode = 'VALIDATION_ERROR') =>
-  build(400, { code, error: 'Bad Request', message }, event);
-
-export const notFound = (event: APIGatewayEvent, message: string, code: ApiErrorCode = 'POST_NOT_FOUND') =>
-  build(404, { code, error: 'Not Found', message }, event);
-
-export const tooManyRequests = (event: APIGatewayEvent, message: string, code: ApiErrorCode = 'RATE_LIMIT_EXCEEDED') =>
-  build(429, { code, error: 'Too Many Requests', message }, event);
-
-export const serverError = (event: APIGatewayEvent, err: unknown) => {
-  console.error('[SERVER ERROR]', err);
-  return build(500, { code: 'INTERNAL_ERROR', error: 'Internal Server Error', message: 'Internal error. Please try again.' }, event);
-};
+export function serverError(
+  event: APIGatewayProxyEvent,
+  err: unknown,
+  code: ApiErrorCode = 'INTERNAL_ERROR',
+): APIGatewayProxyResult
+// e.g.: return serverError(event, err, 'AI_EXTRACTION_FAILED');
 ```
 
-**`src/shared/validators.ts`**
-```typescript
-import { z } from 'zod';
-
-export class ValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ValidationError';
-  }
-}
-
-export const feedRequestSchema = z.object({
-  tags: z.array(z.string().min(1)).min(1).max(20),
-  quantity: z.number().int().min(1).max(5).default(3),
-});
-
-export const updatePreferencesSchema = z.object({
-  activeTags: z.array(z.string().min(1)).min(1).max(20).optional(),
-  theme: z.enum(['dark', 'light']).optional(),
-  language: z.enum(['en', 'pt-BR']).optional(),
-}).refine(
-  (d) => d.activeTags !== undefined || d.theme !== undefined || d.language !== undefined,
-  { message: 'At least one field (activeTags, theme, language) must be provided' },
-);
-
-export const updateProfileSchema = z.object({
-  description: z.string().min(20).max(500),
-});
-
-export const acceptLegalTermsSchema = z.object({
-  termsVersion: z.string().min(1),
-  privacyVersion: z.string().min(1),
-});
-
-export function validate<T>(schema: z.ZodSchema<T>, data: unknown): T {
-  const result = schema.safeParse(data);
-  if (!result.success) {
-    const message = result.error.errors.map((e) => e.message).join('; ');
-    throw new ValidationError(message);
-  }
-  return result.data;
-}
-```
-
-**`src/shared/db.ts`** — all DynamoDB operations (key sections shown)
-```typescript
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { Tables } from './constants.js';
-import type { Post, UserRecord, LegalDocument } from './types.js';
-
-const client = new DynamoDBClient({ region: process.env['AWS_REGION'] ?? 'sa-east-1' });
-export const db = DynamoDBDocumentClient.from(client);
-
-// ── Feed ──────────────────────────────────────────────────────────────
-
-export const getFeedByUser = async (userId: string, limit = 5, cursor: string | null = null) => {
-  const params: Parameters<typeof db.send>[0] extends { input: infer I } ? I : never = {
-    TableName: Tables.FEED,
-    IndexName: 'userId-createdAt-index',
-    KeyConditionExpression: 'userId = :uid',
-    ExpressionAttributeValues: { ':uid': userId },
-    ScanIndexForward: false,
-    Limit: limit,
-  } as Parameters<typeof QueryCommand>[0];
-  if (cursor !== null) {
-    (params as Record<string, unknown>)['ExclusiveStartKey'] =
-      JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8'));
-  }
-  const result = await db.send(new QueryCommand(params as Parameters<typeof QueryCommand>[0]));
-  const nextCursor = result.LastEvaluatedKey
-    ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64')
-    : null;
-  return { items: (result.Items ?? []) as Post[], cursor: nextCursor };
-};
-
-// ── Users ─────────────────────────────────────────────────────────────
-
-export const getUser = async (userId: string): Promise<UserRecord | null> => {
-  const result = await db.send(new GetCommand({ TableName: Tables.USERS, Key: { userId } }));
-  return (result.Item as UserRecord) ?? null;
-};
-
-export const saveUser = async (user: UserRecord) =>
-  db.send(new PutCommand({ TableName: Tables.USERS, Item: user }));
-
-export const updateUserProfile = async (userId: string, description: string, activeTags: string[]) =>
-  db.send(new UpdateCommand({
-    TableName: Tables.USERS,
-    Key: { userId },
-    UpdateExpression: 'SET #desc = :d, activeTags = :t, lastActiveAt = :ts',
-    ExpressionAttributeNames: { '#desc': 'description' },
-    ExpressionAttributeValues: { ':d': description, ':t': activeTags, ':ts': new Date().toISOString() },
-  }));
-
-export const updateUserPreferences = async (
-  userId: string,
-  patch: { activeTags?: string[]; theme?: string; language?: string },
-) => {
-  const sets: string[] = ['lastActiveAt = :ts'];
-  const names: Record<string, string> = {};
-  const values: Record<string, unknown> = { ':ts': new Date().toISOString() };
-
-  if (patch.activeTags !== undefined) { sets.push('activeTags = :at'); values[':at'] = patch.activeTags; }
-  if (patch.theme !== undefined) { sets.push('#th = :th'); names['#th'] = 'theme'; values[':th'] = patch.theme; }
-  if (patch.language !== undefined) { sets.push('#la = :la'); names['#la'] = 'language'; values[':la'] = patch.language; }
-
-  return db.send(new UpdateCommand({
-    TableName: Tables.USERS,
-    Key: { userId },
-    UpdateExpression: `SET ${sets.join(', ')}`,
-    ...(Object.keys(names).length > 0 && { ExpressionAttributeNames: names }),
-    ExpressionAttributeValues: values,
-  }));
-};
-
-export const acceptUserTerms = async (userId: string, termsVersion: string, privacyVersion: string) =>
-  db.send(new UpdateCommand({
-    TableName: Tables.USERS,
-    Key: { userId },
-    UpdateExpression: 'SET termsAcceptedVersion = :tv, privacyAcceptedVersion = :pv, termsAcceptedAt = :ta',
-    ExpressionAttributeValues: {
-      ':tv': termsVersion,
-      ':pv': privacyVersion,
-      ':ta': new Date().toISOString(),
-    },
-  }));
-
-// ── Legal Documents ────────────────────────────────────────────────────
-
-export const getLatestLegalDocument = async (type: 'terms' | 'privacy'): Promise<LegalDocument | null> => {
-  const result = await db.send(new QueryCommand({
-    TableName: Tables.LEGAL,
-    KeyConditionExpression: '#t = :t',
-    ExpressionAttributeNames: { '#t': 'type' },
-    ExpressionAttributeValues: { ':t': type },
-    ScanIndexForward: false,
-    Limit: 1,
-  }));
-  return ((result.Items ?? [])[0] as LegalDocument) ?? null;
-};
-
-export const putLegalDocument = async (doc: LegalDocument) =>
-  db.send(new PutCommand({ TableName: Tables.LEGAL, Item: doc }));
-
-// ── Deduplication context ─────────────────────────────────────────────
-
-/**
- * Returns the titles and summaries of the last `limit` posts for a user
- * that match any of the provided tags. Used by workerInternal to build the
- * deduplication context for the Gemini prompt.
- *
- * Only `id`, `title`, and `summary` are projected — content is not needed
- * and keeping the payload small is important since up to 30 posts are fetched.
- */
-export const getRecentPostsByTags = async (
-  userId: string,
-  tags: string[],
-  limit = 30,
-): Promise<Array<{ title: string; summary: string }>> => {
-  const result = await db.send(new QueryCommand({
-    TableName: Tables.FEED,
-    IndexName: 'userId-createdAt-index',
-    KeyConditionExpression: 'userId = :uid',
-    FilterExpression: tags.map((_, i) => `contains(tags, :tag${String(i)})`).join(' OR '),
-    ExpressionAttributeValues: {
-      ':uid': userId,
-      ...Object.fromEntries(tags.map((tag, i) => [`:tag${String(i)}`, tag])),
-    },
-    ProjectionExpression: 'title, summary',
-    ScanIndexForward: false,
-    Limit: limit * 3, // over-fetch to account for FilterExpression client-side filtering
-  }));
-
-  return ((result.Items ?? []) as Array<{ title: string; summary: string }>).slice(0, limit);
-};
-
-// (remaining functions: savePost, markPostSaved, markPostUnsaved, getSavedByUser,
-//  saveRequest, updateRequestStatus, countPendingRequests, getPostById — same logic
-//  as documented, fully typed with proper TypeScript signatures)
-```
-
-// ── Feed ──────────────────────────────────────────────────────────────
-
-export const getFeedByUser = async (userId, limit = 5, cursor = null) => {
-  const params = {
-    TableName: Tables.FEED,
-    IndexName: 'userId-createdAt-index',
-    KeyConditionExpression: 'userId = :uid',
-    ExpressionAttributeValues: { ':uid': userId },
-    ScanIndexForward: false, // descending — most recent posts first
-    Limit: limit,
-  };
-  if (cursor) {
-    params.ExclusiveStartKey = JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8'));
-  }
-  const result = await db.send(new QueryCommand(params));
-  const nextCursor = result.LastEvaluatedKey
-    ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64')
-    : null;
-  return { items: result.Items, cursor: nextCursor };
-};
-
-export const getPostById = async (postId) => {
-  const result = await db.send(new GetCommand({
-    TableName: Tables.FEED,
-    Key: { id: postId },
-  }));
-  return result.Item ?? null;
-};
-
-export const savePost = async (post) => {
-  return db.send(new PutCommand({ TableName: Tables.FEED, Item: post }));
-};
-
-export const markPostSaved = async (postId, userId) => {
-  const savedAt = new Date().toISOString();
-  return db.send(new UpdateCommand({
-    TableName: Tables.FEED,
-    Key: { id: postId },
-    ConditionExpression: 'userId = :uid',
-    UpdateExpression: 'SET savedAt = :s REMOVE #ttl',
-    ExpressionAttributeNames: { '#ttl': 'ttl' },
-    ExpressionAttributeValues: { ':s': savedAt, ':uid': userId },
-  }));
-};
-
-export const markPostUnsaved = async (postId, userId) => {
-  const ttl = Math.floor(Date.now() / 1000) + 2592000; // now + 30 days
-  return db.send(new UpdateCommand({
-    TableName: Tables.FEED,
-    Key: { id: postId },
-    ConditionExpression: 'userId = :uid',
-    UpdateExpression: 'REMOVE savedAt SET #ttl = :t',
-    ExpressionAttributeNames: { '#ttl': 'ttl' },
-    ExpressionAttributeValues: { ':t': ttl, ':uid': userId },
-  }));
-};
-
-export const getSavedByUser = async (userId, limit = 20, cursor = null) => {
-  const params = {
-    TableName: Tables.FEED,
-    IndexName: 'userId-savedAt-index',
-    KeyConditionExpression: 'userId = :uid',
-    ExpressionAttributeValues: { ':uid': userId },
-    ScanIndexForward: false, // newest saved first
-    Limit: limit,
-  };
-  if (cursor) {
-    params.ExclusiveStartKey = JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8'));
-  }
-  const result = await db.send(new QueryCommand(params));
-  const nextCursor = result.LastEvaluatedKey
-    ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64')
-    : null;
-  return { items: result.Items, cursor: nextCursor };
-};
-
-// ── Requests ─────────────────────────────────────────────────────────
-
-export const saveRequest = async (request) => {
-  return db.send(new PutCommand({ TableName: Tables.REQUESTS, Item: request }));
-};
-
-export const updateRequestStatus = async (id, status, extra = {}) => {
-  const updateExpressions = ['#s = :s'];
-  const names = { '#s': 'status' };
-  const values = { ':s': status };
-
-  Object.entries(extra).forEach(([k, v]) => {
-    updateExpressions.push(`#${k} = :${k}`);
-    names[`#${k}`] = k;
-    values[`:${k}`] = v;
-  });
-
-  return db.send(new UpdateCommand({
-    TableName: Tables.REQUESTS,
-    Key: { id },
-    UpdateExpression: `SET ${updateExpressions.join(', ')}`,
-    ExpressionAttributeNames: names,
-    ExpressionAttributeValues: values,
-  }));
-};
-
-export const countPendingRequests = async (userId) => {
-  const result = await db.send(new QueryCommand({
-    TableName: Tables.REQUESTS,
-    IndexName: 'userId-status-index',
-    KeyConditionExpression: 'userId = :uid AND #s = :s',
-    ExpressionAttributeNames: { '#s': 'status' },
-    ExpressionAttributeValues: { ':uid': userId, ':s': 'PENDING' },
-    Select: 'COUNT',
-  }));
-  return result.Count ?? 0;
-};
-
-// ── Users ─────────────────────────────────────────────────────────────
-
-export const getUser = async (userId) => {
-  const result = await db.send(new GetCommand({
-    TableName: Tables.USERS,
-    Key: { userId },
-  }));
-  return result.Item ?? null;
-};
-
-export const saveUser = async (user) => {
-  return db.send(new PutCommand({ TableName: Tables.USERS, Item: user }));
-};
-
-export const updateUserTags = async (userId, activeTags) => {
-  return db.send(new UpdateCommand({
-    TableName: Tables.USERS,
-    Key: { userId },
-    UpdateExpression: 'SET activeTags = :t, lastActiveAt = :d',
-    ExpressionAttributeValues: {
-      ':t': activeTags,
-      ':d': new Date().toISOString(),
-    },
-  }));
-};
-
-export const updateUserProfile = async (userId, description, activeTags) => {
-  // Saves the free-text description + AI-extracted tags in a single write
-  return db.send(new UpdateCommand({
-    TableName: Tables.USERS,
-    Key: { userId },
-    UpdateExpression: 'SET #desc = :d, activeTags = :t, lastActiveAt = :ts',
-    ExpressionAttributeNames: { '#desc': 'description' },
-    ExpressionAttributeValues: {
-      ':d': description,
-      ':t': activeTags,
-      ':ts': new Date().toISOString(),
-    },
-  }));
-};
-```
-
-**`src/shared/gemini.ts`**
-```typescript
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { AVAILABLE_TAGS } from './constants.js';
-import type { Tag } from './types.js';
-
-export class GeminiError extends Error {
-  constructor(message: string) { super(message); this.name = 'GeminiError'; }
-}
-
-interface GeneratedPost {
-  title: string;
-  summary: string;
-  content: string;
-  tags: Tag[];
-  gradient: [string, string];
-}
-
-const PRIMARY_MODEL = 'gemini-1.5-flash';
-const FALLBACK_MODEL = 'gemini-1.5-pro';
-
-export const generatePost = async (
-  { tags, description, recentPosts }: {
-    tags: string[];
-    description: string | null;
-    recentPosts: Array<{ title: string; summary: string }>;
-  }
-): Promise<GeneratedPost> => {
-  const prompt = buildPostPrompt(tags, description, recentPosts);
-  let raw: string;
-  try {
-    raw = await callGemini(PRIMARY_MODEL, prompt);
-  } catch {
-    raw = await callGemini(FALLBACK_MODEL, prompt);
-  }
-  return parseGeminiResponse(raw) as GeneratedPost;
-};
-
-export const extractTagsFromDescription = async (description: string): Promise<Tag[]> => {
-  const prompt = buildTagExtractionPrompt(description);
-  let raw: string;
-  try {
-    raw = await callGemini(PRIMARY_MODEL, prompt);
-  } catch {
-    raw = await callGemini(FALLBACK_MODEL, prompt);
-  }
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-  const extracted: unknown = JSON.parse(cleaned);
-  if (!Array.isArray(extracted)) throw new GeminiError('Expected a JSON array of tags');
-  const validTags = (extracted as unknown[])
-    .filter((t): t is Tag => typeof t === 'string' && (AVAILABLE_TAGS as readonly string[]).includes(t));
-  if (validTags.length === 0) throw new GeminiError('No valid tags extracted');
-  return validTags;
-};
-
-async function callGemini(modelName: string, prompt: string): Promise<string> {
-  const apiKey = process.env['GEMINI_API_KEY'];
-  if (!apiKey) throw new GeminiError('GEMINI_API_KEY not configured');
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: modelName });
-  const result = await model.generateContent(prompt);
-  return result.response.text();
-}
-
-function parseGeminiResponse(raw: string): unknown {
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-  const parsed = JSON.parse(cleaned) as Record<string, unknown>;
-  for (const field of ['title', 'summary', 'content', 'tags', 'gradient']) {
-    if (!parsed[field]) throw new GeminiError(`Missing field: ${field}`);
-  }
-  if (!Array.isArray(parsed['gradient']) || parsed['gradient'].length !== 2) {
-    throw new GeminiError('gradient must be a 2-element hex array');
-  }
-  return parsed;
-}
-
-function buildPostPrompt(
-  tags: string[],
-  description: string | null,
-  recentPosts: Array<{ title: string; summary: string }>,
-): string {
-  const recentContext = recentPosts.length > 0
-    ? `\nRecent posts already generated for this user on these tags (DO NOT repeat these topics or close variations):\n${recentPosts.map((p, i) => `${String(i + 1)}. "${p.title}" — ${p.summary}`).join('\n')}\n`
-    : '';
-
-  return `You are generating a technical article for a developer.
-${description ? `Developer profile: "${description}"\n` : ''}
-Active areas of interest: ${tags.join(', ')}.
-${recentContext}
-Generate a UNIQUE, dense, and original technical article about a specific and advanced subtopic
-within these areas of interest. The article MUST be substantially different from any topic listed above.
-
-Respond EXCLUSIVELY with a valid JSON object:
-
-{
-  "title": "Precise and technical title (max 60 characters)",
-  "summary": "One sentence practical value (max 120 characters)",
-  "content": "## Title\\n\\nFull Markdown, at least 600 words, with real code blocks.",
-  "tags": ["tag1", "tag2"],
-  "gradient": ["#hexcolor1", "#hexcolor2"]
-}
-
-Rules: 600+ words, real functional code, expert-level content, gradient coherent with theme.`;
-}
-
-function buildTagExtractionPrompt(description: string): string {
-  return `Given this developer profile description:
-"${description}"
-
-From the list below, extract the 5–10 most relevant tags:
-${AVAILABLE_TAGS.join(', ')}
-
-Rules:
-1. Only tags from the list above
-2. 5–10 tags ordered by relevance
-3. Respond ONLY with a JSON string array
-
-Example: ["AWS", "TypeScript", "Node.js"]`;
-}
-```
-
-**`src/shared/sqs.ts`**
-```typescript
-import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
-
-const client = new SQSClient({ region: process.env['AWS_REGION'] ?? 'sa-east-1' });
-
-export const sendGenerationRequest = async (params: {
-  requestId: string;
-  userId: string;
-  tags: string[];
-  description: string | null;
-}): Promise<string> => {
-  const queueUrl = process.env['GENERATION_QUEUE_URL'];
-  if (!queueUrl) throw new Error('GENERATION_QUEUE_URL not configured');
-  const result = await client.send(new SendMessageCommand({
-    QueueUrl: queueUrl,
-    MessageBody: JSON.stringify(params),
-  }));
-  return result.MessageId ?? '';
-};
-```
-
-**`src/shared/rateLimit.ts`**
-```typescript
-import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { db, Tables } from './db.js';
-
-export class RateLimitError extends Error {
-  constructor(message: string) { super(message); this.name = 'RateLimitError'; }
-}
-
-export const checkRateLimit = async (
-  key: string,
-  { max, windowSeconds }: { max: number; windowSeconds: number },
-): Promise<void> => {
-  const now = Math.floor(Date.now() / 1000);
-  const bucket = Math.floor(now / windowSeconds);
-  const windowKey = `${key}#${bucket}`;
-  const windowEnd = (bucket + 1) * windowSeconds;
-
-  const result = await db.send(new UpdateCommand({
-    TableName: Tables.RATE_LIMIT,
-    Key: { key: windowKey },
-    UpdateExpression: 'ADD #count :one SET #ttl = if_not_exists(#ttl, :expiry)',
-    ExpressionAttributeNames: { '#count': 'count', '#ttl': 'ttl' },
-    ExpressionAttributeValues: { ':one': 1, ':expiry': windowEnd + 60 },
-    ReturnValues: 'ALL_NEW',
-  }));
-
-  const count = (result.Attributes?.['count'] as number | undefined) ?? 1;
-  if (count > max) throw new RateLimitError(`Rate limit exceeded: ${key}`);
-};
-```
 
 ### Lambda Handler Implementations
 
@@ -1499,19 +929,25 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
 | Attribute | DynamoDB Type | Description |
 |---|---|---|
-| `type` **(PK)** | String | `"terms"` or `"privacy"` |
-| `createdAt` **(SK)** | String | ISO 8601 — creation timestamp. Sort key enables natural ordering: `ScanIndexForward: false, Limit: 1` returns the current active version. |
-| `version` | String | Human-readable version label (e.g. `"1.0"`, `"1.1"`). Used by the frontend in `GET /user/preferences` response comparison and displayed in the UI. |
-| `content` | String | Full document content in Markdown. Served directly by `GET /legal/terms` and `GET /legal/privacy`. |
+| `typeLanguage` **(PK)** | String | Composite key: `"{type}#{language}"` e.g. `"terms#en"`, `"privacy#pt-BR"` |
+| `createdAt` **(SK)** | String | ISO 8601 — creation timestamp. `ScanIndexForward: false, Limit: 1` returns the current active version per language. |
+| `type` | String | `"terms"` or `"privacy"` — non-key attribute stored for display |
+| `language` | String | `"en"` or `"pt-BR"` — document language |
+| `version` | String | Human-readable version label (e.g. `"1.0"`, `"1.1"`). Same across all languages per publish event. |
+| `content` | String | Full document content in Markdown in the given language. |
 | `updatedAt` | String | ISO 8601 — date shown to the user in `LegalDocModal`. |
 
-**Publishing a new version:** Insert a new item with `createdAt = now()` and the new `version` and `content`. No need to update or delete the previous row — the Lambda always queries with `ScanIndexForward: false, Limit: 1` to get the most recent. Old versions are retained for audit purposes.
+**Publishing new terms:** Insert 4 new items (one per type+language combination) with `createdAt = now()` and incremented `version`. No need to update or delete previous rows — they remain as audit history. `getLatestLegalDocument(type, language)` always returns the most recent.
 
 **`getLegalTermsStatus` logic:**
-1. Query `SintoniaLegal` for latest `terms` → get `version`
-2. Query `SintoniaLegal` for latest `privacy` → get `version`
+1. Query `SintoniaLegal` for latest `terms` (using `'en'` as canonical version source) → get `version`
+2. Query `SintoniaLegal` for latest `privacy` (using `'en'`) → get `version`
 3. GetItem from `SintoniaUsers` → read `termsAcceptedVersion` and `privacyAcceptedVersion`
-4. `needsAcceptance = termsLatest !== termsAcceptedVersion || privacyLatest !== privacyAcceptedVersion`
+4. `needsAcceptance = (termsVersion !== '' && privacyVersion !== '') && (termsLatest !== termsAccepted || privacyLatest !== privacyAccepted)`
+
+**`getLegalDocument` language fallback:**
+- `GET /legal/{type}?lang={en|pt-BR}` — query param selects language (default: `'en'`)
+- If the requested language returns `null`, automatically falls back to `'en'`
 
 ### Billing Mode
 
@@ -1829,14 +1265,8 @@ Returns the user's profile including description, active tags, and persisted UI 
 ```json
 {
   "userId": "cognito-sub-uuid",
-  "description": "Backend developer focused on AWS and distributed systems, learning Kubernetes and performance optimization.",
-  "activeTags": ["AWS", "Node.js", "Kubernetes", "Performance", "Serverless"],
-  "availableTags": [
-    "AWS", "React", "TypeScript", "Node.js", "Python",
-    "Docker", "Kubernetes", "Linux", "DynamoDB", "PostgreSQL",
-    "Redis", "GraphQL", "Rust", "Go", "CI/CD",
-    "Terraform", "Serverless", "Security", "Performance", "Architecture"
-  ],
+  "description": "Backend developer focused on AWS and distributed systems.",
+  "activeTags": ["AWS", "distributed systems", "Kubernetes"],
   "theme": "dark",
   "language": "en"
 }
@@ -1945,7 +1375,42 @@ Unsaves a post — removes `savedAt` and restores `ttl = now + 30 days`.
 | Status | When |
 |---|---|
 | `401 Unauthorized` | Invalid token |
+| `404 Not Found` | Post does not exist or belongs to another user (`POST_NOT_SAVED`) |
+| `500 Internal Server Error` | DynamoDB failure |
+
+---
+
+### `POST /post/:id/like` [AUTH]
+
+Likes a post — sets `likedAt` on the post item. This is used as a positive feedback signal by the Gemini prompt during content generation.
+
+**Response 200:**
+```json
+{ "likedAt": "2026-07-02T10:00:00Z" }
+```
+
+**Possible errors:**
+
+| Status | When |
+|---|---|
+| `401 Unauthorized` | Invalid token |
 | `404 Not Found` | Post does not exist or belongs to another user |
+| `500 Internal Server Error` | DynamoDB failure |
+
+---
+
+### `DELETE /post/:id/like` [AUTH]
+
+Removes the like from a post — clears `likedAt`.
+
+**Response 200:** `{}`
+
+**Possible errors:**
+
+| Status | When |
+|---|---|
+| `401 Unauthorized` | Invalid token |
+| `404 Not Found` | Post has not been liked by this user (`POST_NOT_LIKED`) |
 | `500 Internal Server Error` | DynamoDB failure |
 
 ---
@@ -2015,15 +1480,28 @@ Called on every authenticated session start. Determines whether the user must ac
 
 ### `GET /legal/terms` [AUTH]
 
-Returns the current active Terms of Use document as Markdown. Called by `TermsAcceptanceModal` (blocking modal at login) and `LegalDocModal` (Legal tab in Profile).
+> **Replaced by `GET /legal/{type}?lang=`** — see below. Both `/legal/terms` and `/legal/privacy` are handled by the same `getLegalDocument` Lambda via path parameter `{type}`.
+
+### `GET /legal/{type}?lang={en|pt-BR}` [AUTH]
+
+Returns the current active document (Terms of Use or Privacy Policy) as Markdown in the requested language. Called by `TermsAcceptanceModal` and `LegalDocModal`.
+
+**Path params:**
+- `type` — `"terms"` or `"privacy"`
+
+**Query params:**
+- `lang` — `"en"` (default) or `"pt-BR"`. Falls back to `"en"` if the requested language is not available.
 
 **Response 200:**
 ```json
 {
+  "typeLanguage": "terms#en",
   "type": "terms",
-  "version": "1.1",
-  "updatedAt": "2026-06-01T00:00:00Z",
-  "content": "## Terms of Use\n\n..."
+  "language": "en",
+  "version": "1.0",
+  "createdAt": "2026-07-05T00:00:00Z",
+  "updatedAt": "2026-07-05T00:00:00Z",
+  "content": "# Terms of Use\n\n..."
 }
 ```
 
@@ -2039,19 +1517,7 @@ Returns the current active Terms of Use document as Markdown. Called by `TermsAc
 
 ### `GET /legal/privacy` [AUTH]
 
-Returns the current active Privacy Policy document. Same contract as `GET /legal/terms` with `"type": "privacy"`.
-
-**Response 200:**
-```json
-{
-  "type": "privacy",
-  "version": "1.0",
-  "updatedAt": "2026-06-01T00:00:00Z",
-  "content": "## Privacy Policy\n\n..."
-}
-```
-
-**Possible errors:** same as `GET /legal/terms`.
+> Same contract as `GET /legal/{type}?lang=` with `type = "privacy"`.
 
 ---
 
@@ -2106,6 +1572,7 @@ All non-2xx responses follow a standard format. The `code` is a machine-readable
 | `UNAUTHENTICATED` | 401 | Token absent, expired, or invalid |
 | `POST_NOT_FOUND` | 404 | Post does not exist or belongs to another user |
 | `POST_NOT_SAVED` | 404 | Attempting to unsave a post that is not saved |
+| `POST_NOT_LIKED` | 404 | Attempting to unlike a post that has not been liked |
 | `LEGAL_DOCUMENT_NOT_FOUND` | 404 | No active document found for the requested type |
 | `VALIDATION_ERROR` | 400 | Malformed body or invalid field values |
 | `TERMS_VERSION_MISMATCH` | 400 | Sent versions don't match current active versions |
@@ -2121,64 +1588,62 @@ All non-2xx responses follow a standard format. The `code` is a machine-readable
 ### TypeScript (frontend)
 
 ```typescript
-// src/types/index.ts
+// src/types/domain.ts
+
+/** Free-form string tag — AI extracts any value; no predefined allow-list. */
+export type Tag = string;
+
+export type Theme = 'dark' | 'light';
+export type Language = 'en' | 'pt-BR';
 
 export interface Post {
-  id: string;
-  title: string;
-  summary: string;
-  content?: string;         // Only present after GET /post/:id
-  tags: string[];
-  gradient: [string, string];
-  createdAt: string;        // ISO 8601
-  savedAt?: string;         // ISO 8601 — present when the post is saved by the user
-}
-
-export interface SavedPostsResponse {
-  posts: Post[];
-  cursor: string | null;
-  hasMore: boolean;
+  readonly id: string;
+  readonly userId: string;
+  readonly title: string;
+  readonly summary: string;
+  readonly content?: string;        // Only present after GET /post/:id
+  readonly tags: Tag[];
+  readonly gradient: readonly [string, string];
+  readonly createdAt: string;       // ISO 8601
+  readonly savedAt?: string;        // ISO 8601 — present when saved by the user
+  readonly likedAt?: string;        // ISO 8601 — present when liked; used as AI feedback signal
 }
 
 export interface UserPreferences {
-  userId: string;
-  description: string | null;   // Free-text profile description
-  activeTags: string[];         // AI-extracted tags the user has enabled
-  availableTags: string[];      // Full list of possible tags (AVAILABLE_TAGS)
-}
-
-export interface FeedResponse {
-  posts: Post[];
-  cursor: string | null;
-  hasMore: boolean;
-}
-
-export interface GenerationResponse {
-  requestIds: string[];
-  status: 'PENDING';
-  message: string;
-}
-
-export const AVAILABLE_TAGS = [
-  'AWS', 'React', 'TypeScript', 'Node.js', 'Python',
-  'Docker', 'Kubernetes', 'Linux', 'DynamoDB', 'PostgreSQL',
-  'Redis', 'GraphQL', 'Rust', 'Go', 'CI/CD',
-  'Terraform', 'Serverless', 'Security', 'Performance', 'Architecture',
-] as const;
-
-export type Tag = typeof AVAILABLE_TAGS[number];
-
-/** Visual theme applied to the application. Persisted in syntonia-preferences. */
-export type Theme = 'dark' | 'light';
-
-/** UI language. Persisted in syntonia-preferences. Drives Gemini prompt language in production. */
-export type Language = 'en' | 'pt-BR';
-
-/** Client-only preferences stored in usePreferencesStore (localStorage: syntonia-preferences). */
-export interface UserPreferencesLocal {
+  readonly userId: string;
+  readonly description: string | null;
+  readonly activeTags: Tag[];
   readonly theme: Theme;
   readonly language: Language;
 }
+
+export interface FeedResponse {
+  readonly posts: Post[];
+  readonly cursor: string | null;
+  readonly hasMore: boolean;
+}
+
+export interface GenerationResponse {
+  readonly requestIds: string[];
+  readonly status: 'PENDING';
+  // No 'message' field — clean contract
+}
+
+export interface LegalDocument {
+  readonly typeLanguage: string;       // e.g. 'terms#en', 'privacy#pt-BR'
+  readonly type: 'terms' | 'privacy';
+  readonly language: 'en' | 'pt-BR';
+  readonly version: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly content: string;
+}
+
+export type ApiErrorCode =
+  | 'UNAUTHENTICATED' | 'POST_NOT_FOUND' | 'POST_NOT_SAVED' | 'POST_NOT_LIKED'
+  | 'LEGAL_DOCUMENT_NOT_FOUND' | 'VALIDATION_ERROR' | 'TERMS_VERSION_MISMATCH'
+  | 'GENERATION_LIMIT_REACHED' | 'RATE_LIMIT_EXCEEDED' | 'AI_EXTRACTION_FAILED'
+  | 'INTERNAL_ERROR' | 'UNKNOWN_ERROR';  // UNKNOWN_ERROR is frontend-only fallback
 ```
 
 ### DynamoDB Item Shapes (JavaScript / backend)
@@ -2435,6 +1900,7 @@ provider:
   # Environment variables available to ALL Lambda functions
   environment:
     STAGE: ${self:provider.stage}
+    AWS_REGION: sa-east-1
     FEED_TABLE: SintoniaFeed-${self:provider.stage}
     REQUESTS_TABLE: SintoniaRequests-${self:provider.stage}
     USERS_TABLE: SintoniaUsers-${self:provider.stage}
@@ -2443,6 +1909,11 @@ provider:
     GENERATION_QUEUE_URL: !Ref GenerationQueue
     # Secret read from SSM Parameter Store at deploy time
     GEMINI_API_KEY: ${ssm:/syntonia/${self:provider.stage}/gemini-api-key}
+    # LOG_LEVEL: DEBUG | INFO | WARN | ERROR (default: INFO)
+    LOG_LEVEL: INFO
+    # CORS: '*' by default (no credentials). Restrict in production:
+    # CORS_ORIGINS: 'https://syntonia.app,https://dev.syntonia.app'
+    CORS_ORIGINS: ${env:CORS_ORIGINS, '*'}
 
   # IAM: no shared role — each Lambda uses its own least-privilege role
   # (defined in resources: section below, referenced via role: on each function)
@@ -3205,15 +2676,16 @@ resources:
         TableName: SintoniaLegal-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
         # No TTL — legal documents are permanent records.
-        # PK: type ('terms' | 'privacy'), SK: createdAt (ISO 8601)
-        # Querying with ScanIndexForward: false, Limit: 1 returns the active document.
+        # PK: typeLanguage (e.g. 'terms#en', 'privacy#pt-BR')
+        # SK: createdAt (ISO 8601)
+        # Query: typeLanguage = :pk, ScanIndexForward: false, Limit: 1 → active doc per language
         AttributeDefinitions:
-          - AttributeName: type
+          - AttributeName: typeLanguage
             AttributeType: S
           - AttributeName: createdAt
             AttributeType: S
         KeySchema:
-          - AttributeName: type
+          - AttributeName: typeLanguage
             KeyType: HASH
           - AttributeName: createdAt
             KeyType: RANGE
@@ -3387,12 +2859,14 @@ syntonia-app/
     ├── scripts/
     │   └── seed-legal.ts              # PutItem: Terms of Use + Privacy Policy v1.0 into SintoniaLegal
     └── src/
-        ├── functions/                 # 15 Lambda handlers (.ts)
+        ├── functions/                 # 17 Lambda handlers (.ts)
         │   ├── getFeed.ts             # GET /feed
         │   ├── requestPost.ts         # POST /feed/request
         │   ├── getPost.ts             # GET /post/{id}
         │   ├── savePost.ts            # POST /post/{id}/save
         │   ├── unsavePost.ts          # DELETE /post/{id}/save
+        │   ├── likePost.ts            # POST /post/{id}/like
+        │   ├── unlikePost.ts          # DELETE /post/{id}/like
         │   ├── getSavedPosts.ts       # GET /posts/saved
         │   ├── getPreferences.ts      # GET /user/preferences (upsert fallback + returns theme/language)
         │   ├── updatePreferences.ts   # PUT /user/preferences (patch: activeTags? + theme? + language?)
@@ -3401,18 +2875,26 @@ syntonia-app/
         │   ├── workerInternal.ts      # SQS trigger → Gemini → DynamoDB (reservedConcurrency: 5)
         │   ├── onUserSignup.ts        # Cognito Post-Confirmation Trigger
         │   ├── getLegalTermsStatus.ts # GET /legal/terms-status
-        │   ├── getLegalDocument.ts    # GET /legal/{type} (terms | privacy)
-        │   └── acceptLegalTerms.ts   # POST /legal/accept
-        └── shared/                   # Reusable TypeScript modules
-            ├── types.ts               # ApiErrorCode, Tag, UserRecord, LegalDocument, etc.
-            ├── constants.ts           # AVAILABLE_TAGS, DEFAULT_TAGS, Tables
-            ├── db.ts                  # DynamoDB client + all operations
-            ├── gemini.ts              # Gemini client + prompt builder + response parser
-            ├── sqs.ts                 # SQS client + sendGenerationRequest
-            ├── rateLimit.ts           # Fixed-window rate limiter (DynamoDB-backed)
-            ├── auth.ts                # getUserId() + getUserEmail() from JWT claims
-            ├── response.ts            # HTTP response helpers + CORS + error codes
-            └── validators.ts          # Zod schemas + validate() helper
+        │   ├── getLegalDocument.ts    # GET /legal/{type}?lang= (with language fallback)
+        │   └── acceptLegalTerms.ts    # POST /legal/accept
+        └── shared/                    # Reusable TypeScript modules (domain subfolders)
+            ├── core/
+            │   ├── types/             # 11 type files + index.ts barrel
+            │   ├── env.ts             # ALL process.env access
+            │   ├── tables.ts          # DynamoDB table name constants
+            │   ├── default-tags.ts    # DEFAULT_TAGS + DEFAULT_DESCRIPTION
+            │   └── logger.ts          # createLogger() — structured JSON logger
+            ├── http/
+            │   ├── auth.ts            # getUserId(), getUserEmail(), AuthError
+            │   ├── response.ts        # HTTP helpers + CORS via CORS_ORIGINS env var
+            │   ├── validators.ts      # Zod schemas + validate()
+            │   └── rateLimit.ts       # checkRateLimit() + RateLimitError
+            ├── db/
+            │   └── index.ts           # All DynamoDB operations
+            ├── ai/
+            │   └── gemini.ts          # generatePost(), extractTagsFromDescription()
+            └── queue/
+                └── sqs.ts             # sendGenerationRequest()
 ```
 
 ### Auxiliary Configuration Files
@@ -3581,7 +3063,7 @@ Copy `UserPoolId`, `UserPoolClientId` and `ApiGatewayUrl` to:
 | Environment | Git Branch | Backend Stage | Frontend URL |
 |---|---|---|---|
 | **Production** | `main` | `prod` | `https://syntonia.app` |
-| **Staging** | `dev` | `dev` | `https://dev.syntonia.app` |
+| **Staging** | `development` | `dev` | `https://development.syntonia.app` |
 
 ### CI/CD — Frontend (Amplify Hosting)
 
@@ -3749,11 +3231,19 @@ Created automatically by the Serverless Framework:
 /aws/lambda/syntonia-backend-{stage}-requestPost
 /aws/lambda/syntonia-backend-{stage}-workerInternal
 /aws/lambda/syntonia-backend-{stage}-getPost
+/aws/lambda/syntonia-backend-{stage}-savePost
+/aws/lambda/syntonia-backend-{stage}-unsavePost
+/aws/lambda/syntonia-backend-{stage}-likePost
+/aws/lambda/syntonia-backend-{stage}-unlikePost
+/aws/lambda/syntonia-backend-{stage}-getSavedPosts
 /aws/lambda/syntonia-backend-{stage}-getPreferences
 /aws/lambda/syntonia-backend-{stage}-updatePreferences
 /aws/lambda/syntonia-backend-{stage}-updateProfile
 /aws/lambda/syntonia-backend-{stage}-health
 /aws/lambda/syntonia-backend-{stage}-onUserSignup
+/aws/lambda/syntonia-backend-{stage}-getLegalTermsStatus
+/aws/lambda/syntonia-backend-{stage}-getLegalDocument
+/aws/lambda/syntonia-backend-{stage}-acceptLegalTerms
 ```
 
 Retention configured at **14 days** via `logRetentionInDays` in `serverless.yml`.
@@ -3771,29 +3261,32 @@ Retention configured at **14 days** via `logRetentionInDays` in `serverless.yml`
 
 ### Structured Log Patterns
 
-All handlers follow a structured logging convention:
+All handlers use `createLogger` from `src/shared/core/logger.ts`. Each log entry is a single JSON line on stdout — CloudWatch Logs Insights compatible. See `backend/AGENTS.md §4b` for the full logger API.
 
-```javascript
-// Success
-console.log(`[workerInternal] Post ${post.id} created successfully`);
-
-// Captured error
-console.error(`[workerInternal] Attempt ${attempt} failed:`, err.message);
-
-// serverError helper logs automatically
-console.error('[SERVER ERROR]', err);
+```json
+{
+  "level": "INFO",
+  "timestamp": "2026-07-05T14:00:00.000Z",
+  "message": "Feed query completed",
+  "fn": "getFeed",
+  "stage": "dev",
+  "requestId": "abc-123",
+  "userId": "cognito-sub",
+  "count": 5,
+  "durationMs": 142
+}
 ```
 
 **CloudWatch Logs Insights queries:**
 ```
-# Posts generated per hour
-fields @timestamp, @message
-| filter @message like /Post .+ created successfully/
-| stats count() as postsCreated by bin(1h)
+# All logs for a specific request
+fields @timestamp, level, message, fn, userId, durationMs
+| filter requestId = "abc-123"
+| sort @timestamp asc
 
 # Worker errors
-fields @timestamp, @message
-| filter @message like /Attempt .+ failed/
+fields @timestamp, message, fn
+| filter level = "ERROR"
 | sort @timestamp desc
 | limit 20
 ```
@@ -3858,7 +3351,7 @@ Saved posts actions: ~15 saves + ~5 unsaves per user/month = ~20,000 save/unsave
 - [x] All data routes protected by Cognito JWT (API Gateway Authorizer)
 - [x] `userId` **always** extracted from the token — never accepted from the request body
 - [x] API Gateway throttling: 1000 req/s burst, 500 req/s steady
-- [x] CORS explicitly configured for allowed domains only (no `*`)
+- [x] CORS controlled via `CORS_ORIGINS` environment variable — default `'*'` (wildcard, no credentials). To restrict in production: `CORS_ORIGINS=https://syntonia.app,...` in `serverless.yml`. No URLs hardcoded in source code.
 - [x] `PreventUserExistenceErrors: ENABLED` on Cognito Client — does not reveal if email exists
 - [x] `GenerateSecret: false` on Cognito Client — SPA does not use client secret
 
@@ -3869,11 +3362,11 @@ Saved posts actions: ~15 saves + ~5 unsaves per user/month = ~20,000 save/unsave
 - [x] CI/CD IAM user with minimum privilege policy (only what is needed)
 
 ### Data & Database
-- [x] All Lambda functions share a single IAM role scoped to only the DynamoDB tables and SQS resources they collectively need
+- [x] All Lambda functions have individual IAM roles with least-privilege permissions (17 separate `AWS::IAM::Role` resources in `serverless.yml`)
 - [x] `getPost` verifies `post.userId === userId` — users can only access their own posts
 - [x] `requestPost` checks PENDING requests to prevent abuse (429 if >= 5)
 - [x] Zod schema validation on all Lambda inputs
-- [ ] **Phase 2 improvement:** Consider per-function IAM roles to enforce least-privilege at the individual Lambda level (e.g., `health` and `getFeed` should not have `sqs:SendMessage`)
+- [ ] **Phase 2 improvement:** Consider stricter IAM scoping for individual Lambda operations (e.g. `health` has no DynamoDB access — already done)
 
 ### Rate Limiting (SintoniaRateLimit)
 - [x] `AI_GENERATION#{userId}` — max 10 AI generation requests per hour per user

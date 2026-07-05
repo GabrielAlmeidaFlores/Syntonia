@@ -1,3 +1,11 @@
 frontend/node_modules
 frontend/dist
 node_modules
+
+# Local env files — never commit secrets
+.env.local
+.env.*.local
+
+# Serverless build artifacts
+.serverless/
+backend/.serverless/

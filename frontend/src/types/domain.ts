@@ -107,10 +107,13 @@ export interface TermsStatus {
   readonly privacyVersion: string;
 }
 
-/** Response from GET /legal/terms or GET /legal/privacy. */
+/** Response from GET /legal/{type}?lang={en|pt-BR}. */
 export interface LegalDocument {
+  readonly typeLanguage: string;
   readonly type: "terms" | "privacy";
+  readonly language: "en" | "pt-BR";
   readonly version: string;
+  readonly createdAt: string;
   readonly updatedAt: string;
   readonly content: string;
 }

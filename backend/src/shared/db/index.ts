@@ -354,18 +354,20 @@ export async function acceptUserTerms(
 // ── Legal ─────────────────────────────────────────────────────────────
 
 /**
- * Returns the most recent (active) document for the given type.
+ * Returns the most recent (active) document for the given type and language.
+ * Uses `typeLanguage` as the partition key (e.g. "terms#en", "privacy#pt-BR").
  * Queries with ScanIndexForward: false, Limit: 1 — the first result is the latest.
- * Returns null if no document has been published yet.
+ * Returns null if no document has been published yet for this type+language combination.
  */
 export async function getLatestLegalDocument(
   type: 'terms' | 'privacy',
+  language: 'en' | 'pt-BR' = 'en',
 ): Promise<LegalDocumentItem | null> {
+  const typeLanguage = `${type}#${language}`;
   const result = await db.send(new QueryCommand({
     TableName: Tables.LEGAL,
-    KeyConditionExpression: '#t = :t',
-    ExpressionAttributeNames: { '#t': 'type' },
-    ExpressionAttributeValues: { ':t': type },
+    KeyConditionExpression: 'typeLanguage = :pk',
+    ExpressionAttributeValues: { ':pk': typeLanguage },
     ScanIndexForward: false,
     Limit: 1,
   }));

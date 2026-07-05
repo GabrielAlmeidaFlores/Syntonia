@@ -9,6 +9,7 @@ import { Spinner } from "@/components/shared/spinner";
 import { useTranslation } from "@/hooks/use-translation";
 import { formatDate } from "@/lib/utils";
 import { api } from "@/services/api";
+import { usePreferencesStore } from "@/stores/preferences";
 import type { LegalDocument } from "@/types";
 
 interface LegalDocModalProps {
@@ -20,7 +21,8 @@ interface LegalDocModalProps {
 /**
  * Full-screen overlay that loads and renders a legal document (Terms of Use or
  * Privacy Policy) from the backend as Markdown. Slides in from the bottom.
- * Closes via the X button or Escape key.
+ * Passes the user's active language as `?lang=` query param so the backend
+ * returns the document in the correct language. Closes via the X button or Escape key.
  */
 export function LegalDocModal({
   open,
@@ -28,6 +30,7 @@ export function LegalDocModal({
   onClose,
 }: LegalDocModalProps): React.JSX.Element {
   const t = useTranslation();
+  const language = usePreferencesStore((s) => s.language);
   const [doc, setDoc] = React.useState<LegalDocument | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState(false);
@@ -38,7 +41,7 @@ export function LegalDocModal({
     setError(false);
     setLoading(true);
     void api
-      .get<LegalDocument>(`/legal/${docType}`)
+      .get<LegalDocument>(`/legal/${docType}?lang=${language}`)
       .then((data) => {
         setDoc(data);
       })
@@ -48,7 +51,7 @@ export function LegalDocModal({
       .finally(() => {
         setLoading(false);
       });
-  }, [open, docType]);
+  }, [open, docType, language]);
 
   React.useEffect(() => {
     if (!open) return;
