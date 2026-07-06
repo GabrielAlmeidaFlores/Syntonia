@@ -69,7 +69,7 @@ functions:
   # ── Feed ───────────────────────────────────────────────────────────
 
   getFeed:
-    handler: src/functions/getFeed.handler
+    handler: src/functions/get-feed.handler
     role: !GetAtt GetFeedLambdaRole.Arn
     timeout: 10
     description: "Returns paginated posts for the authenticated user"
@@ -83,7 +83,7 @@ functions:
             authorizerId: !Ref ApiGatewayAuthorizer
 
   requestPost:
-    handler: src/functions/requestPost.handler
+    handler: src/functions/request-post.handler
     role: !GetAtt RequestPostLambdaRole.Arn
     timeout: 10
     description: "Queues JIT content generation request via SQS"
@@ -97,7 +97,7 @@ functions:
             authorizerId: !Ref ApiGatewayAuthorizer
 
   getPost:
-    handler: src/functions/getPost.handler
+    handler: src/functions/get-post.handler
     role: !GetAtt GetPostLambdaRole.Arn
     timeout: 10
     description: "Returns a single post with full Markdown content"
@@ -111,7 +111,7 @@ functions:
             authorizerId: !Ref ApiGatewayAuthorizer
 
   savePost:
-    handler: src/functions/savePost.handler
+    handler: src/functions/save-post.handler
     role: !GetAtt SavePostLambdaRole.Arn
     timeout: 10
     description: "Bookmarks a post — sets savedAt, removes TTL"
@@ -125,7 +125,7 @@ functions:
             authorizerId: !Ref ApiGatewayAuthorizer
 
   unsavePost:
-    handler: src/functions/unsavePost.handler
+    handler: src/functions/unsave-post.handler
     role: !GetAtt UnsavePostLambdaRole.Arn
     timeout: 10
     description: "Removes bookmark — clears savedAt, restores TTL to now+30d"
@@ -139,7 +139,7 @@ functions:
             authorizerId: !Ref ApiGatewayAuthorizer
 
   likePost:
-    handler: src/functions/likePost.handler
+    handler: src/functions/like-post.handler
     role: !GetAtt LikePostLambdaRole.Arn
     timeout: 10
     description: "Likes a post — sets likedAt for AI preference feedback"
@@ -153,7 +153,7 @@ functions:
             authorizerId: !Ref ApiGatewayAuthorizer
 
   unlikePost:
-    handler: src/functions/unlikePost.handler
+    handler: src/functions/unlike-post.handler
     role: !GetAtt UnlikePostLambdaRole.Arn
     timeout: 10
     description: "Removes like — clears likedAt"
@@ -167,7 +167,7 @@ functions:
             authorizerId: !Ref ApiGatewayAuthorizer
 
   getSavedPosts:
-    handler: src/functions/getSavedPosts.handler
+    handler: src/functions/get-saved-posts.handler
     role: !GetAtt GetSavedPostsLambdaRole.Arn
     timeout: 10
     description: "Returns paginated saved posts via userId-savedAt-index GSI"
@@ -183,7 +183,7 @@ functions:
   # ── User ───────────────────────────────────────────────────────────
 
   getPreferences:
-    handler: src/functions/getPreferences.handler
+    handler: src/functions/get-preferences.handler
     role: !GetAtt GetPreferencesLambdaRole.Arn
     timeout: 10
     description: "Returns user profile, tags, theme and language (upserts profile if missing)"
@@ -197,7 +197,7 @@ functions:
             authorizerId: !Ref ApiGatewayAuthorizer
 
   updatePreferences:
-    handler: src/functions/updatePreferences.handler
+    handler: src/functions/update-preferences.handler
     role: !GetAtt UpdatePreferencesLambdaRole.Arn
     timeout: 10
     description: "Patch endpoint — updates any of: activeTags, theme, language"
@@ -211,7 +211,7 @@ functions:
             authorizerId: !Ref ApiGatewayAuthorizer
 
   updateProfile:
-    handler: src/functions/updateProfile.handler
+    handler: src/functions/update-profile.handler
     role: !GetAtt UpdateProfileLambdaRole.Arn
     timeout: 29
     description: "Saves description and calls Gemini to extract active tags (sync, up to 29s)"
@@ -227,7 +227,7 @@ functions:
   # ── Legal / Terms ──────────────────────────────────────────────────
 
   getLegalTermsStatus:
-    handler: src/functions/getLegalTermsStatus.handler
+    handler: src/functions/get-legal-terms-status.handler
     role: !GetAtt GetLegalTermsStatusLambdaRole.Arn
     timeout: 5
     description: "Returns whether user needs to accept updated terms"
@@ -241,7 +241,7 @@ functions:
             authorizerId: !Ref ApiGatewayAuthorizer
 
   getLegalDocument:
-    handler: src/functions/getLegalDocument.handler
+    handler: src/functions/get-legal-document.handler
     role: !GetAtt GetLegalDocumentLambdaRole.Arn
     timeout: 5
     description: "Returns the active Terms of Use or Privacy Policy document"
@@ -255,7 +255,7 @@ functions:
             authorizerId: !Ref ApiGatewayAuthorizer
 
   acceptLegalTerms:
-    handler: src/functions/acceptLegalTerms.handler
+    handler: src/functions/accept-legal-terms.handler
     role: !GetAtt AcceptLegalTermsLambdaRole.Arn
     timeout: 5
     description: "Records user acceptance of the current terms and privacy policy versions"
@@ -271,7 +271,7 @@ functions:
   # ── Async Worker ───────────────────────────────────────────────────
 
   workerInternal:
-    handler: src/functions/workerInternal.handler
+    handler: src/functions/worker-internal.handler
     role: !GetAtt WorkerInternalLambdaRole.Arn
     timeout: 60
     description: "Consumes SQS queue and generates content with Gemini (includes dedup context)"
@@ -284,7 +284,7 @@ functions:
   # ── Cognito Trigger ────────────────────────────────────────────────
 
   onUserSignup:
-    handler: src/functions/onUserSignup.handler
+    handler: src/functions/on-user-signup.handler
     role: !GetAtt OnUserSignupLambdaRole.Arn
     timeout: 10
     description: "Creates user profile in DynamoDB after email confirmation"

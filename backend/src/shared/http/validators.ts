@@ -50,7 +50,7 @@ export const updatePreferencesSchema = z.object({
 export const updateProfileSchema = z.object({
   description: z.string()
     .min(20, 'Description must be at least 20 characters')
-    .max(500, 'Description must be at most 500 characters'),
+    .max(10000, 'Description must be at most 10000 characters'),
 });
 
 /** POST /legal/accept body schema. */

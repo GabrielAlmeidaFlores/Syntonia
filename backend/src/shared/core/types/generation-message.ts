@@ -6,4 +6,6 @@ export interface GenerationMessage {
   readonly userId: string;
   readonly tags: Tag[];
   readonly description: string | null;
+  /** User's preferred UI language — controls the language Gemini generates posts in. */
+  readonly language: 'en' | 'pt-BR';
 }

@@ -297,7 +297,7 @@ export const translations: Record<Language, Translations> = {
       hint: "Describe your background and interests. Syntonia uses this to extract your areas of interest and generate relevant content.",
       placeholder:
         "e.g. Backend developer working with AWS Lambda and TypeScript…",
-      charCount: (n) => `${String(n)} / 500 characters`,
+      charCount: (n) => `${String(n)} / 10 000 characters`,
       saveButton: "Save & extract tags",
       savingButton: "Extracting…",
       toastSuccess: (n) => `Profile updated — ${String(n)} tags extracted.`,
@@ -374,7 +374,7 @@ export const translations: Record<Language, Translations> = {
       descriptionLabel: "Your profile description",
       placeholder:
         "e.g. Senior backend developer working with AWS Lambda and TypeScript. Building serverless APIs and learning Kubernetes.",
-      charHint: (n) => `Minimum 20 characters · ${String(n)} / 500`,
+      charHint: (n) => `Minimum 20 characters · ${String(n)} / 10 000`,
       extractButton: "Extract my interests",
       analysing: "Analysing your profile with AI…",
     },
@@ -510,7 +510,7 @@ export const translations: Record<Language, Translations> = {
       hint: "Descreva seu background e interesses. O Syntonia usa isso para extrair suas áreas de interesse e gerar conteúdo relevante.",
       placeholder:
         "ex: Desenvolvedor backend trabalhando com AWS Lambda e TypeScript…",
-      charCount: (n) => `${String(n)} / 500 caracteres`,
+      charCount: (n) => `${String(n)} / 10 000 caracteres`,
       saveButton: "Salvar & extrair tags",
       savingButton: "Extraindo…",
       toastSuccess: (n) => `Perfil atualizado — ${String(n)} tags extraídas.`,
@@ -588,7 +588,7 @@ export const translations: Record<Language, Translations> = {
       descriptionLabel: "Sua descrição de perfil",
       placeholder:
         "ex: Desenvolvedor backend sênior com AWS Lambda e TypeScript. Construindo APIs serverless e aprendendo Kubernetes.",
-      charHint: (n) => `Mínimo de 20 caracteres · ${String(n)} / 500`,
+      charHint: (n) => `Mínimo de 20 caracteres · ${String(n)} / 10 000`,
       extractButton: "Extrair meus interesses",
       analysing: "Analisando seu perfil com IA…",
     },

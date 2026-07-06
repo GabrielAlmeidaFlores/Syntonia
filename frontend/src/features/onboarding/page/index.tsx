@@ -36,7 +36,7 @@ export default function OnboardingPage(): React.JSX.Element {
   const [isConfirming, setIsConfirming] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const canExtract = description.trim().length >= 20;
+  const canExtract = description.trim().length >= 20 && description.length <= 10000;
 
   const handleExtract = async (): Promise<void> => {
     setStep("extracting");
@@ -113,6 +113,7 @@ export default function OnboardingPage(): React.JSX.Element {
             }}
             disabled={step !== "input"}
             rows={5}
+            maxLength={10000}
           />
           <p className="text-xs text-content-subtle">
             {t.onboarding.charHint(description.length)}

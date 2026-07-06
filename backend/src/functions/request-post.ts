@@ -4,7 +4,7 @@ import { AuthError, getUserId } from '../shared/http/auth.js';
 import { countPendingRequests, getUser, saveRequest } from '../shared/db/index.js';
 import { createLogger } from '../shared/core/logger.js';
 import { sendGenerationRequest } from '../shared/queue/sqs.js';
-import { checkRateLimit, RateLimitError } from '../shared/http/rateLimit.js';
+import { checkRateLimit, RateLimitError } from '../shared/http/rate-limit.js';
 import { accepted, badRequest, unauthorized, tooManyRequests, serverError } from '../shared/http/response.js';
 import { validate, feedRequestSchema, ValidationError } from '../shared/http/validators.js';
 import type { RequestItem } from '../shared/core/types/index.js';
@@ -51,14 +51,15 @@ export const handler = async (
 
     const user = await getUser(userId);
     const description = user?.description ?? null;
-    log.debug('User description fetched for prompt enrichment', { userId, hasDescription: description !== null });
+    const language = user?.language ?? 'en';
+    log.debug('User profile fetched for prompt enrichment', { userId, hasDescription: description !== null, language });
 
     const requests = await Promise.all(
       Array.from({ length: quantity }, async () => {
         const requestId = uuidv4();
 
         log.debug('Sending SQS message', { userId, requestId, tags });
-        const sqsMessageId = await sendGenerationRequest({ requestId, userId, tags, description });
+        const sqsMessageId = await sendGenerationRequest({ requestId, userId, tags, description, language });
         log.debug('SQS message sent', { userId, requestId, sqsMessageId });
 
         const request: RequestItem = {

@@ -39,7 +39,7 @@ export function DescriptionForm({
   const [state, setState] = React.useState<ExtractionState>("idle");
 
   const isDirty = value.trim() !== description.trim();
-  const canSave = isDirty && value.trim().length >= 20;
+  const canSave = isDirty && value.trim().length >= 20 && value.length <= 10000;
 
   const handleSave = async (): Promise<void> => {
     setState("extracting");
@@ -83,6 +83,7 @@ export function DescriptionForm({
         }}
         disabled={state === "extracting"}
         rows={5}
+        maxLength={10000}
         placeholder={t.descriptionForm.placeholder}
       />
 

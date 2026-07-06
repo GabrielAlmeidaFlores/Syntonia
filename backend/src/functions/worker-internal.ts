@@ -13,9 +13,9 @@ export const handler = async (event: SQSEvent, ctx: Context): Promise<void> => {
 
   for (const record of event.Records) {
     const message = JSON.parse(record.body) as GenerationMessage;
-    const { requestId, userId, tags, description } = message;
+    const { requestId, userId, tags, description, language } = message;
 
-    const reqLog = log.child({ requestId, userId, tags, hasDescription: description !== null });
+    const reqLog = log.child({ requestId, userId, tags, hasDescription: description !== null, language });
     const stop = reqLog.timer();
 
     reqLog.info('Processing generation request', { sqsMessageId: record.messageId });
@@ -43,7 +43,7 @@ export const handler = async (event: SQSEvent, ctx: Context): Promise<void> => {
       try {
         attemptLog.info('Calling Gemini to generate post');
 
-        const postData = await generatePost({ tags: tags as Tag[], description, recentPosts });
+        const postData = await generatePost({ tags: tags as Tag[], description, recentPosts, language: language ?? 'en' });
 
         attemptStop('Gemini generation completed', { title: postData.title, tags: postData.tags });
 

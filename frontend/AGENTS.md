@@ -236,7 +236,7 @@ src/
 
 **File structure rule:** Each UI component lives in its own folder with `index.tsx`. Sub-components for a feature page live alongside the page's `index.tsx`.
 
-**PascalCase and camelCase filenames are forbidden everywhere** — including `public/`. No `mockServiceWorker.js`, no `App.tsx`, no `feedStore.ts`.
+**PascalCase and camelCase filenames are forbidden everywhere** — including `public/` and `src/`. All source files must use `kebab-case`: words separated by `-`, all lowercase. No `mockServiceWorker.js`, no `App.tsx`, no `feedStore.ts`, no `useFeed.ts` → must be `use-feed.ts`.
 
 ---
 

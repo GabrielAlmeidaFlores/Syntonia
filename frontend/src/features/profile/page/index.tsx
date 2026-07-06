@@ -80,8 +80,8 @@ export default function ProfilePage(): React.JSX.Element {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent-muted">
-            <User className="h-6 w-6 text-accent-light" aria-hidden />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent-muted">
+            <User className="h-6 w-6 shrink-0 text-accent-light" aria-hidden />
           </div>
           <div>
             <p className="font-semibold text-content-primary">

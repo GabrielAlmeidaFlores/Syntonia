@@ -56,23 +56,23 @@ backend/
 │   └── seed-legal.ts         # Seeds SintoniaLegal table with v1.0 Terms + Privacy docs
 └── src/
     ├── functions/            # 17 Lambda handlers
-    │   ├── getFeed.ts               # GET /feed
-    │   ├── requestPost.ts           # POST /feed/request
-    │   ├── getPost.ts               # GET /post/{id}
-    │   ├── savePost.ts              # POST /post/{id}/save
-    │   ├── unsavePost.ts            # DELETE /post/{id}/save
-    │   ├── likePost.ts              # POST /post/{id}/like
-    │   ├── unlikePost.ts            # DELETE /post/{id}/like
-    │   ├── getSavedPosts.ts         # GET /posts/saved
-    │   ├── getPreferences.ts        # GET /user/preferences
-    │   ├── updatePreferences.ts     # PUT /user/preferences (patch)
-    │   ├── updateProfile.ts         # PUT /user/profile
+    │   ├── get-feed.ts              # GET /feed
+    │   ├── request-post.ts          # POST /feed/request
+    │   ├── get-post.ts              # GET /post/{id}
+    │   ├── save-post.ts             # POST /post/{id}/save
+    │   ├── unsave-post.ts           # DELETE /post/{id}/save
+    │   ├── like-post.ts             # POST /post/{id}/like
+    │   ├── unlike-post.ts           # DELETE /post/{id}/like
+    │   ├── get-saved-posts.ts       # GET /posts/saved
+    │   ├── get-preferences.ts       # GET /user/preferences
+    │   ├── update-preferences.ts    # PUT /user/preferences (patch)
+    │   ├── update-profile.ts        # PUT /user/profile
     │   ├── health.ts                # GET /health (public)
-    │   ├── workerInternal.ts        # SQS → Gemini → DynamoDB
-    │   ├── onUserSignup.ts          # Cognito Post-Confirmation Trigger
-    │   ├── getLegalTermsStatus.ts   # GET /legal/terms-status
-    │   ├── getLegalDocument.ts      # GET /legal/{type}
-    │   └── acceptLegalTerms.ts      # POST /legal/accept
+    │   ├── worker-internal.ts       # SQS → Gemini → DynamoDB
+    │   ├── on-user-signup.ts        # Cognito Post-Confirmation Trigger
+    │   ├── get-legal-terms-status.ts  # GET /legal/terms-status
+    │   ├── get-legal-document.ts    # GET /legal/{type}
+    │   └── accept-legal-terms.ts    # POST /legal/accept
     └── shared/               # Reusable modules — organized by domain
         ├── core/
         │   ├── types/            # One file per type/interface (see §4c)
@@ -84,7 +84,7 @@ backend/
         │   ├── auth.ts           # getUserId(), getUserEmail(), AuthError
         │   ├── response.ts       # ok(), badRequest(), notFound(), serverError() + CORS
         │   ├── validators.ts     # Zod schemas, validate(), ValidationError
-        │   └── rateLimit.ts      # checkRateLimit(), RateLimitError
+        │   └── rate-limit.ts     # checkRateLimit(), RateLimitError
         ├── db/
         │   └── index.ts          # All DynamoDB operations (feed, users, requests, legal)
         ├── ai/
@@ -250,13 +250,15 @@ Set `LOG_LEVEL` environment variable:
 
 | Category | Convention | Example |
 |---|---|---|
-| Handler files | `camelCase.ts` | `getFeed.ts` |
-| Shared module files | `camelCase.ts` | `rateLimit.ts` |
+| Handler files | `kebab-case.ts` | `get-feed.ts` |
+| Shared module files | `kebab-case.ts` | `rate-limit.ts` |
 | Exported functions | `camelCase` | `getFeedByUser` |
 | Exported classes | `PascalCase` | `AuthError` |
 | Types/Interfaces | `PascalCase` | `UserRecord`, `LegalDocument` |
 | Constants | `SCREAMING_SNAKE_CASE` | `AVAILABLE_TAGS` |
 | Lambda handler export | always `handler` | `export const handler = async ...` |
+
+**PascalCase and camelCase filenames are forbidden for all source files.** Use `kebab-case` — words separated by `-`, all lowercase. No `getFeed.ts`, no `rateLimit.ts`, no `workerInternal.ts`.
 
 ---
 
@@ -267,7 +269,7 @@ Every handler follows this exact structure:
 ```typescript
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { AuthError, getUserId } from '../shared/http/auth.js';
-import { RateLimitError } from '../shared/http/rateLimit.js';
+import { RateLimitError } from '../shared/http/rate-limit.js';
 import { ok, unauthorized, badRequest, tooManyRequests, serverError } from '../shared/http/response.js';
 import { ValidationError, validate, someSchema } from '../shared/http/validators.js';
 
@@ -449,7 +451,7 @@ const { tags, quantity } = validate(feedRequestSchema, body);
 
 ---
 
-## §10 — Rate Limiting (src/shared/http/rateLimit.ts)
+## §10 — Rate Limiting (src/shared/http/rate-limit.ts)
 
 DynamoDB-backed fixed-window counter. `checkRateLimit` throws `RateLimitError` if exceeded.
 
@@ -524,7 +526,7 @@ return serverError(event, err);
 
 ## §13 — getPost / savePost / unsavePost Handler Details
 
-**`getPost.ts` — `GET /post/{id}`:**
+**`get-post.ts` — `GET /post/{id}`:**
 ```
 1. getUserId(event)
 2. postId = event.pathParameters?.['id']
@@ -536,7 +538,7 @@ return serverError(event, err);
 5. return ok(event, post)
 ```
 
-**`savePost.ts` — `POST /post/{id}/save`:**
+**`save-post.ts` — `POST /post/{id}/save`:**
 ```
 1. getUserId(event)
 2. postId = event.pathParameters?.['id']
@@ -546,7 +548,7 @@ return serverError(event, err);
 4. return ok(event, { savedAt: new Date().toISOString() })
 ```
 
-**`unsavePost.ts` — `DELETE /post/{id}/save`:**
+**`unsave-post.ts` — `DELETE /post/{id}/save`:**
 ```
 1. getUserId(event)
 2. postId = event.pathParameters?.['id']
@@ -669,7 +671,7 @@ return ok(event, { needsAcceptance, termsVersion, privacyVersion });
 
 ---
 
-## §17 — workerInternal (SQS Trigger)
+## §17 — worker-internal (SQS Trigger)
 
 ```
 SQS record body: { requestId, userId, tags, description }
@@ -1125,23 +1127,23 @@ await getLatestLegalDocument('privacy');           // most recent EN Privacy (de
 
 | Handler file | Method | Path | Auth | Returns |
 |---|---|---|---|---|
-| `getFeed.ts` | GET | `/feed` | ✓ | `{ posts, cursor, hasMore }` |
-| `requestPost.ts` | POST | `/feed/request` | ✓ | `202 { requestIds, status }` |
-| `getPost.ts` | GET | `/post/{id}` | ✓ | Full `Post` object |
-| `savePost.ts` | POST | `/post/{id}/save` | ✓ | `{ savedAt }` |
-| `unsavePost.ts` | DELETE | `/post/{id}/save` | ✓ | `{}` |
-| `likePost.ts` | POST | `/post/{id}/like` | ✓ | `{ likedAt }` |
-| `unlikePost.ts` | DELETE | `/post/{id}/like` | ✓ | `{}` |
-| `getSavedPosts.ts` | GET | `/posts/saved` | ✓ | `{ posts, cursor, hasMore }` |
-| `getPreferences.ts` | GET | `/user/preferences` | ✓ | `{ userId, description, activeTags, theme, language }` |
-| `updatePreferences.ts` | PUT | `/user/preferences` | ✓ | `{}` |
-| `updateProfile.ts` | PUT | `/user/profile` | ✓ | `{ description, activeTags, updatedAt }` |
+| `get-feed.ts` | GET | `/feed` | ✓ | `{ posts, cursor, hasMore }` |
+| `request-post.ts` | POST | `/feed/request` | ✓ | `202 { requestIds, status }` |
+| `get-post.ts` | GET | `/post/{id}` | ✓ | Full `Post` object |
+| `save-post.ts` | POST | `/post/{id}/save` | ✓ | `{ savedAt }` |
+| `unsave-post.ts` | DELETE | `/post/{id}/save` | ✓ | `{}` |
+| `like-post.ts` | POST | `/post/{id}/like` | ✓ | `{ likedAt }` |
+| `unlike-post.ts` | DELETE | `/post/{id}/like` | ✓ | `{}` |
+| `get-saved-posts.ts` | GET | `/posts/saved` | ✓ | `{ posts, cursor, hasMore }` |
+| `get-preferences.ts` | GET | `/user/preferences` | ✓ | `{ userId, description, activeTags, theme, language }` |
+| `update-preferences.ts` | PUT | `/user/preferences` | ✓ | `{}` |
+| `update-profile.ts` | PUT | `/user/profile` | ✓ | `{ description, activeTags, updatedAt }` |
 | `health.ts` | GET | `/health` | ✗ | `{ status, timestamp, stage }` |
-| `workerInternal.ts` | SQS | — | — | void (SQS trigger) |
-| `onUserSignup.ts` | Cognito | — | — | event (Cognito PostConfirmation trigger) |
-| `getLegalTermsStatus.ts` | GET | `/legal/terms-status` | ✓ | `{ needsAcceptance, termsVersion, privacyVersion }` |
-| `getLegalDocument.ts` | GET | `/legal/{type}?lang={en\|pt-BR}` | ✓ | Full `LegalDocumentItem` (typeLanguage, type, language, version, createdAt, updatedAt, content) |
-| `acceptLegalTerms.ts` | POST | `/legal/accept` | ✓ | `{ acceptedAt }` |
+| `worker-internal.ts` | SQS | — | — | void (SQS trigger) |
+| `on-user-signup.ts` | Cognito | — | — | event (Cognito PostConfirmation trigger) |
+| `get-legal-terms-status.ts` | GET | `/legal/terms-status` | ✓ | `{ needsAcceptance, termsVersion, privacyVersion }` |
+| `get-legal-document.ts` | GET | `/legal/{type}?lang={en\|pt-BR}` | ✓ | Full `LegalDocumentItem` (typeLanguage, type, language, version, createdAt, updatedAt, content) |
+| `accept-legal-terms.ts` | POST | `/legal/accept` | ✓ | `{ acceptedAt }` |
 
 ---
 

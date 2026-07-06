@@ -24,13 +24,16 @@ export class GeminiError extends Error {
  * @param recentPosts — titles and summaries of the last 30 posts already
  *   generated for this user on these tags. Used as deduplication context so
  *   Gemini avoids repeating topics.
+ * @param language — the user's preferred language; Gemini will generate the
+ *   entire article in this language ('en' = English, 'pt-BR' = Brazilian Portuguese).
  */
 export async function generatePost(params: {
   readonly tags: Tag[];
   readonly description: string | null;
   readonly recentPosts: PostSummaryWithLike[];
+  readonly language: 'en' | 'pt-BR';
 }): Promise<GeneratedPost> {
-  const prompt = buildPostPrompt(params.tags, params.description, params.recentPosts);
+  const prompt = buildPostPrompt(params.tags, params.description, params.recentPosts, params.language);
   let raw: string;
   try {
     raw = await callGemini(PRIMARY_MODEL, prompt);
@@ -93,7 +96,12 @@ function buildPostPrompt(
   tags: Tag[],
   description: string | null,
   recentPosts: PostSummaryWithLike[],
+  language: 'en' | 'pt-BR',
 ): string {
+  const langInstruction = language === 'pt-BR'
+    ? 'Write the ENTIRE article in Brazilian Portuguese (pt-BR). All titles, summaries, explanations and code comments must be in Portuguese.'
+    : 'Write the ENTIRE article in English.';
+
   let recentContext = '';
   if (recentPosts.length > 0) {
     const lines = recentPosts.map((p, i) => {
@@ -107,6 +115,8 @@ function buildPostPrompt(
 ${description !== null ? `Developer profile: "${description}"\n` : ''}
 Active areas of interest: ${tags.join(', ')}.
 ${recentContext}
+LANGUAGE INSTRUCTION: ${langInstruction}
+
 Generate a UNIQUE, dense, and original technical article about a specific and advanced subtopic within these areas of interest.${recentPosts.length > 0 ? ' The article MUST be substantially different from any topic listed above.' : ''}
 
 Respond EXCLUSIVELY with a valid JSON object (no markdown, no text before or after):
