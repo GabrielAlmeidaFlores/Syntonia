@@ -3,10 +3,8 @@ import * as React from "react";
 import { useTranslation } from "@/hooks/use-translation";
 import {
   FEED_PAGE_SIZE,
-  JIT_GENERATION_DELAY_MS,
   TRIGGER_THRESHOLD,
 } from "@/lib/constants";
-import { VITE_MODE } from "@/lib/env";
 import { api, getApiErrorMessage } from "@/services/api";
 import { useFeedStore } from "@/stores/feed";
 import { useHistoryStore } from "@/stores/history";
@@ -18,11 +16,10 @@ const POLL_INTERVAL_MS = 5_000;
 const MAX_POLL_ATTEMPTS = 18;
 
 /**
- * Polls GET /feed every POLL_INTERVAL_MS until new posts arrive in DynamoDB
- * or MAX_POLL_ATTEMPTS is exhausted (90 seconds total).
- * Passes `after` so the poll only detects posts newer than the session boundary,
- * preventing already-seen posts from being re-inserted into the feed.
- * Updates the feed store directly when posts are detected.
+ * Polls GET /feed every POLL_INTERVAL_MS until new posts arrive or
+ * MAX_POLL_ATTEMPTS is exhausted (90 seconds total).
+ * Passes `after` so only posts newer than the session boundary are detected.
+ * Updates the feed store directly when posts are found.
  */
 async function pollUntilPostsArrive(
   prevCount: number,
@@ -71,9 +68,10 @@ async function pollUntilPostsArrive(
  * than TRIGGER_THRESHOLD posts remain in the buffer — including when the
  * buffer is completely empty (first load for a new user).
  *
- * In development, uses a fixed simulated delay (MSW intercepts the request).
- * In production, polls GET /feed after POST /feed/request until new posts
- * arrive from the Gemini worker, updating the feed store automatically.
+ * After requesting generation via POST /feed/request, polls GET /feed every
+ * 5s until new posts arrive or 90s elapses. Works identically in development
+ * and production — the MSW mock simulates the generation delay and generates
+ * fresh posts with current timestamps so the poll finds them.
  *
  * `sessionAfterRef` captures `lastViewedCreatedAt` once on mount and passes
  * it to the poll so only genuinely new posts are detected.
@@ -108,13 +106,7 @@ export function useJIT(currentIndex: number, totalPosts: number): void {
           quantity: 3,
         });
 
-        if (VITE_MODE === "development") {
-          await new Promise<void>((resolve) => {
-            setTimeout(resolve, JIT_GENERATION_DELAY_MS);
-          });
-        } else {
-          await pollUntilPostsArrive(totalPosts, sessionAfterRef.current);
-        }
+        await pollUntilPostsArrive(totalPosts, sessionAfterRef.current);
       } catch (err) {
         addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });
       } finally {

@@ -1,7 +1,6 @@
 import * as React from "react";
 
 import { FEED_PAGE_SIZE } from "@/lib/constants";
-import { VITE_MODE } from "@/lib/env";
 import { api } from "@/services/api";
 import { useFeedStore } from "@/stores/feed";
 import { useHistoryStore } from "@/stores/history";
@@ -12,13 +11,9 @@ import type { FeedResponse, Post } from "@/types";
  *
  * On the first render, reads `lastViewedCreatedAt` from the history store and
  * captures it in a session ref. All GET /feed calls within this session pass
- * `?after=<sessionAfter>` so the backend only returns posts generated after
- * the user's last viewing session. This prevents already-seen posts from
- * reappearing on page reload.
- *
- * In development, MSW intercepts the request and returns a filtered slice of
- * MOCK_POSTS. In production, the request goes to the real API Gateway endpoint
- * which queries DynamoDB via the userId-createdAt-index GSI.
+ * `?after=<sessionAfter>` so the backend (and MSW mock) only returns posts
+ * generated after the user's last viewing session. This prevents already-seen
+ * posts from reappearing on page reload.
  *
  * The cursor is a base64-encoded DynamoDB LastEvaluatedKey in production — the
  * hook handles it opaquely.
@@ -49,7 +44,7 @@ export function useFeed(): {
 
     const params = new URLSearchParams({ limit: String(FEED_PAGE_SIZE) });
     if (cursor !== null) params.append("cursor", cursor);
-    if (VITE_MODE !== "development" && sessionAfterRef.current !== null) {
+    if (sessionAfterRef.current !== null) {
       params.append("after", sessionAfterRef.current);
     }
 
