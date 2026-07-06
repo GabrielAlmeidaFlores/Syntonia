@@ -7,6 +7,7 @@ import { EmptyFeedScreen } from "@/components/shared/empty-feed-screen";
 import { FeedInitialLoading } from "@/components/shared/feed-initial-loading";
 import { useSnapNavigation } from "@/hooks/use-snap-navigation";
 import { useFeedStore } from "@/stores/feed";
+import { useHistoryStore } from "@/stores/history";
 import type { Post } from "@/types";
 
 /** Minimum ms the initial loading screen stays visible so the animation plays fully. */
@@ -42,7 +43,12 @@ export function FeedContainer({
   const setCurrentIndex = useFeedStore((s) => s.setCurrentIndex);
   const isPostExpanded = useFeedStore((s) => s.isPostExpanded);
   const setPostExpanded = useFeedStore((s) => s.setPostExpanded);
+  const setLastViewedCreatedAt = useHistoryStore(
+    (s) => s.setLastViewedCreatedAt,
+  );
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const postsRef = React.useRef<Post[]>(posts);
+  postsRef.current = posts;
 
   const mountTimeRef = React.useRef(Date.now());
   const [showLoading, setShowLoading] = React.useState(true);
@@ -89,6 +95,10 @@ export function FeedContainer({
           if (entry.isIntersecting) {
             const idx = Number(entry.target.getAttribute("data-index"));
             setCurrentIndex(idx);
+            const post = postsRef.current[idx];
+            if (post !== undefined) {
+              setLastViewedCreatedAt(post.createdAt);
+            }
           }
         }
       },
@@ -101,7 +111,7 @@ export function FeedContainer({
     return () => {
       observer.disconnect();
     };
-  }, [posts.length, setCurrentIndex]);
+  }, [posts.length, setCurrentIndex, setLastViewedCreatedAt]);
 
   if (posts.length === 0 && !isLoading && !showLoading) {
     return (

@@ -2,6 +2,8 @@ import { create } from "zustand";
 
 import { appCache } from "@/lib/cache";
 import { VITE_MODE } from "@/lib/env";
+import { useFeedStore } from "@/stores/feed";
+import { useHistoryStore } from "@/stores/history";
 import type { UserProfile } from "@/types";
 
 interface AuthCallbackResponse {
@@ -87,6 +89,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
     }
     appCache.invalidateAll();
+    useHistoryStore.getState().reset();
+    useFeedStore.getState().reset();
     set({ user: null, token: null, isAuthenticated: false });
   },
 

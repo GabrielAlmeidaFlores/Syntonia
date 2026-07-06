@@ -33,17 +33,27 @@ function decodeCursor(cursor: string): Record<string, unknown> {
 /**
  * Queries the user's feed via userId-createdAt-index GSI.
  * Returns posts in descending createdAt order with cursor-based pagination.
+ * When `after` is provided, only posts with createdAt > after are returned —
+ * this lets the client skip posts from previous sessions.
  */
 export async function getFeedByUser(
   userId: string,
   limit = 5,
   cursor: string | null = null,
+  after?: string,
 ): Promise<{ items: PostItem[]; cursor: string | null }> {
+  const keyCondition = after !== undefined
+    ? 'userId = :uid AND createdAt > :after'
+    : 'userId = :uid';
+
+  const expressionValues: Record<string, unknown> = { ':uid': userId };
+  if (after !== undefined) expressionValues[':after'] = after;
+
   const result = await db.send(new QueryCommand({
     TableName: Tables.FEED,
     IndexName: 'userId-createdAt-index',
-    KeyConditionExpression: 'userId = :uid',
-    ExpressionAttributeValues: { ':uid': userId },
+    KeyConditionExpression: keyCondition,
+    ExpressionAttributeValues: expressionValues,
     ScanIndexForward: false,
     Limit: limit,
     ...(cursor !== null && { ExclusiveStartKey: decodeCursor(cursor) }),

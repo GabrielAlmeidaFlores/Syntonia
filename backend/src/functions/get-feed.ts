@@ -61,10 +61,11 @@ export const handler = async (
     const userId = getUserId(event);
     const limit = Math.min(Number(event.queryStringParameters?.['limit'] ?? 5), 10);
     const cursor = event.queryStringParameters?.['cursor'] ?? null;
+    const after = event.queryStringParameters?.['after'] ?? undefined;
 
-    log.info('Feed requested', { userId, limit, hasCursor: cursor !== null });
+    log.info('Feed requested', { userId, limit, hasCursor: cursor !== null, hasAfter: after !== undefined });
 
-    const { items, cursor: nextCursor } = await getFeedByUser(userId, limit, cursor);
+    const { items, cursor: nextCursor } = await getFeedByUser(userId, limit, cursor, after);
 
     stop('Feed query completed', { userId, limit, count: items.length, hasMore: nextCursor !== null });
 

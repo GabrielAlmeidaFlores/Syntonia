@@ -9,6 +9,7 @@ import {
 import { VITE_MODE } from "@/lib/env";
 import { api, getApiErrorMessage } from "@/services/api";
 import { useFeedStore } from "@/stores/feed";
+import { useHistoryStore } from "@/stores/history";
 import { useToastStore } from "@/stores/toast";
 import { useUserStore } from "@/stores/user";
 import type { FeedResponse, GenerationResponse } from "@/types";
@@ -19,9 +20,14 @@ const MAX_POLL_ATTEMPTS = 18;
 /**
  * Polls GET /feed every POLL_INTERVAL_MS until new posts arrive in DynamoDB
  * or MAX_POLL_ATTEMPTS is exhausted (90 seconds total).
+ * Passes `after` so the poll only detects posts newer than the session boundary,
+ * preventing already-seen posts from being re-inserted into the feed.
  * Updates the feed store directly when posts are detected.
  */
-async function pollUntilPostsArrive(prevCount: number): Promise<void> {
+async function pollUntilPostsArrive(
+  prevCount: number,
+  after: string | undefined,
+): Promise<void> {
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
     await new Promise<void>((resolve) => {
       setTimeout(resolve, POLL_INTERVAL_MS);
@@ -31,8 +37,11 @@ async function pollUntilPostsArrive(prevCount: number): Promise<void> {
       const snapshot = useFeedStore.getState();
       if (snapshot.posts.length > prevCount) return;
 
+      const params = new URLSearchParams({ limit: String(FEED_PAGE_SIZE) });
+      if (after !== undefined) params.append("after", after);
+
       const data = await api.get<FeedResponse>(
-        `/feed?limit=${String(FEED_PAGE_SIZE)}`,
+        `/feed?${params.toString()}`,
       );
 
       if (data.posts.length > 0) {
@@ -65,6 +74,9 @@ async function pollUntilPostsArrive(prevCount: number): Promise<void> {
  * In development, uses a fixed simulated delay (MSW intercepts the request).
  * In production, polls GET /feed after POST /feed/request until new posts
  * arrive from the Gemini worker, updating the feed store automatically.
+ *
+ * `sessionAfterRef` captures `lastViewedCreatedAt` once on mount and passes
+ * it to the poll so only genuinely new posts are detected.
  */
 export function useJIT(currentIndex: number, totalPosts: number): void {
   const isGenerating = React.useRef(false);
@@ -72,6 +84,9 @@ export function useJIT(currentIndex: number, totalPosts: number): void {
   const setLoading = useFeedStore((s) => s.setLoading);
   const addToast = useToastStore((s) => s.addToast);
   const t = useTranslation();
+
+  const lastViewedCreatedAt = useHistoryStore((s) => s.lastViewedCreatedAt);
+  const sessionAfterRef = React.useRef(lastViewedCreatedAt ?? undefined);
 
   React.useEffect(() => {
     const postsRemaining = totalPosts - currentIndex;
@@ -98,7 +113,7 @@ export function useJIT(currentIndex: number, totalPosts: number): void {
             setTimeout(resolve, JIT_GENERATION_DELAY_MS);
           });
         } else {
-          await pollUntilPostsArrive(totalPosts);
+          await pollUntilPostsArrive(totalPosts, sessionAfterRef.current);
         }
       } catch (err) {
         addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });

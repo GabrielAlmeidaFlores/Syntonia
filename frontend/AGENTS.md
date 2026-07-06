@@ -107,12 +107,15 @@ src/
 │       └── feed/                    SavedFeedPage (index.tsx) — /saved/feed?start=post-id
 ├── hooks/
 │   ├── use-feed.ts                  Calls GET /feed via api.ts; paginates with cursor.
+│   │                                In production passes `?after=sessionAfter` on every request so
+│   │                                only posts newer than the user's last session are returned.
 │   ├── use-horizontal-swipe.ts      Attaches pointer events to a DOM element and fires a callback
 │   │                                when the user swipes left or right past a configurable threshold.
 │   │                                Uses setPointerCapture + passive:false on pointermove to block
 │   │                                vertical snap-scroll only when horizontal intent is confirmed.
 │   ├── use-jit.ts                   Calls POST /feed/request when buffer ≤ TRIGGER_THRESHOLD.
 │   │                                In production: polls GET /feed every 5s until posts arrive (90s max).
+│   │                                Poll also passes `?after=sessionAfter` to avoid detecting old posts.
 │   ├── use-saved-posts.ts           Loads GET /posts/saved with in-memory cache (SAVED_POSTS_TTL_MS = 5min).
 │   │                                Skips re-fetch if cache is fresh. Exposes `refresh()` to force
 │   │                                re-fetch and invalidate cache (called by the Reload button).
@@ -555,7 +558,7 @@ export const useMyStore = create<MyState>((set) => ({
 - Actions receive primitive values — no complex objects in `set()` unless necessary.
 - **Always use `(s) => s.field` selectors** in components to avoid unnecessary re-renders.
 - Never call `useMyStore()` without a selector in a component — it subscribes to all state.
-- `persist` middleware is used for `useUserStore`, `useSavedStore`, and `usePreferencesStore`.
+- `persist` middleware is used for `useUserStore`, `useSavedStore`, `usePreferencesStore`, and `useHistoryStore`.
 
 ### Stores summary
 
@@ -567,6 +570,7 @@ export const useMyStore = create<MyState>((set) => ({
 | `useLikedStore`       | `likedIds` (Set), `isLiked()`                                      | Yes        | `syntonia-liked`       |
 | `usePreferencesStore` | `theme`, `language`                                                | Yes        | `syntonia-preferences` |
 | `useUserStore`        | `description`, `extractedTags`, `activeTags`                       | Yes        | `syntonia-user-prefs`  |
+| `useHistoryStore`     | `lastViewedCreatedAt` (ISO string or null)                         | Yes        | `syntonia-history`     |
 | `useTermsStore`       | `needsAcceptance`, `termsVersion`, `privacyVersion`, `isChecking`  | No         | —                      |
 | `useToastStore`       | `toasts[]`                                                         | No         | —                      |
 

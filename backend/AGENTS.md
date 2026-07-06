@@ -391,7 +391,7 @@ export const serverError = (
 
 ```typescript
 // Feed
-getFeedByUser(userId, limit?, cursor?)   → { items: Post[], cursor: string | null }
+getFeedByUser(userId, limit?, cursor?, after?)   → { items: Post[], cursor: string | null }
 getPostById(postId)                      → Post | null
 savePost(post)                           → void
 markPostSaved(postId, userId)            → void   // SET savedAt, REMOVE ttl — ConditionExpression: userId = :uid

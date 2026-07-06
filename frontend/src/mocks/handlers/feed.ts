@@ -18,11 +18,12 @@ interface GenerationResponse {
 /**
  * GET /feed
  *
- * Returns a paginated slice of MOCK_POSTS. The cursor is a base64-encoded JSON
- * object `{ offset: number }` — identical structure to the production DynamoDB
- * LastEvaluatedKey encoding, ensuring cursor behaviour is consistent between
- * the mock and the real backend.
+ * Returns a paginated slice of MOCK_POSTS filtered by an optional `after`
+ * query param (ISO timestamp). Posts with createdAt <= after are excluded,
+ * mirroring the production DynamoDB `createdAt > :after` KeyConditionExpression.
  *
+ * The cursor is a base64-encoded JSON object `{ offset: number }` — identical
+ * structure to the production DynamoDB LastEvaluatedKey encoding.
  * The 400ms delay simulates a real DynamoDB GSI query via API Gateway + Lambda.
  */
 const getFeedHandler = http.get<never, never, FeedResponse>(
@@ -33,6 +34,12 @@ const getFeedHandler = http.get<never, never, FeedResponse>(
     const url = new URL(request.url);
     const cursorParam = url.searchParams.get("cursor");
     const limitParam = url.searchParams.get("limit");
+    const afterParam = url.searchParams.get("after");
+
+    const filtered =
+      afterParam !== null
+        ? MOCK_POSTS.filter((p) => p.createdAt > afterParam)
+        : MOCK_POSTS;
 
     const offset =
       cursorParam !== null
@@ -41,10 +48,10 @@ const getFeedHandler = http.get<never, never, FeedResponse>(
     const limit =
       limitParam !== null ? Math.min(Number(limitParam), 10) : FEED_PAGE_SIZE;
 
-    const slice = MOCK_POSTS.slice(offset, offset + limit);
+    const slice = filtered.slice(offset, offset + limit);
     const nextOffset = offset + slice.length;
     const nextCursor =
-      nextOffset < MOCK_POSTS.length
+      nextOffset < filtered.length
         ? btoa(JSON.stringify({ offset: nextOffset }))
         : null;
 
