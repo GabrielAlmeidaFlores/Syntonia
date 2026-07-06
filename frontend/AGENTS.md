@@ -32,6 +32,7 @@ Every AI agent working on this codebase must follow this exact sequence before w
 | Zustand               | 5.x     | Global state management                 |
 | React Router          | 6.28.x  | Client-side routing                     |
 | Framer Motion         | 11.x    | Swipe animations (PostCard, PostDetail) |
+| aws-amplify           | 6.x     | Cognito auth (signIn, signUp, signOut, session restore) |
 | react-markdown        | 9.x     | Renders Markdown post content           |
 | rehype-highlight      | 7.x     | Syntax highlighting in code blocks      |
 | highlight.js          | 11.x    | Highlight themes                        |
@@ -42,7 +43,8 @@ Every AI agent working on this codebase must follow this exact sequence before w
 
 **Node version:** 22.15.0 (enforced via `engines` in package.json)
 
-**Zero real API calls** — this is a pure mock. All data comes from `src/mocks/data/`.
+**Development:** zero real API calls — all data comes from `src/mocks/data/` via MSW.
+**Production:** Cognito (`@aws-amplify/auth`) handles authentication; API Gateway handles all other endpoints.
 
 ---
 
@@ -79,6 +81,8 @@ src/
 │       ├── input/                   Controlled text input (dark theme).
 │       ├── legal-doc-modal/         LegalDocModal — bottom-sheet that fetches and renders a legal
 │       │                            document (terms/privacy) as Markdown from GET /legal/{type}.
+│       ├── password-input/          PasswordInput — text input with Eye/EyeOff toggle button.
+│       │                            Wraps the base Input style; manages visible/hidden state internally.
 │       ├── share-modal/             ShareModal — bottom-sheet with post URL + copy-to-clipboard button.
 │       ├── skeleton/                Shimmer skeleton block (dark theme).
 │       ├── terms-acceptance-modal/  TermsAcceptanceModal — full-screen blocking modal (z:99999) shown
@@ -88,7 +92,10 @@ src/
 │       └── toast/                   ToastContainer (Framer Motion, portal).
 ├── features/                        One folder per feature, structured as {feature}/page/.
 │   ├── auth/
-│   │   └── login/page/              MockCognitoPage — calls POST /auth/callback (MSW).
+│   │   └── login/page/              LoginPage — three-mode auth form (signin / signup / confirm).
+│   │                                Dev: single button → POST /auth/callback (MSW mock).
+│   │                                Prod: email+password forms via @aws-amplify/auth; confirm mode
+│   │                                accepts the 6-digit Cognito verification code.
 │   ├── onboarding/page/             OnboardingPage + extracted-tags.tsx
 │   ├── feed/page/                   FeedPage + feed-container.tsx + post-card.tsx + post-detail.tsx
 │   ├── profile/page/                ProfilePage (tabs: Profile | Settings | Legal) +
@@ -105,7 +112,10 @@ src/
 │   │                                Uses setPointerCapture + passive:false on pointermove to block
 │   │                                vertical snap-scroll only when horizontal intent is confirmed.
 │   ├── use-jit.ts                   Calls POST /feed/request when buffer ≤ TRIGGER_THRESHOLD.
-│   ├── use-saved-posts.ts           Loads GET /posts/saved on mount; exposes `isLoading`.
+│   │                                In production: polls GET /feed every 5s until posts arrive (90s max).
+│   ├── use-saved-posts.ts           Loads GET /posts/saved with in-memory cache (SAVED_POSTS_TTL_MS = 5min).
+│   │                                Skips re-fetch if cache is fresh. Exposes `refresh()` to force
+│   │                                re-fetch and invalidate cache (called by the Reload button).
 │   ├── use-snap-navigation.ts       Intercepts wheel + keyboard events on a snap-scroll container
 │   │                                for reliable desktop navigation (wheel delta fix + Arrow/Space keys).
 │   └── use-translation.ts           Returns the translations object for the active language.
@@ -113,6 +123,13 @@ src/
 ├── lib/
 │   ├── env.ts                       Single source of truth for all VITE_* env vars. Every
 │   │                                import.meta.env access goes through here — nowhere else.
+│   ├── cache.ts                     In-memory TTL cache for API responses. Keyed by string.
+│   │                                Constants: SAVED_POSTS_TTL_MS (5min), POST_DETAIL_TTL_MS (30min),
+│   │                                PREFERENCES_TTL_MS (10min). Cleared entirely on logout.
+│   │                                API: appCache.{set, get, isFresh, touch, invalidate, invalidateAll}.
+│   ├── cognito.ts                   Calls Amplify.configure() with Cognito User Pool settings
+│   │                                from VITE_* env vars. Called once from main.tsx before the
+│   │                                React tree renders. No-op in dev (env vars absent).
 │   ├── i18n.ts                      Master translations file. Record<Language, Translations>.
 │   │                                All UI strings live here. Adding a language = adding a key.
 │   ├── utils.ts                     cn(), formatDate(), formatRelativeTime(), truncate(), sleep().
@@ -149,7 +166,11 @@ src/
 │                                    backend `ApiErrorCode` to a translated string from `t.errors`.
 ├── stores/
 │   ├── auth/
-│   │   └── index.ts                 useAuthStore — user, token, login(code), logout.
+│   │   └── index.ts                 useAuthStore — user, token, isAuthenticated,
+│   │                                login(email, password), logout(), restoreSession().
+│   │                                Dev: login calls POST /auth/callback (MSW).
+│   │                                Prod: login uses @aws-amplify/auth signIn; restoreSession()
+│   │                                checks for an existing Cognito session on app boot.
 │   ├── feed/
 │   │   └── index.ts                 useFeedStore — posts[], currentIndex, cursor, isLoading,
 │   │                                hasMore, isPostExpanded (locks snap container when PostDetail open).
@@ -165,9 +186,12 @@ src/
 │   │                                isChecking. NOT persisted. Checked on every authenticated session
 │   │                                via GET /legal/terms-status in app.tsx useEffect.
 │   ├── user/
-│   │   └── index.ts                 useUserStore — description, extractedTags (all AI-extracted,
-│   │                                immutable after extraction), activeTags (enabled subset),
-│   │                                setProfile(), setTags(), toggleTag().
+│   │   └── index.ts                 useUserStore — description, extractedTags, activeTags (enabled subset),
+│   │                                setDescription(), setProfile(), setTags(), toggleTag(),
+│   │                                syncFromServer(description, activeTags).
+│   │                                setProfile() — full reset after new AI extraction; all tags start active.
+│   │                                syncFromServer() — soft sync from server (login/restore); preserves
+│   │                                local extractedTags, merges new activeTags into them.
 │   │                                Persisted to localStorage: syntonia-user-prefs.
 │   ├── liked/
 │   │   └── index.ts                 useLikedStore — likedIds (Set, persisted), like(), unlike(), isLiked().
@@ -443,7 +467,7 @@ export type { ComponentProps };
 
 Pages that render without `FeedLayout`:
 
-- `/auth/login` (MockCognitoPage)
+- `/auth/login` (LoginPage — three-mode form: signin / signup / confirm)
 - `/onboarding` (OnboardingPage)
 - `/post/:id` (PostPage — full-screen, own sticky header)
 - `/saved/feed` (SavedFeedPage — full-screen snap-scroll, own back button)
@@ -543,6 +567,7 @@ export const useMyStore = create<MyState>((set) => ({
 | `useLikedStore`       | `likedIds` (Set), `isLiked()`                                      | Yes        | `syntonia-liked`       |
 | `usePreferencesStore` | `theme`, `language`                                                | Yes        | `syntonia-preferences` |
 | `useUserStore`        | `description`, `extractedTags`, `activeTags`                       | Yes        | `syntonia-user-prefs`  |
+| `useTermsStore`       | `needsAcceptance`, `termsVersion`, `privacyVersion`, `isChecking`  | No         | —                      |
 | `useToastStore`       | `toasts[]`                                                         | No         | —                      |
 
 ---
@@ -709,15 +734,27 @@ FeedPage
 
 ### JIT trigger
 
-`useJIT` runs inside `FeedPage` on every render:
+`useJIT` runs inside `FeedPage` on every render. Triggers when `activeTags.length > 0` AND `postsRemaining ≤ TRIGGER_THRESHOLD` — including when the feed is completely empty (first load for a new user).
 
+**Development path:**
 ```
-postsRemaining = totalPosts - currentIndex
-if postsRemaining <= TRIGGER_THRESHOLD (2) && !isGenerating:
-  → simulate POST /feed/request
-  → await sleep(JIT_GENERATION_DELAY_MS)
-  → appendPosts(3 shuffled posts matching activeTags)
-  → isGenerating stays true for 10s (debounce)
+postsRemaining ≤ TRIGGER_THRESHOLD && !isGenerating && activeTags.length > 0
+  → POST /feed/request (MSW intercepts, returns 202)
+  → await sleep(JIT_GENERATION_DELAY_MS)   [1500ms simulated delay]
+  → setLoading(false); isGenerating locked for 10s (debounce)
+```
+
+**Production path:**
+```
+postsRemaining ≤ TRIGGER_THRESHOLD && !isGenerating && activeTags.length > 0
+  → POST /feed/request → real SQS → Gemini worker (~15–60s)
+  → pollUntilPostsArrive(prevCount):
+      GET /feed every 5s, up to 18 attempts (90s total)
+      When data.posts.length > prevCount:
+        setPosts(data.posts) if prevCount === 0
+        appendPosts(deduplicated fresh posts) otherwise
+        setCursor(data.cursor)
+  → setLoading(false); isGenerating locked for 10s
 ```
 
 ### X-axis: PostCard → PostDetail
@@ -775,7 +812,7 @@ Never hardcode tag strings in components — always import from `@/lib/constants
 
 ### activeTags vs extractedTags
 
-- `extractedTags` — all tags extracted by AI from the user's description. Set once by `setProfile()`. **Never changes** after extraction. Always shown in `TagSelector` so the user can see and re-enable deactivated tags.
+- `extractedTags` — all tags the user has ever had active. Set by `setProfile()` when a new description is submitted (full reset — all new tags start active). Expanded (never shrunk) by `syncFromServer()` on every login and session restore, which merges any server-side `activeTags` not already present locally. Deactivated tags remain in `extractedTags` so they can be re-enabled by the user.
 - `activeTags` — the enabled subset of `extractedTags`. Drives feed generation. Stored in localStorage.
 - Minimum 1 active tag must always remain — enforced in `useUserStore.toggleTag` and `TagManager`.
 - Used by `useJIT` to filter relevant posts for generation.
@@ -800,9 +837,17 @@ Never hardcode tag strings in components — always import from `@/lib/constants
 4. Returns `Tag[]` → `useUserStore.setProfile(description, extractedTags)`.
 5. `setProfile` sets both `extractedTags = tags` and `activeTags = tags` — all start active.
 6. `onExtractionStateChange(false)` → `ProfilePage` sets `isExtractingTags = false` → `TagManager` renders real tags.
-7. `extractedTags` never changes after this point (immutable from user's perspective).
+7. `extractedTags` never changes after step 5 **unless** the user signs in or the app restores a session (see below).
 8. User can toggle individual tags in `TagManager` — only `activeTags` changes.
 9. Deactivated tags stay visible in `TagSelector` (muted style) and can be re-enabled.
+
+**Sync from server (login + session restore):**
+
+On every sign-in (`afterSignIn()` in `LoginPage`) and on every page reload with an active Cognito session (`useAuthStore.restoreSession()`), `syncFromServer(description, activeTags)` is called:
+- Updates `description` and `activeTags` from the server
+- Merges any `activeTags` not already in `extractedTags` into `extractedTags`
+- Preserves deactivated tags that exist in `extractedTags` but not in the server's `activeTags`
+- Does NOT reset `extractedTags` to the server's `activeTags` only
 
 **Tag loading state wiring:**
 - `ProfilePage` holds `isExtractingTags: boolean` state
@@ -823,25 +868,44 @@ Never hardcode tag strings in components — always import from `@/lib/constants
 
 ---
 
-## §17 — Auth Flow (Mock)
+## §17 — Auth Flow
 
 ### Production (real Cognito)
 
 ```
-User → /auth/login → Cognito Hosted UI → confirm email
-→ Cognito PostConfirmation trigger → profile created in DynamoDB
-→ App redirect → /onboarding (no description) or /feed
+Sign-up:
+User → /auth/login (LoginPage, mode="signup")
+  → signUp(email, password) via @aws-amplify/auth
+  → Cognito sends 6-digit verification email
+  → mode switches to "confirm"
+  → confirmSignUp(email, code) → auto sign-in → afterSignIn()
+  → Cognito PostConfirmation trigger → onUserSignup Lambda → profile created in DynamoDB
+  → navigate → /onboarding (no description) or /feed
+
+Sign-in:
+User → /auth/login (LoginPage, mode="signin")
+  → login(email, password) → Amplify signIn → fetchAuthSession + fetchUserAttributes
+  → GET /user/preferences → set user+token in auth store
+  → afterSignIn(): syncFromServer(description, activeTags) in user store
+  → navigate(returnTo)
+
+Session restore (app boot — no redirect needed):
+main.tsx → useAuthStore.restoreSession()
+  → fetchAuthSession(): if no valid idToken → return (unauthenticated, go to /auth/login)
+  → fetchUserAttributes() + GET /user/preferences (parallel)
+  → set user + token + isAuthenticated in auth store
+  → if description non-empty: syncFromServer(description, activeTags) in user store
+  → React tree renders with isAuthenticated = true → RootRedirect sends to /feed
 ```
 
-### Mock flow
+### Development (mock)
 
 ```
-User → /auth/login → MockCognitoPage
-→ click "Continue with Cognito"
-→ sleep(800ms)
-→ useAuthStore.mockCognitoLogin() → sets user from MOCK_AUTH_USER
-→ useUserStore.setProfile(description, activeTags)
-→ navigate(returnTo) → /feed (mock user has description set)
+User → /auth/login → LoginPage (single button, isMock = true)
+  → click "Continue with Cognito"
+  → useAuthStore.login(email, password) [dev branch: POST /auth/callback → MSW → MOCK_USER + token]
+  → afterSignIn(): syncFromServer(description, activeTags)
+  → navigate(returnTo) → /feed (mock user has description set)
 ```
 
 The mock user has a pre-set description and active tags so the feed works immediately after login.
@@ -865,19 +929,24 @@ return (
 
 ### Animation inventory — what exists
 
-| Context                           | Mechanism                                                   | Animation                           |
-| --------------------------------- | ----------------------------------------------------------- | ----------------------------------- |
-| Route change (Feed/Saved/Profile) | Framer Motion `AnimatePresence mode="wait"` in `FeedLayout` | Crossfade 140ms                     |
-| Bottom nav active indicator       | Framer Motion `layoutId="nav-active"` spring                | Pill slides between tabs            |
-| ProfilePage tab switch            | Framer Motion `AnimatePresence` + direction variants        | Slide 20px horizontal, 200ms        |
-| SavedGrid card entrance           | Framer Motion stagger (`gridContainerVariants`)             | Scale 0.9→1, stagger 45ms           |
-| PostDetail open/close             | `AnimatePresence` + `motion.div` spring                     | Slide from right, spring            |
-| PostPage entrance                 | `motion.div`                                                | Slide 30px from right, 280ms        |
-| Login / Onboarding entrance       | `motion.div`                                                | Fade + y:16→0, 300ms                |
-| EmptyFeedScreen entrance          | `motion.div`                                                | Fade + y:16→0, 300ms                |
-| Toast enter                       | Framer Motion `AnimatePresence mode="popLayout"`            | Slide from right with overshoot     |
-| Toast exit                        | Framer Motion exit variants                                 | Slide right + fade 300ms            |
-| Toast layout shift                | Framer Motion `layout` prop                                 | Spring — others animate up smoothly |
+| Context                           | Mechanism                                                        | Animation                                         |
+| --------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------- |
+| Route change (Feed/Saved/Profile) | `motion.div key={pathname}` (no AnimatePresence)                 | Tween: opacity 0→1 + y:12→0, 220ms ease-out      |
+| Bottom nav active indicator       | Framer Motion `layoutId="nav-active"` spring                     | Pill slides between tabs, spring                  |
+| ProfilePage tab switch            | Framer Motion `AnimatePresence` + direction variants             | Slide 20px horizontal, 200ms                      |
+| SavedGrid card entrance           | Framer Motion stagger (`gridContainerVariants`)                  | Scale 0.9→1, stagger 45ms                         |
+| PostDetail open (feed slide)      | `AnimatePresence` + `motion.div` spring x                        | Slide from right, spring (damping:32, stiff:300)  |
+| PostDetail open (saved expand)    | `AnimatePresence` + `motion.div` tween scale                     | Scale 0.92→1 + opacity, 260ms ease-out            |
+| PostPage entrance                 | `motion.div`                                                     | Slide 30px from right, 280ms                      |
+| Login / Onboarding entrance       | `motion.div`                                                     | Fade + y:16→0, 300ms                              |
+| EmptyFeedScreen entrance          | `motion.div`                                                     | Fade + y:16→0, 300ms                              |
+| Bottom-sheet modals (open)        | `motion.div` tween y                                             | y:100%→0, 280ms `ease:[0.32,0.72,0,1]`            |
+| Bottom-sheet modals (close)       | `exit` tween y                                                   | y:0→100%, 200ms `ease:[0.72,0,0.28,1]`            |
+| Modal overlays                    | `motion.div` opacity tween                                       | opacity 0→1, 180ms easeOut — NO backdrop blur     |
+| Terms accordion                   | `AnimatePresence` opacity                                        | Fade in/out 150ms — no height animation           |
+| Toast enter                       | Framer Motion `AnimatePresence mode="popLayout"`                 | Slide from right with overshoot                   |
+| Toast exit                        | Framer Motion exit variants                                      | Slide right + fade 300ms                          |
+| Toast layout shift                | Framer Motion `layout` prop                                      | Spring — others animate up smoothly               |
 
 ### When to use Framer Motion
 
@@ -896,11 +965,14 @@ return (
 ### Standard timing values
 
 ```
-Micro (button press):  100ms  — active:scale-[0.97] (Tailwind)
-Fast (crossfade):      140ms  — route change in FeedLayout
-Normal (slide):        200ms  — tab content, card items
-Slow (page entrance):  280–300ms  — full page enter animations
-Spring (layout):       damping 30, stiffness 380  — nav indicator, layout shifts
+Micro (button press):       100ms  — active:scale-[0.97] (Tailwind)
+Fast (route transition):    220ms  — route change in FeedLayout (tween y:12 + opacity)
+Normal (slide):             200ms  — tab content, card items
+Slow (page entrance):       280–300ms  — full page enter animations
+Modal enter (bottom-sheet): 280ms  — tween ease:[0.32,0.72,0,1]
+Modal exit (bottom-sheet):  200ms  — tween ease:[0.72,0,0.28,1]
+Modal overlay:              180ms  — tween easeOut, opacity only
+Spring (layout):            damping 30, stiffness 380  — nav indicator, layout shifts
 ```
 
 ### Direction-aware animation pattern (ProfilePage tabs)
@@ -961,6 +1033,30 @@ const itemVariants = {
 ### Toast animation — special rules
 
 Radix UI Toast was replaced by Framer Motion. See §28 for the full toast pattern.
+
+### Animation performance rules
+
+These rules prevent jank on mid-range and low-end devices. Follow them for any new animated element.
+
+1. **Never use `backdropFilter` on animated elements.** `backdrop-filter: blur()` forces GPU compositing but recalculates every frame — it is the single most expensive CSS property. For overlays, use a solid semi-transparent Tailwind class (`bg-black/60`) instead of blur.
+
+2. **Use `type: "tween"` for modals and route transitions.** Spring physics are calculated every frame and are non-deterministic. For predictable, GPU-friendly animations use tween with a cubic-bezier curve. Springs are only appropriate for draggable/interactive elements (nav indicator, PostDetail drag-to-dismiss).
+
+3. **Set `style={{ willChange: "transform" }}` on bottom-sheet containers and route wrappers.** This tells the browser to promote the element to its own compositing layer *before* the animation starts, avoiding a costly layer-creation spike on the first frame. Do not add `willChange` to deeply-nested or numerous elements — it consumes GPU memory.
+
+4. **Never animate `height` to/from `"auto"`.** Height animation forces layout recalculation (reflow) on every frame. For accordion-style expand/collapse, animate `opacity` only, or use CSS `grid-template-rows: 0fr → 1fr`.
+
+5. **Only animate GPU-accelerated properties:** `transform` (translate, scale, rotate), `opacity`. Never animate `width`, `height`, `top`, `left`, `margin`, `padding` with Framer Motion.
+
+6. **Shared constants for bottom-sheet transitions:**
+
+```typescript
+const SHEET_ENTER = { type: "tween", ease: [0.32, 0.72, 0, 1], duration: 0.28 } as const;
+const SHEET_EXIT  = { type: "tween", ease: [0.72, 0, 0.28, 1], duration: 0.2  } as const;
+const OVERLAY     = { type: "tween", ease: "easeOut",           duration: 0.18 } as const;
+```
+
+Define these as module-level constants (not inline) so TypeScript treats them as stable references.
 
 ### `prefers-reduced-motion`
 

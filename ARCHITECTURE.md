@@ -134,7 +134,7 @@ Y-AXIS (vertical scroll — navigates between posts)
 
 ## 3. Frontend — React + Vite + MSW
 
-> **Status:** Fully mocked frontend (Phase 1 complete). No real API calls leave the browser — MSW (Mock Service Worker) intercepts every `fetch` request and returns deterministic mock data. When the real backend is ready, set `VITE_API_URL` in Amplify Console and remove the MSW initialisation from `main.tsx`. No component changes needed.
+> **Status:** Production-ready frontend connected to AWS backend. In development, MSW intercepts every `fetch` request and returns deterministic mock data (`VITE_MODE === "development"`). In production, Cognito (`@aws-amplify/auth`) handles auth and all requests go to the real API Gateway. The `VITE_API_URL`, `VITE_COGNITO_USER_POOL_ID`, and `VITE_COGNITO_CLIENT_ID` env vars control the production target.
 
 ### Tech Stack
 
@@ -144,26 +144,26 @@ Y-AXIS (vertical scroll — navigates between posts)
 | **TypeScript** | 5.7.x | Strict mode — zero `any`, full type safety |
 | **Vite** | 6.x | Build tool + dev server |
 | **Tailwind CSS** | 3.4.x | Utility-first styling with CSS variable tokens |
-| **Zustand** | 5.x | Global state — 7 stores (auth, feed, saved, user, preferences, terms, toast) |
+| **Zustand** | 5.x | Global state — 8 stores (auth, feed, saved, liked, user, preferences, terms, toast) |
 | **React Router** | 6.28.x | Client-side routing — lazy-loaded pages |
 | **Framer Motion** | 11.x | Snap-scroll, swipe transitions, stagger animations |
 | **react-markdown** | 9.x | Renders Markdown post content |
 | **rehype-highlight** | 7.x | Syntax highlighting in code blocks |
 | **remark-gfm** | latest | GitHub Flavored Markdown support |
 | **highlight.js** | 11.x | Syntax highlight themes |
+| **aws-amplify** | 6.x | Cognito auth — signIn, signUp, confirmSignUp, signOut, session restore |
 | **MSW** | 2.x | Mock Service Worker — intercepts all API calls in development |
 | **Radix UI** | various | Accessible headless primitives (Tooltip) |
 | **CVA** | 0.7.x | Class Variance Authority — component variant system |
 | **clsx + tailwind-merge** | latest | Class name merging via `cn()` |
-| **Lucide React** | 0.469.x | Icon set |
 
-**Node version:** 22.15.0 | **Package manager:** yarn 1.22.22
+| **Lucide React** | 0.469.x | Icon set |
 
 ### Route Structure
 
 ```
 /                     → RootRedirect → /auth/login | /onboarding | /feed
-/auth/login           → MockCognitoPage (mock auth — no real Cognito in dev)
+/auth/login           → LoginPage (signin / signup / confirm — real Cognito in prod, MSW in dev)
 /onboarding           → OnboardingPage (RequireAuth) — first-time profile setup
 /feed                 → FeedPage (RequireAuth + FeedLayout) — main snap-scroll feed
 /saved                → SavedGridPage (RequireAuth + FeedLayout) — 2-column saved posts grid
@@ -177,11 +177,11 @@ Y-AXIS (vertical scroll — navigates between posts)
 2. Authenticated + `description === ''` → `/onboarding`
 3. Authenticated + has description → `/feed`
 
-All pages are `React.lazy` — wrapped in `withSuspense()` which renders a `Spinner` as fallback.
+**Node version:** 22.15.0 | **Package manager:** yarn 1.22.22
 
 ### Application Entry Points
 
-**`src/main.tsx`**
+All pages are `React.lazy` — wrapped in `withSuspense()` which renders a `Spinner` as fallback.
 - Starts MSW ServiceWorker in development (`VITE_MODE === "development"`)
 - Renders `<App />` in `<React.StrictMode>`
 
@@ -203,13 +203,14 @@ Component → api.ts → fetch() → [MSW ServiceWorker] → mock handler → JS
 **Handlers:** `src/mocks/handlers/` (auth, feed, legal, saved, user)
 **Mock data:** `src/mocks/data/` (posts, user, legal, saved, tags)
 
-In production: remove MSW init from `main.tsx`, set `VITE_API_URL` → all requests go to real API Gateway. Zero other changes needed.
+In production: all requests go to the real API Gateway with `VITE_API_URL`. MSW is automatically disabled when `VITE_MODE !== "development"`.
 
 ### Key Page Flows
 
-**`MockCognitoPage`** (`/auth/login`)
-- Click "Continue with Cognito" → `POST /auth/callback` (MSW) → returns mock user + token
-- Sets auth store, syncs description + activeTags to user store
+**`LoginPage`** (`/auth/login`)
+- Dev: single "Continue" button → `POST /auth/callback` (MSW) → returns mock user + token
+- Prod (signin): email+password → Amplify `signIn` → `GET /user/preferences` → `syncFromServer`
+- Prod (signup): email+password → Amplify `signUp` → 6-digit confirm code → auto sign-in
 - Navigates to `returnTo` param or `/feed`
 
 **`OnboardingPage`** (`/onboarding`)
@@ -242,7 +243,9 @@ In production: remove MSW init from `main.tsx`, set `VITE_API_URL` → all reque
   - Two rows: Terms of Use + Privacy Policy → each opens `LegalDocModal`
 
 **`SavedGridPage`** (`/saved`)
-- `useSavedPosts` loads `GET /posts/saved` on mount
+- `useSavedPosts` loads `GET /posts/saved` with in-memory cache (TTL: 5 minutes)
+- Skips re-fetch on re-mount if cache is fresh — instant navigation back to `/saved`
+- **Reload button** (`RotateCcw` icon) in the header — invalidates cache and re-fetches from backend
 - 2-column grid with stagger animation on load
 - Each `SavedPostCard`: tap → opens `ExpandedOverlay` (full-screen portal, swipe right to close)
 - Unsave button → `ConfirmModal` → `DELETE /post/:id/save`
@@ -253,7 +256,8 @@ In production: remove MSW init from `main.tsx`, set `VITE_API_URL` → all reque
 - No JIT generation — fixed list of saved posts
 
 **`PostPage`** (`/post/:id`)
-- Deep link for sharing — `GET /post/:id` on mount
+- Deep link for sharing — `GET /post/:id` on first visit; cached for 30 minutes
+- Subsequent visits to the same post render instantly from cache (no network round-trip)
 - Full Markdown rendering with syntax highlighting
 
 ### State Management
@@ -381,6 +385,7 @@ VITE_AWS_REGION=sa-east-1
 ```json
 {
   "dependencies": {
+    "aws-amplify": "^6.18.0",
     "framer-motion": "^11.0.0",
     "highlight.js": "^11.9.0",
     "react": "^18.3.0",
@@ -520,7 +525,7 @@ STAGE=dev
 |---|---|---|---|---|
 | `getFeed` | GET /feed | 10s | Default | Returns paginated posts via GSI |
 | `requestPost` | POST /feed/request | 10s | Default | Sends to SQS + persists request to DynamoDB |
-| `workerInternal` | SQS (GenerationQueue) | 60s | 5 (reserved) | Calls Gemini, saves post with 90-day TTL |
+| `workerInternal` | SQS (GenerationQueue) | 60s | Default | Calls Gemini, saves post with 90-day TTL |
 | `getPost` | GET /post/{id} | 10s | Default | Returns a full post by ID |
 | `savePost` | POST /post/{id}/save | 10s | Default | Sets `savedAt`, removes `ttl` — post persists forever |
 | `unsavePost` | DELETE /post/{id}/save | 10s | Default | Removes `savedAt`, restores `ttl = now + 30d` |

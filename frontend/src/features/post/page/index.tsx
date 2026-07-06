@@ -11,6 +11,7 @@ import { Spinner } from "@/components/shared/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/hooks/use-translation";
+import { appCache, POST_DETAIL_TTL_MS } from "@/lib/cache";
 import { formatRelativeTime } from "@/lib/utils";
 import { api } from "@/services/api";
 import type { Post } from "@/types";
@@ -18,9 +19,10 @@ import type { Post } from "@/types";
 /**
  * Deep-link single post page at /post/:id.
  *
- * Calls GET /post/:id — MSW intercepts and returns the full post object
- * (including Markdown content) from MOCK_POSTS. In production the request
- * goes to the real API Gateway → Lambda → DynamoDB GetItem.
+ * Calls GET /post/:id on first visit and caches the result for POST_DETAIL_TTL_MS
+ * (30 minutes). Subsequent visits to the same post within the TTL render instantly
+ * from cache without a network round-trip.
+ * In production the request goes to the real API Gateway → Lambda → DynamoDB GetItem.
  */
 export default function PostPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
@@ -38,10 +40,20 @@ export default function PostPage(): React.JSX.Element {
       return;
     }
 
+    const cacheKey = `post:${id}`;
+    const cached = appCache.get(cacheKey, POST_DETAIL_TTL_MS) as Post | null;
+
+    if (cached !== null) {
+      setPost(cached);
+      setLoading(false);
+      return;
+    }
+
     void api
       .get<Post>(`/post/${id}`)
       .then((data) => {
         setPost(data);
+        appCache.set(cacheKey, data);
       })
       .catch(() => {
         setNotFound(true);

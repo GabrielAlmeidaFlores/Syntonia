@@ -701,7 +701,6 @@ SQS record body: { requestId, userId, tags, description }
 **Maximum Gemini calls per SQS message: 3 outer attempts × 2 models = 6 calls worst-case.**
 
 **Key constraints:**
-- `reservedConcurrency: 5` — limits concurrent Gemini API spend
 - `batchSize: 1` — one record per invocation; isolated failures
 - `VisibilityTimeout: 120s` — must be > Lambda timeout (60s); prevents duplicate processing
 - `functionResponseType: ReportBatchItemFailures` — only the failed message returns to queue
@@ -1053,15 +1052,17 @@ aws ssm put-parameter \
   --name "/syntonia/dev/gemini-api-key" \
   --value "AIzaSy..." \
   --type SecureString \
-  --region sa-east-1
+  --region sa-east-1 \
+  --profile syntonia
 
-npm run deploy:dev
+# Deploy (use serverless@3 — v4 requires paid login)
+AWS_PROFILE=syntonia npx serverless@3 deploy --stage dev
 
 # After first deploy — seed legal documents
-npm run seed:legal
+AWS_PROFILE=syntonia npm run seed:legal
 
 # Get output values for frontend configuration
-npx serverless info --stage dev
+AWS_PROFILE=syntonia npx serverless@3 info --stage dev
 ```
 
 **Outputs from serverless.yml** → set in `frontend/.env.local` and Amplify Console:
@@ -1132,7 +1133,7 @@ await getLatestLegalDocument('privacy');           // most recent EN Privacy (de
 | `likePost.ts` | POST | `/post/{id}/like` | ✓ | `{ likedAt }` |
 | `unlikePost.ts` | DELETE | `/post/{id}/like` | ✓ | `{}` |
 | `getSavedPosts.ts` | GET | `/posts/saved` | ✓ | `{ posts, cursor, hasMore }` |
-| `getPreferences.ts` | GET | `/user/preferences` | ✓ | `{ userId, description, activeTags, availableTags, theme, language }` |
+| `getPreferences.ts` | GET | `/user/preferences` | ✓ | `{ userId, description, activeTags, theme, language }` |
 | `updatePreferences.ts` | PUT | `/user/preferences` | ✓ | `{}` |
 | `updateProfile.ts` | PUT | `/user/profile` | ✓ | `{ description, activeTags, updatedAt }` |
 | `health.ts` | GET | `/health` | ✗ | `{ status, timestamp, stage }` |

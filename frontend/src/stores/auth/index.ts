@@ -85,6 +85,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         void signOut();
       });
     }
+    void import("@/lib/cache").then(({ appCache }) => {
+      appCache.invalidateAll();
+    });
     set({ user: null, token: null, isAuthenticated: false });
   },
 

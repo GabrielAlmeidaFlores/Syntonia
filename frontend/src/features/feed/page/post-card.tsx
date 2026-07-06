@@ -99,7 +99,7 @@ export function PostCard({
           <button
             type="button"
             onClick={open}
-            className="mt-2 flex items-center gap-2 self-start rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs text-white/80 backdrop-blur-sm transition-colors hover:bg-white/20 active:bg-white/30"
+            className="mt-2 flex items-center gap-2 self-start rounded-full border border-white/20 bg-white/15 px-4 py-1.5 text-xs text-white/80 transition-colors hover:bg-white/20 active:bg-white/30"
             aria-label={t.feed.ariaReadFull}
           >
             <BookOpen className="h-3.5 w-3.5" aria-hidden />
@@ -113,29 +113,11 @@ export function PostCard({
           (detailVariant === "expand" ? (
             <motion.div
               ref={detailRef}
-              initial={{
-                opacity: 0,
-                scale: 0.18,
-                borderRadius: "24px",
-              }}
-              animate={{
-                opacity: 1,
-                scale: 1,
-                borderRadius: "0px",
-              }}
-              exit={{
-                opacity: 0,
-                scale: 0.18,
-                borderRadius: "24px",
-              }}
-              transition={{
-                type: "spring",
-                damping: 22,
-                stiffness: 190,
-                opacity: { duration: 0.18, ease: "easeOut" },
-                borderRadius: { duration: 0.3 },
-              }}
-              style={{ originX: 0.5, originY: 0.5 }}
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.92, transition: { type: "tween", ease: "easeIn", duration: 0.18 } }}
+              transition={{ type: "tween", ease: [0.25, 0.46, 0.45, 0.94], duration: 0.26 }}
+              style={{ originX: 0.5, originY: 0.5, willChange: "transform, opacity" }}
               className="absolute inset-0 z-10 overflow-y-auto overscroll-y-contain bg-surface scrollbar-thin"
             >
               <PostDetail post={post} onClose={close} />
@@ -146,7 +128,8 @@ export function PostCard({
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 28, stiffness: 280 }}
+              transition={{ type: "spring", damping: 32, stiffness: 300, restDelta: 0.5 }}
+              style={{ willChange: "transform" }}
               className="absolute inset-0 z-10 overflow-y-auto overscroll-y-contain bg-surface scrollbar-thin"
             >
               <PostDetail post={post} onClose={close} />

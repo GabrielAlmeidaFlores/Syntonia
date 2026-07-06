@@ -211,10 +211,10 @@ function DocAccordion({
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: "easeInOut" }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ type: "tween", ease: "easeOut", duration: 0.15 }}
             className="overflow-hidden"
           >
             <div className="border-t border-surface-border px-4 py-4">

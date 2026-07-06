@@ -11,6 +11,7 @@ interface Translations {
     close: string;
     showPassword: string;
     hidePassword: string;
+    reload: string;
   };
   errors: Record<ApiErrorCode, string>;
   nav: {
@@ -186,6 +187,7 @@ export const translations: Record<Language, Translations> = {
       close: "Close",
       showPassword: "Show password",
       hidePassword: "Hide password",
+      reload: "Reload",
     },
     errors: {
       UNAUTHENTICATED: "Your session has expired. Please sign in again.",
@@ -385,6 +387,7 @@ export const translations: Record<Language, Translations> = {
       close: "Fechar",
       showPassword: "Mostrar senha",
       hidePassword: "Ocultar senha",
+      reload: "Recarregar",
     },
     errors: {
       UNAUTHENTICATED: "Sua sessão expirou. Por favor, faça login novamente.",

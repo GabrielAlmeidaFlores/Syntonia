@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Bookmark } from "lucide-react";
+import { Bookmark, RotateCcw } from "lucide-react";
 import * as React from "react";
 import { createPortal } from "react-dom";
 
@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PostDetail } from "@/features/feed/page/post-detail";
 import { useSavedPosts } from "@/hooks/use-saved-posts";
 import { useTranslation } from "@/hooks/use-translation";
+import { cn } from "@/lib/utils";
 import { useSavedStore } from "@/stores/saved";
 import type { Post } from "@/types";
 
@@ -130,14 +131,48 @@ function ExpandedOverlay({
   );
 }
 
+interface PageHeaderProps {
+  readonly title: string;
+  readonly onReload: () => void;
+  readonly isLoading: boolean;
+  readonly reloadLabel: string;
+}
+
+/** Page header shared across all saved-grid states (loading / empty / populated). */
+function PageHeader({
+  title,
+  onReload,
+  isLoading,
+  reloadLabel,
+}: PageHeaderProps): React.JSX.Element {
+  return (
+    <div className="flex items-center justify-between px-4 pt-5 pb-4">
+      <h1 className="text-lg font-bold text-content-primary">{title}</h1>
+      <button
+        type="button"
+        onClick={onReload}
+        disabled={isLoading}
+        aria-label={reloadLabel}
+        className="rounded-lg p-1.5 text-content-subtle transition-colors hover:text-content-primary disabled:opacity-40"
+      >
+        <RotateCcw
+          className={cn("h-4 w-4", isLoading && "animate-spin")}
+          aria-hidden
+        />
+      </button>
+    </div>
+  );
+}
+
 /**
  * Grid view of the user's saved posts.
  * Clicking a card expands it with a slide-from-right animation.
  * Cards animate in with a stagger effect on load.
+ * A Reload button in the header lets the user manually refresh from the backend.
  */
 export default function SavedGridPage(): React.JSX.Element {
   const posts = useSavedStore((s) => s.posts);
-  const { isLoading } = useSavedPosts();
+  const { isLoading, refresh } = useSavedPosts();
   const t = useTranslation();
 
   const [expandedPost, setExpandedPost] = React.useState<Post | null>(null);
@@ -150,13 +185,20 @@ export default function SavedGridPage(): React.JSX.Element {
     setExpandedPost(null);
   }, []);
 
+  const title = isLoading || posts.length === 0
+    ? t.saved.title
+    : t.saved.titleWithCount(posts.length);
+
   if (isLoading) {
     return (
-      <div className="h-full overflow-y-auto px-4 py-5">
-        <h1 className="mb-4 text-lg font-bold text-content-primary">
-          {t.saved.title}
-        </h1>
-        <div className="grid grid-cols-2 gap-3">
+      <div className="h-full overflow-y-auto">
+        <PageHeader
+          title={title}
+          onReload={refresh}
+          isLoading={isLoading}
+          reloadLabel={t.common.reload}
+        />
+        <div className="grid grid-cols-2 gap-3 px-4">
           {Array.from({ length: 6 }, (_, i) => (
             <Skeleton key={i} className="aspect-[3/4] rounded-2xl" />
           ))}
@@ -167,35 +209,43 @@ export default function SavedGridPage(): React.JSX.Element {
 
   if (posts.length === 0) {
     return (
-      <motion.div
-        className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.28, ease: "easeOut" }}
-      >
-        <Bookmark className="h-10 w-10 text-content-subtle" aria-hidden />
-        <p className="text-base font-semibold text-content-primary">
-          {t.saved.emptyHeading}
-        </p>
-        <p className="text-sm text-content-muted">{t.saved.emptyDescription}</p>
-      </motion.div>
+      <div className="flex h-full flex-col">
+        <PageHeader
+          title={title}
+          onReload={refresh}
+          isLoading={isLoading}
+          reloadLabel={t.common.reload}
+        />
+        <motion.div
+          className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.28, ease: "easeOut" }}
+        >
+          <Bookmark className="h-10 w-10 text-content-subtle" aria-hidden />
+          <p className="text-base font-semibold text-content-primary">
+            {t.saved.emptyHeading}
+          </p>
+          <p className="text-sm text-content-muted">
+            {t.saved.emptyDescription}
+          </p>
+        </motion.div>
+      </div>
     );
   }
 
   return (
     <>
-      <div className="h-full overflow-y-auto px-4 py-5">
-        <motion.h1
-          className="mb-4 text-lg font-bold text-content-primary"
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, ease: "easeOut" }}
-        >
-          {t.saved.titleWithCount(posts.length)}
-        </motion.h1>
+      <div className="h-full overflow-y-auto">
+        <PageHeader
+          title={title}
+          onReload={refresh}
+          isLoading={isLoading}
+          reloadLabel={t.common.reload}
+        />
 
         <motion.div
-          className="grid grid-cols-2 gap-3 pb-4"
+          className="grid grid-cols-2 gap-3 px-4 pb-4"
           variants={gridContainerVariants}
           initial="hidden"
           animate="visible"

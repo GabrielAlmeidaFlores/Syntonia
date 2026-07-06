@@ -16,6 +16,10 @@ interface ConfirmModalProps {
   readonly confirmVariant?: "destructive" | "primary";
 }
 
+const SHEET_ENTER = { type: "tween", ease: [0.32, 0.72, 0, 1], duration: 0.28 } as const;
+const SHEET_EXIT = { type: "tween", ease: [0.72, 0, 0.28, 1], duration: 0.2 } as const;
+const OVERLAY = { type: "tween", ease: "easeOut", duration: 0.18 } as const;
+
 /**
  * Accessible bottom-sheet confirmation modal rendered via React Portal.
  * Slides in from the bottom on both mobile and desktop.
@@ -49,27 +53,23 @@ export function ConfirmModal({
       {open && (
         <>
           <motion.div
-            className="fixed inset-0"
-            style={{
-              zIndex: 10000,
-              backgroundColor: "rgba(0,0,0,0.6)",
-              backdropFilter: "blur(4px)",
-            }}
+            className="fixed inset-0 bg-black/60"
+            style={{ zIndex: 10000 }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={OVERLAY}
             onClick={onCancel}
             aria-hidden
           />
 
           <motion.div
             className="fixed inset-x-0 bottom-0"
-            style={{ zIndex: 10001 }}
+            style={{ zIndex: 10001, willChange: "transform" }}
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 28, stiffness: 320 }}
+            exit={{ y: "100%", transition: SHEET_EXIT }}
+            transition={SHEET_ENTER}
           >
             <div
               role="dialog"

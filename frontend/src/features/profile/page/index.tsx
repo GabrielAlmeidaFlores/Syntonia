@@ -10,6 +10,7 @@ import { TagManager } from "./tag-manager";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useTranslation } from "@/hooks/use-translation";
+import { appCache, PREFERENCES_TTL_MS } from "@/lib/cache";
 import { cn } from "@/lib/utils";
 import { api } from "@/services/api";
 import { useAuthStore } from "@/stores/auth";
@@ -59,12 +60,14 @@ export default function ProfilePage(): React.JSX.Element {
   );
 
   React.useEffect(() => {
+    if (appCache.isFresh("user-preferences", PREFERENCES_TTL_MS)) return;
     void api.get<UserPreferences>("/user/preferences").then((prefs) => {
       if (prefs.description !== null) {
         syncFromServer(prefs.description, prefs.activeTags);
       }
       setTheme(prefs.theme);
       setLanguage(prefs.language);
+      appCache.touch("user-preferences");
     });
   }, [syncFromServer, setTheme, setLanguage]);
 

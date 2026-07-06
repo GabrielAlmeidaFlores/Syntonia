@@ -12,8 +12,9 @@ import { cn } from "@/lib/utils";
  * with three tabs: Feed, Saved, and Profile.
  * Logout is handled inside ProfilePage.
  *
- * Route transitions: AnimatePresence crossfade on pathname change.
- * Nav indicator: Framer Motion layoutId "nav-active" animates the
+ * Route transitions: `motion.div` with `key={pathname}` — tween y:12 + opacity,
+ * 220ms `ease:[0.25,0.46,0.45,0.94]`, `willChange` pre-set for GPU compositing.
+ * Nav indicator: Framer Motion `layoutId="nav-active"` animates the
  * accent background pill between tabs as a spring transition.
  */
 export function FeedLayout(): React.JSX.Element {
@@ -31,15 +32,11 @@ export function FeedLayout(): React.JSX.Element {
       <main className="flex-1 overflow-hidden">
         <motion.div
           key={location.pathname}
-          initial={{ opacity: 0, y: 60, scale: 0.94 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{
-            type: "spring",
-            damping: 22,
-            stiffness: 200,
-            opacity: { duration: 0.18, ease: "easeOut" },
-          }}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "tween", ease: [0.25, 0.46, 0.45, 0.94], duration: 0.22 }}
           className="h-full"
+          style={{ willChange: "transform, opacity" }}
         >
           <Outlet />
         </motion.div>
