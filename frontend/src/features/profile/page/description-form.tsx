@@ -4,6 +4,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useTranslation } from "@/hooks/use-translation";
+import { appCache } from "@/lib/cache";
 import { api, getApiErrorMessage } from "@/services/api";
 import { useToastStore } from "@/stores/toast";
 import { useUserStore } from "@/stores/user";
@@ -51,6 +52,7 @@ export function DescriptionForm({
       });
 
       setProfile(response.description, response.activeTags);
+      appCache.invalidate("user-preferences");
       addToast({
         type: "success",
         message: t.descriptionForm.toastSuccess(response.activeTags.length),
