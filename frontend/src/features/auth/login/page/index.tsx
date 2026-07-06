@@ -12,16 +12,19 @@ import { getApiErrorMessage } from "@/services/api";
 import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
 
-type AuthMode = "signin" | "signup" | "confirm";
+type AuthMode = "signin" | "signup" | "confirm" | "forgotPassword" | "resetPassword";
 
 /**
- * Authentication page — handles sign-in, sign-up, and email confirmation.
+ * Authentication page — handles sign-in, sign-up, email confirmation,
+ * forgot-password and password-reset flows.
  *
  * In development: shows a single "Continue with Cognito" button (MSW mock).
- * In production: shows real email+password forms connected to the Cognito User Pool.
+ * In production: real email+password forms connected to the Cognito User Pool.
  *   - Sign-in: email + password → Amplify signIn
  *   - Sign-up: email + password + confirm password → Amplify signUp
- *   - Confirm: 6-digit code from email → Amplify confirmSignUp → auto sign-in
+ *   - Confirm: 6-digit code → Amplify confirmSignUp → auto sign-in
+ *   - Forgot password: email → Amplify resetPassword (sends code)
+ *   - Reset password: code + new password → Amplify confirmResetPassword → back to sign-in
  */
 export default function LoginPage(): React.JSX.Element {
   const t = useTranslation();
@@ -38,16 +41,20 @@ export default function LoginPage(): React.JSX.Element {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
   const [confirmCode, setConfirmCode] = React.useState("");
+  const [resetCode, setResetCode] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = React.useState<string | null>(null);
 
-  const clearError = (): void => {
+  const clearMessages = (): void => {
     setError(null);
+    setSuccessMsg(null);
   };
 
   const switchMode = (next: AuthMode): void => {
-    clearError();
+    clearMessages();
     setMode(next);
   };
 
@@ -65,7 +72,7 @@ export default function LoginPage(): React.JSX.Element {
 
   const handleSignIn = async (): Promise<void> => {
     setLoading(true);
-    clearError();
+    clearMessages();
     try {
       await login(email, password);
       afterSignIn();
@@ -81,7 +88,7 @@ export default function LoginPage(): React.JSX.Element {
       return;
     }
     setLoading(true);
-    clearError();
+    clearMessages();
     try {
       const { signUp } = await import("@aws-amplify/auth");
       await signUp({
@@ -99,7 +106,7 @@ export default function LoginPage(): React.JSX.Element {
 
   const handleConfirm = async (): Promise<void> => {
     setLoading(true);
-    clearError();
+    clearMessages();
     try {
       const { confirmSignUp } = await import("@aws-amplify/auth");
       await confirmSignUp({ username: email, confirmationCode: confirmCode });
@@ -111,10 +118,48 @@ export default function LoginPage(): React.JSX.Element {
     }
   };
 
+  const handleForgotPassword = async (): Promise<void> => {
+    setLoading(true);
+    clearMessages();
+    try {
+      const { resetPassword } = await import("@aws-amplify/auth");
+      await resetPassword({ username: email });
+      setMode("resetPassword");
+      setLoading(false);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t.errors.INTERNAL_ERROR);
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (): Promise<void> => {
+    setLoading(true);
+    clearMessages();
+    try {
+      const { confirmResetPassword } = await import("@aws-amplify/auth");
+      await confirmResetPassword({
+        username: email,
+        confirmationCode: resetCode,
+        newPassword,
+      });
+      setResetCode("");
+      setNewPassword("");
+      setPassword("");
+      setMode("signin");
+      setSuccessMsg(t.auth.resetPasswordSuccess);
+      setLoading(false);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t.errors.INTERNAL_ERROR);
+      setLoading(false);
+    }
+  };
+
   const headings: Record<AuthMode, string> = {
     signin: t.auth.signinHeading,
     signup: t.auth.signupHeading,
     confirm: t.auth.confirmHeading,
+    forgotPassword: t.auth.forgotPasswordHeading,
+    resetPassword: t.auth.resetPasswordHeading,
   };
 
   return (
@@ -152,15 +197,17 @@ export default function LoginPage(): React.JSX.Element {
             {headings[mode]}
           </h2>
 
-          {mode === "confirm" ? (
-            <p className="mb-5 text-xs text-content-muted">
-              {t.auth.confirmDescription(email)}
-            </p>
-          ) : (
-            <p className="mb-5 text-xs text-content-muted">
-              {isMock ? t.auth.signinDescription : t.auth.appSubtitle}
-            </p>
-          )}
+          <p className="mb-5 text-xs text-content-muted">
+            {mode === "confirm"
+              ? t.auth.confirmDescription(email)
+              : mode === "forgotPassword"
+                ? t.auth.forgotPasswordDescription
+                : mode === "resetPassword"
+                  ? t.auth.resetPasswordDescription(email)
+                  : isMock
+                    ? t.auth.signinDescription
+                    : t.auth.appSubtitle}
+          </p>
 
           {!isMock && mode === "signin" && (
             <div className="mb-4 flex flex-col gap-3">
@@ -168,24 +215,25 @@ export default function LoginPage(): React.JSX.Element {
                 type="email"
                 placeholder={t.auth.emailPlaceholder}
                 value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                }}
+                onChange={(e) => { setEmail(e.target.value); }}
                 disabled={loading}
                 aria-label={t.auth.emailPlaceholder}
               />
               <PasswordInput
                 placeholder={t.auth.passwordPlaceholder}
                 value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                }}
+                onChange={(e) => { setPassword(e.target.value); }}
                 disabled={loading}
                 aria-label={t.auth.passwordPlaceholder}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !loading) void handleSignIn();
-                }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !loading) void handleSignIn(); }}
               />
+              <button
+                type="button"
+                onClick={() => { switchMode("forgotPassword"); }}
+                className="self-end text-xs text-content-subtle transition-colors hover:text-content-muted"
+              >
+                {t.auth.forgotPasswordLink}
+              </button>
             </div>
           )}
 
@@ -195,32 +243,24 @@ export default function LoginPage(): React.JSX.Element {
                 type="email"
                 placeholder={t.auth.emailPlaceholder}
                 value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                }}
+                onChange={(e) => { setEmail(e.target.value); }}
                 disabled={loading}
                 aria-label={t.auth.emailPlaceholder}
               />
               <PasswordInput
                 placeholder={t.auth.passwordPlaceholder}
                 value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                }}
+                onChange={(e) => { setPassword(e.target.value); }}
                 disabled={loading}
                 aria-label={t.auth.passwordPlaceholder}
               />
               <PasswordInput
                 placeholder={t.auth.passwordConfirmPlaceholder}
                 value={confirmPassword}
-                onChange={(e) => {
-                  setConfirmPassword(e.target.value);
-                }}
+                onChange={(e) => { setConfirmPassword(e.target.value); }}
                 disabled={loading}
                 aria-label={t.auth.passwordConfirmPlaceholder}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !loading) void handleSignUp();
-                }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !loading) void handleSignUp(); }}
               />
             </div>
           )}
@@ -231,18 +271,60 @@ export default function LoginPage(): React.JSX.Element {
                 type="text"
                 placeholder={t.auth.confirmCodePlaceholder}
                 value={confirmCode}
-                onChange={(e) => {
-                  setConfirmCode(e.target.value);
-                }}
+                onChange={(e) => { setConfirmCode(e.target.value); }}
                 disabled={loading}
                 aria-label={t.auth.confirmCodePlaceholder}
                 maxLength={6}
                 inputMode="numeric"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !loading) void handleConfirm();
-                }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !loading) void handleConfirm(); }}
               />
             </div>
+          )}
+
+          {!isMock && mode === "forgotPassword" && (
+            <div className="mb-4">
+              <Input
+                type="email"
+                placeholder={t.auth.emailPlaceholder}
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); }}
+                disabled={loading}
+                aria-label={t.auth.emailPlaceholder}
+                onKeyDown={(e) => { if (e.key === "Enter" && !loading) void handleForgotPassword(); }}
+              />
+            </div>
+          )}
+
+          {!isMock && mode === "resetPassword" && (
+            <div className="mb-4 flex flex-col gap-3">
+              <Input
+                type="text"
+                placeholder={t.auth.confirmCodePlaceholder}
+                value={resetCode}
+                onChange={(e) => { setResetCode(e.target.value); }}
+                disabled={loading}
+                aria-label={t.auth.confirmCodePlaceholder}
+                maxLength={6}
+                inputMode="numeric"
+              />
+              <PasswordInput
+                placeholder={t.auth.newPasswordPlaceholder}
+                value={newPassword}
+                onChange={(e) => { setNewPassword(e.target.value); }}
+                disabled={loading}
+                aria-label={t.auth.newPasswordPlaceholder}
+                onKeyDown={(e) => { if (e.key === "Enter" && !loading) void handleResetPassword(); }}
+              />
+            </div>
+          )}
+
+          {successMsg !== null && (
+            <p
+              role="status"
+              className="mb-4 rounded-lg bg-green-900/30 px-3 py-2 text-xs text-green-400"
+            >
+              {successMsg}
+            </p>
           )}
 
           {error !== null && (
@@ -257,17 +339,12 @@ export default function LoginPage(): React.JSX.Element {
           {isMock ? (
             <Button
               className="w-full"
-              onClick={() => {
-                void handleSignIn();
-              }}
+              onClick={() => { void handleSignIn(); }}
               disabled={loading}
             >
               {loading ? (
                 <span className="flex items-center gap-2">
-                  <span
-                    className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
-                    aria-hidden
-                  />
+                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />
                   {t.auth.signingInButton}
                 </span>
               ) : (
@@ -278,17 +355,12 @@ export default function LoginPage(): React.JSX.Element {
             <>
               <Button
                 className="w-full"
-                onClick={() => {
-                  void handleSignIn();
-                }}
+                onClick={() => { void handleSignIn(); }}
                 disabled={loading || email.length === 0 || password.length === 0}
               >
                 {loading ? (
                   <span className="flex items-center gap-2">
-                    <span
-                      className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
-                      aria-hidden
-                    />
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />
                     {t.auth.signingInButton}
                   </span>
                 ) : (
@@ -298,9 +370,7 @@ export default function LoginPage(): React.JSX.Element {
               <button
                 type="button"
                 className="mt-4 w-full text-center text-xs text-content-muted transition-colors hover:text-content-primary"
-                onClick={() => {
-                  switchMode("signup");
-                }}
+                onClick={() => { switchMode("signup"); }}
               >
                 {t.auth.switchToSignup}
               </button>
@@ -309,9 +379,7 @@ export default function LoginPage(): React.JSX.Element {
             <>
               <Button
                 className="w-full"
-                onClick={() => {
-                  void handleSignUp();
-                }}
+                onClick={() => { void handleSignUp(); }}
                 disabled={
                   loading ||
                   email.length === 0 ||
@@ -321,10 +389,7 @@ export default function LoginPage(): React.JSX.Element {
               >
                 {loading ? (
                   <span className="flex items-center gap-2">
-                    <span
-                      className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
-                      aria-hidden
-                    />
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />
                     {t.auth.creatingAccountButton}
                   </span>
                 ) : (
@@ -334,33 +399,74 @@ export default function LoginPage(): React.JSX.Element {
               <button
                 type="button"
                 className="mt-4 w-full text-center text-xs text-content-muted transition-colors hover:text-content-primary"
-                onClick={() => {
-                  switchMode("signin");
-                }}
+                onClick={() => { switchMode("signin"); }}
               >
                 {t.auth.switchToSignin}
               </button>
             </>
-          ) : (
+          ) : mode === "confirm" ? (
             <Button
               className="w-full"
-              onClick={() => {
-                void handleConfirm();
-              }}
+              onClick={() => { void handleConfirm(); }}
               disabled={loading || confirmCode.length !== 6}
             >
               {loading ? (
                 <span className="flex items-center gap-2">
-                  <span
-                    className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
-                    aria-hidden
-                  />
+                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />
                   {t.auth.confirmingButton}
                 </span>
               ) : (
                 t.auth.confirmButton
               )}
             </Button>
+          ) : mode === "forgotPassword" ? (
+            <>
+              <Button
+                className="w-full"
+                onClick={() => { void handleForgotPassword(); }}
+                disabled={loading || email.length === 0}
+              >
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />
+                    {t.auth.sendingCodeButton}
+                  </span>
+                ) : (
+                  t.auth.sendCodeButton
+                )}
+              </Button>
+              <button
+                type="button"
+                className="mt-4 w-full text-center text-xs text-content-muted transition-colors hover:text-content-primary"
+                onClick={() => { switchMode("signin"); }}
+              >
+                {t.auth.backToSignIn}
+              </button>
+            </>
+          ) : (
+            <>
+              <Button
+                className="w-full"
+                onClick={() => { void handleResetPassword(); }}
+                disabled={loading || resetCode.length !== 6 || newPassword.length === 0}
+              >
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />
+                    {t.auth.resettingPasswordButton}
+                  </span>
+                ) : (
+                  t.auth.resetPasswordButton
+                )}
+              </Button>
+              <button
+                type="button"
+                className="mt-4 w-full text-center text-xs text-content-muted transition-colors hover:text-content-primary"
+                onClick={() => { switchMode("signin"); }}
+              >
+                {t.auth.backToSignIn}
+              </button>
+            </>
           )}
         </div>
       </div>

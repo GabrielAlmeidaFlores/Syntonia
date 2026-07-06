@@ -141,6 +141,18 @@ interface Translations {
     confirmingButton: string;
     switchToSignup: string;
     switchToSignin: string;
+    forgotPasswordLink: string;
+    forgotPasswordHeading: string;
+    forgotPasswordDescription: string;
+    sendCodeButton: string;
+    sendingCodeButton: string;
+    resetPasswordHeading: string;
+    resetPasswordDescription: (email: string) => string;
+    newPasswordPlaceholder: string;
+    resetPasswordButton: string;
+    resettingPasswordButton: string;
+    resetPasswordSuccess: string;
+    backToSignIn: string;
   };
   onboarding: {
     heading: string;
@@ -341,6 +353,19 @@ export const translations: Record<Language, Translations> = {
       confirmingButton: "Confirming…",
       switchToSignup: "Don't have an account? Sign up",
       switchToSignin: "Already have an account? Sign in",
+      forgotPasswordLink: "Forgot password?",
+      forgotPasswordHeading: "Reset your password",
+      forgotPasswordDescription: "Enter your email and we'll send you a verification code.",
+      sendCodeButton: "Send code",
+      sendingCodeButton: "Sending…",
+      resetPasswordHeading: "Create new password",
+      resetPasswordDescription: (email) =>
+        `Enter the code sent to ${email} and choose a new password.`,
+      newPasswordPlaceholder: "New password",
+      resetPasswordButton: "Reset password",
+      resettingPasswordButton: "Resetting…",
+      resetPasswordSuccess: "Password updated. You can now sign in.",
+      backToSignIn: "Back to sign in",
     },
     onboarding: {
       heading: "Set up your profile",
@@ -542,6 +567,19 @@ export const translations: Record<Language, Translations> = {
       confirmingButton: "Confirmando…",
       switchToSignup: "Não tem conta? Criar conta",
       switchToSignin: "Já tem conta? Entrar",
+      forgotPasswordLink: "Esqueci minha senha",
+      forgotPasswordHeading: "Redefinir senha",
+      forgotPasswordDescription: "Informe seu e-mail e enviaremos um código de verificação.",
+      sendCodeButton: "Enviar código",
+      sendingCodeButton: "Enviando…",
+      resetPasswordHeading: "Criar nova senha",
+      resetPasswordDescription: (email) =>
+        `Digite o código enviado para ${email} e escolha uma nova senha.`,
+      newPasswordPlaceholder: "Nova senha",
+      resetPasswordButton: "Redefinir senha",
+      resettingPasswordButton: "Redefinindo…",
+      resetPasswordSuccess: "Senha atualizada. Você já pode entrar.",
+      backToSignIn: "Voltar para o login",
     },
     onboarding: {
       heading: "Configure seu perfil",
