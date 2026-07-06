@@ -111,47 +111,53 @@ function buildPostPrompt(
     recentContext = `\nRecent posts already generated for this user on these tags (last ${String(recentPosts.length)} posts):\n${lines.join('\n')}\n\nDO NOT repeat these topics or close variations.\nPRIORITISE generating content SIMILAR IN STYLE AND DEPTH to the posts marked [❤️ LIKED by user] — those reflect the user's preferences.\n`;
   }
 
-  return `You are generating a technical article for a developer.
-${description !== null ? `Developer profile: "${description}"\n` : ''}
-Active areas of interest: ${tags.join(', ')}.
+  const profileDirective = description !== null
+    ? `The following is the user's content profile and generation directives. Follow them strictly — they define tone, style, depth and content scope:\n---\n${description}\n---\n`
+    : '';
+
+  return `You are generating a high-quality, in-depth article for a user with specific content preferences.
+${profileDirective}
+Topic area for this article: ${tags.join(', ')}.
 ${recentContext}
 LANGUAGE INSTRUCTION: ${langInstruction}
 
-Generate a UNIQUE, dense, and original technical article about a specific and advanced subtopic within these areas of interest.${recentPosts.length > 0 ? ' The article MUST be substantially different from any topic listed above.' : ''}
+Generate a UNIQUE, dense and original article about a specific and advanced subtopic within the given topic area.${recentPosts.length > 0 ? ' The article MUST be substantially different from any topic listed above.' : ''}
+The article can cover technology, history, geopolitics, finance, military strategy, economics, or any other domain indicated by the topic area and user profile — it does NOT need to be a technical software article.
 
 Respond EXCLUSIVELY with a valid JSON object (no markdown, no text before or after):
 
 {
-  "title": "Precise and technical title (max 60 characters)",
+  "title": "Precise and informative title (max 60 characters)",
   "summary": "One sentence explaining the practical value (max 120 characters)",
-  "content": "## Title\\n\\nFull Markdown content with at least 600 words and real functional code blocks.",
+  "content": "## Title\\n\\nFull Markdown content with at least 600 words. Include code blocks only when relevant to the topic.",
   "tags": ["tag1", "tag2"],
   "gradient": ["#hexcolor1", "#hexcolor2"]
 }
 
 Mandatory rules:
 1. Content must have at least 600 words
-2. Include at least one real, functional code block with comments
-3. Expert-level content — assume the reader is a professional developer
-4. Gradient colors must be coherent with the topic theme (e.g. AWS = orange/amber, TypeScript = blue, Docker = cyan/dark)
+2. Include code blocks only when directly relevant (omit for history, geopolitics, finance articles)
+3. Expert-level content — assume the reader is knowledgeable in the subject area
+4. Gradient colors must be coherent with the topic theme (e.g. AWS = orange/amber, TypeScript = blue, History = earthy tones, Finance = green/gold, Geopolitics = grey/navy)
 5. Do not include any text before or after the JSON`;
 }
 
 function buildTagExtractionPrompt(description: string): string {
-  return `Given this developer profile description:
+  return `Given this user profile and content generation instructions:
 "${description}"
 
-Extract the most relevant technical areas of interest from this description.
-These will be used to generate personalised technical content for the user.
+Extract ALL distinct areas of interest and content categories from this profile.
+These tags will be used to generate personalized content across all the user's interest areas.
 
 Rules:
-1. Return between 3 and 10 tags
-2. Tags should be specific technical topics (technologies, concepts, tools, languages)
-3. Order by relevance (most relevant first)
-4. Use concise labels (e.g. "AWS", "TypeScript", "distributed systems", "Rust")
-5. Respond ONLY with a valid JSON array of strings
+1. Return between 5 and 20 tags
+2. Tags represent ANY area of interest — technology, history, geopolitics, finance, cybersecurity, military strategy, economics, etc.
+3. Be comprehensive: capture ALL content pillars mentioned, not just technical ones
+4. Order by relevance (most relevant first)
+5. Use concise English labels that describe the topic clearly
+6. Respond ONLY with a valid JSON array of strings, no other text
 
-Example response: ["AWS", "TypeScript", "Node.js", "serverless", "DynamoDB"]`;
+Example response: ["AWS", "Microservices", "Cybersecurity", "Geopolitics", "Roman History", "Cryptocurrency", "Stock Market", "Software Architecture", "Clean Code", "Political Analysis"]`;
 }
 
 function parseGeminiResponse(raw: string): GeneratedPost {
