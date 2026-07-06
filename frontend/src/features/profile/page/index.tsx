@@ -83,8 +83,8 @@ export default function ProfilePage(): React.JSX.Element {
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent-muted">
             <User className="h-6 w-6 shrink-0 text-accent-light" aria-hidden />
           </div>
-          <div>
-            <p className="font-semibold text-content-primary">
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-content-primary">
               {user?.email ?? "User"}
             </p>
             <p className="text-xs text-content-subtle">{t.profile.subtitle}</p>
