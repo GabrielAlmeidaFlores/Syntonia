@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { useTranslation } from "@/hooks/use-translation";
 import { VITE_MODE } from "@/lib/env";
 import { getApiErrorMessage } from "@/services/api";
@@ -29,7 +30,7 @@ export default function LoginPage(): React.JSX.Element {
   const returnTo = searchParams.get("returnTo") ?? "/feed";
 
   const login = useAuthStore((s) => s.login);
-  const setProfile = useUserStore((s) => s.setProfile);
+  const syncFromServer = useUserStore((s) => s.syncFromServer);
 
   const isMock = VITE_MODE === "development";
 
@@ -57,7 +58,7 @@ export default function LoginPage(): React.JSX.Element {
       user.description !== null &&
       user.description !== ""
     ) {
-      setProfile(user.description, user.activeTags);
+      syncFromServer(user.description, user.activeTags);
     }
     navigate(returnTo, { replace: true });
   };
@@ -173,8 +174,7 @@ export default function LoginPage(): React.JSX.Element {
                 disabled={loading}
                 aria-label={t.auth.emailPlaceholder}
               />
-              <Input
-                type="password"
+              <PasswordInput
                 placeholder={t.auth.passwordPlaceholder}
                 value={password}
                 onChange={(e) => {
@@ -201,8 +201,7 @@ export default function LoginPage(): React.JSX.Element {
                 disabled={loading}
                 aria-label={t.auth.emailPlaceholder}
               />
-              <Input
-                type="password"
+              <PasswordInput
                 placeholder={t.auth.passwordPlaceholder}
                 value={password}
                 onChange={(e) => {
@@ -211,8 +210,7 @@ export default function LoginPage(): React.JSX.Element {
                 disabled={loading}
                 aria-label={t.auth.passwordPlaceholder}
               />
-              <Input
-                type="password"
+              <PasswordInput
                 placeholder={t.auth.passwordConfirmPlaceholder}
                 value={confirmPassword}
                 onChange={(e) => {

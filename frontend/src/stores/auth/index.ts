@@ -114,7 +114,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
       if (prefs.description !== null && prefs.description !== "") {
         const { useUserStore } = await import("@/stores/user");
-        useUserStore.getState().setProfile(prefs.description, prefs.activeTags);
+        useUserStore.getState().syncFromServer(prefs.description, prefs.activeTags);
       }
     } catch {
       return;

@@ -5,7 +5,7 @@ import type { Tag } from "@/types";
 
 interface UserState {
   readonly description: string;
-  /** All tags extracted by AI — never changes after extraction. */
+  /** All tags extracted by AI — never changes until a new description is submitted. */
   readonly extractedTags: Tag[];
   /** Subset of extractedTags the user has enabled — drives feed generation. */
   readonly activeTags: Tag[];
@@ -13,8 +13,20 @@ interface UserState {
   readonly setTags: (tags: Tag[]) => void;
   /** Toggles a single tag on/off. Always keeps at least 1 active tag. */
   readonly toggleTag: (tag: Tag) => void;
-  /** Replaces description and extracted tags atomically after AI extraction. All tags start active. */
+  /**
+   * Full reset — called only when the user submits a NEW description.
+   * Replaces both extractedTags and activeTags with the AI-generated set.
+   * All tags start active after extraction.
+   */
   readonly setProfile: (description: string, tags: Tag[]) => void;
+  /**
+   * Soft sync from server on session restore or login.
+   * Updates description and activeTags WITHOUT resetting extractedTags.
+   * Merges any activeTags not already in extractedTags into extractedTags,
+   * ensuring activeTags ⊆ extractedTags at all times.
+   * Deactivated tags (in extractedTags but not in activeTags) are preserved.
+   */
+  readonly syncFromServer: (description: string, activeTags: Tag[]) => void;
 }
 
 export const useUserStore = create<UserState>()(
@@ -37,7 +49,19 @@ export const useUserStore = create<UserState>()(
       },
       setProfile: (description, tags) =>
         set({ description, extractedTags: tags, activeTags: tags }),
+      syncFromServer: (description, newActiveTags) =>
+        set((state) => {
+          const merged = [
+            ...new Set([...state.extractedTags, ...newActiveTags]),
+          ];
+          return {
+            description,
+            activeTags: newActiveTags,
+            extractedTags: merged,
+          };
+        }),
     }),
     { name: "syntonia-user-prefs" },
   ),
 );
+

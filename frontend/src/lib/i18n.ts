@@ -9,6 +9,8 @@ import type { ApiErrorCode } from "@/types";
 interface Translations {
   common: {
     close: string;
+    showPassword: string;
+    hidePassword: string;
   };
   errors: Record<ApiErrorCode, string>;
   nav: {
@@ -182,6 +184,8 @@ export const translations: Record<Language, Translations> = {
   en: {
     common: {
       close: "Close",
+      showPassword: "Show password",
+      hidePassword: "Hide password",
     },
     errors: {
       UNAUTHENTICATED: "Your session has expired. Please sign in again.",
@@ -379,6 +383,8 @@ export const translations: Record<Language, Translations> = {
   "pt-BR": {
     common: {
       close: "Fechar",
+      showPassword: "Mostrar senha",
+      hidePassword: "Ocultar senha",
     },
     errors: {
       UNAUTHENTICATED: "Sua sessão expirou. Por favor, faça login novamente.",

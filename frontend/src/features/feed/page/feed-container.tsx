@@ -59,6 +59,15 @@ export function FeedContainer({
     };
   }, [posts.length]);
 
+  React.useEffect(() => {
+    const safety = setTimeout(() => {
+      setShowLoading(false);
+    }, 6_000);
+    return () => {
+      clearTimeout(safety);
+    };
+  }, []);
+
   useSnapNavigation(containerRef);
 
   React.useEffect(() => {

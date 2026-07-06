@@ -35,7 +35,7 @@ const TAB_ORDER: Record<Tab, number> = { profile: 0, settings: 1, legal: 2 };
 export default function ProfilePage(): React.JSX.Element {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  const setProfile = useUserStore((s) => s.setProfile);
+  const syncFromServer = useUserStore((s) => s.syncFromServer);
   const setTheme = usePreferencesStore((s) => s.setTheme);
   const setLanguage = usePreferencesStore((s) => s.setLanguage);
   const [activeTab, setActiveTab] = React.useState<Tab>("profile");
@@ -61,12 +61,12 @@ export default function ProfilePage(): React.JSX.Element {
   React.useEffect(() => {
     void api.get<UserPreferences>("/user/preferences").then((prefs) => {
       if (prefs.description !== null) {
-        setProfile(prefs.description, prefs.activeTags);
+        syncFromServer(prefs.description, prefs.activeTags);
       }
       setTheme(prefs.theme);
       setLanguage(prefs.language);
     });
-  }, [setProfile, setTheme, setLanguage]);
+  }, [syncFromServer, setTheme, setLanguage]);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-surface scrollbar-thin">
