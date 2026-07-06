@@ -121,7 +121,7 @@ export default function OnboardingPage(): React.JSX.Element {
         </div>
 
         {error !== null && (
-          <p className="rounded-lg bg-red-950 px-3 py-2 text-sm text-red-400">
+          <p className="rounded-lg bg-feedback-error px-3 py-2 text-sm text-feedback-error">
             {error}
           </p>
         )}

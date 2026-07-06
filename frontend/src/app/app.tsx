@@ -61,6 +61,7 @@ export function App(): React.JSX.Element {
   }, [isAuthenticated, setStatus, setChecking]);
 
   const isDark = theme === "dark";
+  const backdropBg = isDark ? "#02020d" : "#b8bfcc";
   const outerBg = isDark ? "#060714" : "#dde3ee";
   const orbs = isDark
     ? [
@@ -77,16 +78,21 @@ export function App(): React.JSX.Element {
   return (
     <Tooltip.Provider delayDuration={300} skipDelayDuration={150}>
       <div
-        className="relative flex min-h-dvh justify-center overflow-hidden"
-        style={{ backgroundColor: outerBg }}
+        className="flex min-h-dvh justify-center"
+        style={{ backgroundColor: backdropBg }}
       >
         <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{ background: orbs }}
-        />
-        <div className="relative w-full max-w-[560px]">
-          <AppRouter />
+          className="relative w-full max-w-[560px] overflow-hidden"
+          style={{ backgroundColor: outerBg }}
+        >
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{ background: orbs }}
+          />
+          <div className="relative">
+            <AppRouter />
+          </div>
         </div>
       </div>
       <ToastContainer />

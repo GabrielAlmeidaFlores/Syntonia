@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -13,6 +13,18 @@ import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
 
 type AuthMode = "signin" | "signup" | "confirm" | "forgotPassword" | "resetPassword";
+
+interface ButtonConfig {
+  readonly text: string;
+  readonly loadingText: string;
+  readonly onClick: () => void;
+  readonly disabled: boolean;
+}
+
+interface SwitchLinkConfig {
+  readonly label: string;
+  readonly onClick: () => void;
+}
 
 /**
  * Authentication page — handles sign-in, sign-up, email confirmation,
@@ -162,314 +174,272 @@ export default function LoginPage(): React.JSX.Element {
     resetPassword: t.auth.resetPasswordHeading,
   };
 
+  const descriptions: Record<AuthMode, string> = {
+    signin: isMock ? t.auth.signinDescription : t.auth.appSubtitle,
+    signup: t.auth.appSubtitle,
+    confirm: t.auth.confirmDescription(email),
+    forgotPassword: t.auth.forgotPasswordDescription,
+    resetPassword: t.auth.resetPasswordDescription(email),
+  };
+
+  const buttonConfigs: Record<AuthMode, ButtonConfig> = {
+    signin: {
+      text: isMock ? t.auth.signinButton : t.auth.realSigninButton,
+      loadingText: t.auth.signingInButton,
+      onClick: () => { void handleSignIn(); },
+      disabled: !isMock && (email.length === 0 || password.length === 0),
+    },
+    signup: {
+      text: t.auth.createAccountButton,
+      loadingText: t.auth.creatingAccountButton,
+      onClick: () => { void handleSignUp(); },
+      disabled: email.length === 0 || password.length === 0 || confirmPassword.length === 0,
+    },
+    confirm: {
+      text: t.auth.confirmButton,
+      loadingText: t.auth.confirmingButton,
+      onClick: () => { void handleConfirm(); },
+      disabled: confirmCode.length !== 6,
+    },
+    forgotPassword: {
+      text: t.auth.sendCodeButton,
+      loadingText: t.auth.sendingCodeButton,
+      onClick: () => { void handleForgotPassword(); },
+      disabled: email.length === 0,
+    },
+    resetPassword: {
+      text: t.auth.resetPasswordButton,
+      loadingText: t.auth.resettingPasswordButton,
+      onClick: () => { void handleResetPassword(); },
+      disabled: resetCode.length !== 6 || newPassword.length === 0,
+    },
+  };
+
+  const switchLinks: Partial<Record<AuthMode, SwitchLinkConfig>> = {
+    signin: { label: t.auth.switchToSignup, onClick: () => { switchMode("signup"); } },
+    signup: { label: t.auth.switchToSignin, onClick: () => { switchMode("signin"); } },
+    forgotPassword: { label: t.auth.backToSignIn, onClick: () => { switchMode("signin"); } },
+    resetPassword: { label: t.auth.backToSignIn, onClick: () => { switchMode("signin"); } },
+  };
+
+  const btn = buttonConfigs[mode];
+  const switchLink = switchLinks[mode];
+
   return (
     <motion.div
-      className="flex min-h-dvh flex-col items-center justify-center px-6 py-12"
+      className="flex min-h-dvh w-full flex-col items-center justify-center gap-6 px-4 py-12"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
     >
-      <div className="flex w-full max-w-sm flex-col items-center gap-8">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-muted">
-            <Sparkles className="h-7 w-7 text-accent-light" aria-hidden />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-content-primary">
-              {t.auth.appTitle}
-            </h1>
-            <p className="mt-1 text-sm text-content-muted">
-              {t.auth.appSubtitle}
-            </p>
-          </div>
+      <div className="flex flex-col items-center gap-2 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-muted">
+          <Sparkles className="h-6 w-6 text-accent-light" aria-hidden />
         </div>
+        <h1 className="text-2xl font-bold text-content-primary">
+          {t.auth.appTitle}
+        </h1>
+        <p className="text-sm text-content-muted">{t.auth.appSubtitle}</p>
+      </div>
 
-        <div className="w-full rounded-2xl border border-surface-border bg-surface-card p-6">
-          {isMock && (
-            <div className="mb-4 rounded-lg bg-accent-muted px-3 py-1.5 text-center">
-              <span className="text-xs font-medium text-accent-light">
-                {t.auth.mockLabel}
+      <div className="w-full overflow-hidden rounded-2xl border border-surface-border bg-surface-card">
+        {isMock && (
+          <div className="border-b border-surface-border bg-accent-muted/40 px-4 py-2 text-center">
+            <span className="text-xs font-medium text-accent-light">
+              {t.auth.mockLabel}
+            </span>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-5 p-6">
+          <div className="border-b border-surface-border pb-4">
+            <h2 className="text-base font-semibold text-content-primary">
+              {headings[mode]}
+            </h2>
+            <p className="mt-1 text-sm text-content-muted">
+              {descriptions[mode]}
+            </p>
+          </div>
+
+          {!isMock && (
+            <div className="flex flex-col gap-3">
+              {mode === "signin" && (
+                <>
+                  <Input
+                    type="email"
+                    placeholder={t.auth.emailPlaceholder}
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); }}
+                    disabled={loading}
+                    aria-label={t.auth.emailPlaceholder}
+                  />
+                  <div className="flex flex-col gap-1.5">
+                    <PasswordInput
+                      placeholder={t.auth.passwordPlaceholder}
+                      value={password}
+                      onChange={(e) => { setPassword(e.target.value); }}
+                      disabled={loading}
+                      aria-label={t.auth.passwordPlaceholder}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !loading) void handleSignIn();
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { switchMode("forgotPassword"); }}
+                      className="self-end text-xs text-content-subtle transition-colors hover:text-accent-light"
+                    >
+                      {t.auth.forgotPasswordLink}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {mode === "signup" && (
+                <>
+                  <Input
+                    type="email"
+                    placeholder={t.auth.emailPlaceholder}
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); }}
+                    disabled={loading}
+                    aria-label={t.auth.emailPlaceholder}
+                  />
+                  <PasswordInput
+                    placeholder={t.auth.passwordPlaceholder}
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); }}
+                    disabled={loading}
+                    aria-label={t.auth.passwordPlaceholder}
+                  />
+                  <PasswordInput
+                    placeholder={t.auth.passwordConfirmPlaceholder}
+                    value={confirmPassword}
+                    onChange={(e) => { setConfirmPassword(e.target.value); }}
+                    disabled={loading}
+                    aria-label={t.auth.passwordConfirmPlaceholder}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !loading) void handleSignUp();
+                    }}
+                  />
+                </>
+              )}
+
+              {mode === "confirm" && (
+                <Input
+                  type="text"
+                  placeholder={t.auth.confirmCodePlaceholder}
+                  value={confirmCode}
+                  onChange={(e) => { setConfirmCode(e.target.value); }}
+                  disabled={loading}
+                  aria-label={t.auth.confirmCodePlaceholder}
+                  maxLength={6}
+                  inputMode="numeric"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !loading) void handleConfirm();
+                  }}
+                />
+              )}
+
+              {mode === "forgotPassword" && (
+                <Input
+                  type="email"
+                  placeholder={t.auth.emailPlaceholder}
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); }}
+                  disabled={loading}
+                  aria-label={t.auth.emailPlaceholder}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !loading) void handleForgotPassword();
+                  }}
+                />
+              )}
+
+              {mode === "resetPassword" && (
+                <>
+                  <Input
+                    type="text"
+                    placeholder={t.auth.confirmCodePlaceholder}
+                    value={resetCode}
+                    onChange={(e) => { setResetCode(e.target.value); }}
+                    disabled={loading}
+                    aria-label={t.auth.confirmCodePlaceholder}
+                    maxLength={6}
+                    inputMode="numeric"
+                  />
+                  <PasswordInput
+                    placeholder={t.auth.newPasswordPlaceholder}
+                    value={newPassword}
+                    onChange={(e) => { setNewPassword(e.target.value); }}
+                    disabled={loading}
+                    aria-label={t.auth.newPasswordPlaceholder}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !loading) void handleResetPassword();
+                    }}
+                  />
+                </>
+              )}
+            </div>
+          )}
+
+          <AnimatePresence mode="wait">
+            {error !== null && (
+              <motion.p
+                key="error"
+                role="alert"
+                className="rounded-lg bg-feedback-error px-3 py-2.5 text-sm text-feedback-error"
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15 }}
+              >
+                {error}
+              </motion.p>
+            )}
+            {successMsg !== null && (
+              <motion.p
+                key="success"
+                role="status"
+                className="rounded-lg bg-feedback-success px-3 py-2.5 text-sm text-feedback-success"
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15 }}
+              >
+                {successMsg}
+              </motion.p>
+            )}
+          </AnimatePresence>
+
+          <Button
+            className="w-full"
+            onClick={btn.onClick}
+            disabled={loading || btn.disabled}
+          >
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <span
+                  className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                  aria-hidden
+                />
+                {btn.loadingText}
               </span>
-            </div>
-          )}
-
-          <h2 className="mb-1 text-base font-semibold text-content-primary">
-            {headings[mode]}
-          </h2>
-
-          <p className="mb-5 text-xs text-content-muted">
-            {mode === "confirm"
-              ? t.auth.confirmDescription(email)
-              : mode === "forgotPassword"
-                ? t.auth.forgotPasswordDescription
-                : mode === "resetPassword"
-                  ? t.auth.resetPasswordDescription(email)
-                  : isMock
-                    ? t.auth.signinDescription
-                    : t.auth.appSubtitle}
-          </p>
-
-          {!isMock && mode === "signin" && (
-            <div className="mb-4 flex flex-col gap-3">
-              <Input
-                type="email"
-                placeholder={t.auth.emailPlaceholder}
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); }}
-                disabled={loading}
-                aria-label={t.auth.emailPlaceholder}
-              />
-              <PasswordInput
-                placeholder={t.auth.passwordPlaceholder}
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); }}
-                disabled={loading}
-                aria-label={t.auth.passwordPlaceholder}
-                onKeyDown={(e) => { if (e.key === "Enter" && !loading) void handleSignIn(); }}
-              />
-              <button
-                type="button"
-                onClick={() => { switchMode("forgotPassword"); }}
-                className="self-end text-xs text-content-subtle transition-colors hover:text-content-muted"
-              >
-                {t.auth.forgotPasswordLink}
-              </button>
-            </div>
-          )}
-
-          {!isMock && mode === "signup" && (
-            <div className="mb-4 flex flex-col gap-3">
-              <Input
-                type="email"
-                placeholder={t.auth.emailPlaceholder}
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); }}
-                disabled={loading}
-                aria-label={t.auth.emailPlaceholder}
-              />
-              <PasswordInput
-                placeholder={t.auth.passwordPlaceholder}
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); }}
-                disabled={loading}
-                aria-label={t.auth.passwordPlaceholder}
-              />
-              <PasswordInput
-                placeholder={t.auth.passwordConfirmPlaceholder}
-                value={confirmPassword}
-                onChange={(e) => { setConfirmPassword(e.target.value); }}
-                disabled={loading}
-                aria-label={t.auth.passwordConfirmPlaceholder}
-                onKeyDown={(e) => { if (e.key === "Enter" && !loading) void handleSignUp(); }}
-              />
-            </div>
-          )}
-
-          {!isMock && mode === "confirm" && (
-            <div className="mb-4">
-              <Input
-                type="text"
-                placeholder={t.auth.confirmCodePlaceholder}
-                value={confirmCode}
-                onChange={(e) => { setConfirmCode(e.target.value); }}
-                disabled={loading}
-                aria-label={t.auth.confirmCodePlaceholder}
-                maxLength={6}
-                inputMode="numeric"
-                onKeyDown={(e) => { if (e.key === "Enter" && !loading) void handleConfirm(); }}
-              />
-            </div>
-          )}
-
-          {!isMock && mode === "forgotPassword" && (
-            <div className="mb-4">
-              <Input
-                type="email"
-                placeholder={t.auth.emailPlaceholder}
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); }}
-                disabled={loading}
-                aria-label={t.auth.emailPlaceholder}
-                onKeyDown={(e) => { if (e.key === "Enter" && !loading) void handleForgotPassword(); }}
-              />
-            </div>
-          )}
-
-          {!isMock && mode === "resetPassword" && (
-            <div className="mb-4 flex flex-col gap-3">
-              <Input
-                type="text"
-                placeholder={t.auth.confirmCodePlaceholder}
-                value={resetCode}
-                onChange={(e) => { setResetCode(e.target.value); }}
-                disabled={loading}
-                aria-label={t.auth.confirmCodePlaceholder}
-                maxLength={6}
-                inputMode="numeric"
-              />
-              <PasswordInput
-                placeholder={t.auth.newPasswordPlaceholder}
-                value={newPassword}
-                onChange={(e) => { setNewPassword(e.target.value); }}
-                disabled={loading}
-                aria-label={t.auth.newPasswordPlaceholder}
-                onKeyDown={(e) => { if (e.key === "Enter" && !loading) void handleResetPassword(); }}
-              />
-            </div>
-          )}
-
-          {successMsg !== null && (
-            <p
-              role="status"
-              className="mb-4 rounded-lg bg-green-900/30 px-3 py-2 text-xs text-green-400"
-            >
-              {successMsg}
-            </p>
-          )}
-
-          {error !== null && (
-            <p
-              role="alert"
-              className="mb-4 rounded-lg bg-red-900/30 px-3 py-2 text-xs text-red-400"
-            >
-              {error}
-            </p>
-          )}
-
-          {isMock ? (
-            <Button
-              className="w-full"
-              onClick={() => { void handleSignIn(); }}
-              disabled={loading}
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />
-                  {t.auth.signingInButton}
-                </span>
-              ) : (
-                t.auth.signinButton
-              )}
-            </Button>
-          ) : mode === "signin" ? (
-            <>
-              <Button
-                className="w-full"
-                onClick={() => { void handleSignIn(); }}
-                disabled={loading || email.length === 0 || password.length === 0}
-              >
-                {loading ? (
-                  <span className="flex items-center gap-2">
-                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />
-                    {t.auth.signingInButton}
-                  </span>
-                ) : (
-                  t.auth.realSigninButton
-                )}
-              </Button>
-              <button
-                type="button"
-                className="mt-4 w-full text-center text-xs text-content-muted transition-colors hover:text-content-primary"
-                onClick={() => { switchMode("signup"); }}
-              >
-                {t.auth.switchToSignup}
-              </button>
-            </>
-          ) : mode === "signup" ? (
-            <>
-              <Button
-                className="w-full"
-                onClick={() => { void handleSignUp(); }}
-                disabled={
-                  loading ||
-                  email.length === 0 ||
-                  password.length === 0 ||
-                  confirmPassword.length === 0
-                }
-              >
-                {loading ? (
-                  <span className="flex items-center gap-2">
-                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />
-                    {t.auth.creatingAccountButton}
-                  </span>
-                ) : (
-                  t.auth.createAccountButton
-                )}
-              </Button>
-              <button
-                type="button"
-                className="mt-4 w-full text-center text-xs text-content-muted transition-colors hover:text-content-primary"
-                onClick={() => { switchMode("signin"); }}
-              >
-                {t.auth.switchToSignin}
-              </button>
-            </>
-          ) : mode === "confirm" ? (
-            <Button
-              className="w-full"
-              onClick={() => { void handleConfirm(); }}
-              disabled={loading || confirmCode.length !== 6}
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />
-                  {t.auth.confirmingButton}
-                </span>
-              ) : (
-                t.auth.confirmButton
-              )}
-            </Button>
-          ) : mode === "forgotPassword" ? (
-            <>
-              <Button
-                className="w-full"
-                onClick={() => { void handleForgotPassword(); }}
-                disabled={loading || email.length === 0}
-              >
-                {loading ? (
-                  <span className="flex items-center gap-2">
-                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />
-                    {t.auth.sendingCodeButton}
-                  </span>
-                ) : (
-                  t.auth.sendCodeButton
-                )}
-              </Button>
-              <button
-                type="button"
-                className="mt-4 w-full text-center text-xs text-content-muted transition-colors hover:text-content-primary"
-                onClick={() => { switchMode("signin"); }}
-              >
-                {t.auth.backToSignIn}
-              </button>
-            </>
-          ) : (
-            <>
-              <Button
-                className="w-full"
-                onClick={() => { void handleResetPassword(); }}
-                disabled={loading || resetCode.length !== 6 || newPassword.length === 0}
-              >
-                {loading ? (
-                  <span className="flex items-center gap-2">
-                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />
-                    {t.auth.resettingPasswordButton}
-                  </span>
-                ) : (
-                  t.auth.resetPasswordButton
-                )}
-              </Button>
-              <button
-                type="button"
-                className="mt-4 w-full text-center text-xs text-content-muted transition-colors hover:text-content-primary"
-                onClick={() => { switchMode("signin"); }}
-              >
-                {t.auth.backToSignIn}
-              </button>
-            </>
-          )}
+            ) : (
+              btn.text
+            )}
+          </Button>
         </div>
       </div>
+
+      {switchLink !== undefined && (
+        <button
+          type="button"
+          className="text-sm text-content-muted transition-colors hover:text-content-primary"
+          onClick={switchLink.onClick}
+        >
+          {switchLink.label}
+        </button>
+      )}
     </motion.div>
   );
 }

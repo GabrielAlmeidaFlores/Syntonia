@@ -70,6 +70,7 @@ export function ConfirmModal({
             animate={{ y: 0 }}
             exit={{ y: "100%", transition: SHEET_EXIT }}
             transition={SHEET_ENTER}
+            onClick={(e) => { e.stopPropagation(); }}
           >
             <div
               role="dialog"

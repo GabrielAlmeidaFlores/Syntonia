@@ -177,7 +177,10 @@ export default function ProfilePage(): React.JSX.Element {
         confirmLabel={t.profile.logoutConfirmAction}
         cancelLabel={t.confirmModal.cancel}
         confirmVariant="destructive"
-        onConfirm={logout}
+        onConfirm={() => {
+          setShowLogoutModal(false);
+          logout();
+        }}
         onCancel={() => {
           setShowLogoutModal(false);
         }}
