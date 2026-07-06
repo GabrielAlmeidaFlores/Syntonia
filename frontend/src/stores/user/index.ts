@@ -22,10 +22,13 @@ interface UserState {
   readonly setProfile: (description: string, tags: Tag[]) => void;
   /**
    * Replaces local state with what the server has.
-   * Called on session restore and login. Does NOT merge with local state —
-   * extractedTags is set to exactly the server's activeTags. This guarantees
-   * that when the description changes, old tags from previous descriptions
-   * never re-appear as deactivated chips in the TagManager.
+   * Called on session restore and login.
+   *
+   * - Same description as current state → preserves existing extractedTags so
+   *   deactivated tags remain visible in TagManager; only updates activeTags.
+   * - Description changed → full reset: extractedTags = activeTags (server's
+   *   new tags only). This prevents old description's tags from coming back
+   *   as deactivated chips when the user updates their profile.
    */
   readonly syncFromServer: (description: string, activeTags: Tag[]) => void;
 }
@@ -54,8 +57,14 @@ export const useUserStore = create<UserState>()(
       setProfile: (description, tags) =>
         set({ description, extractedTags: tags, activeTags: tags }),
       syncFromServer: (description, newActiveTags) => {
-        const tags = newActiveTags.length > 0 ? newActiveTags : get().activeTags;
-        set({ description, activeTags: tags, extractedTags: tags });
+        const current = get();
+        const tags = newActiveTags.length > 0 ? newActiveTags : current.activeTags;
+        if (description === current.description && current.extractedTags.length > 0) {
+          const allTags = [...new Set([...current.extractedTags, ...tags])];
+          set({ description, activeTags: tags, extractedTags: allTags });
+        } else {
+          set({ description, activeTags: tags, extractedTags: tags });
+        }
       },
     }),
     { name: "syntonia-user-prefs" },
