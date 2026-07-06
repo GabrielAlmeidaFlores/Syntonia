@@ -20,7 +20,7 @@
  * translated string from `t.errors[code]`.
  */
 
-import { VITE_API_URL } from "@/lib/env";
+import { VITE_API_URL, VITE_MODE } from "@/lib/env";
 import type { ApiErrorCode } from "@/types";
 
 const API_ERROR_PREFIX = "API_ERROR::";
@@ -131,14 +131,28 @@ async function parseResponseBody(response: Response): Promise<unknown> {
   }
 }
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (VITE_MODE === "development") return {};
+  try {
+    const { fetchAuthSession } = await import("@aws-amplify/auth");
+    const session = await fetchAuthSession();
+    const token = session.tokens?.idToken?.toString();
+    if (token === undefined || token === "") return {};
+    return { Authorization: `Bearer ${token}` };
+  } catch {
+    return {};
+  }
+}
+
 async function request<T>(
   method: string,
   path: string,
   body?: unknown,
 ): Promise<T> {
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${VITE_API_URL}${path}`, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 

@@ -123,6 +123,21 @@ interface Translations {
     signinDescription: string;
     signinButton: string;
     signingInButton: string;
+    emailPlaceholder: string;
+    passwordPlaceholder: string;
+    realSigninButton: string;
+    passwordConfirmPlaceholder: string;
+    passwordMismatch: string;
+    signupHeading: string;
+    createAccountButton: string;
+    creatingAccountButton: string;
+    confirmHeading: string;
+    confirmDescription: (email: string) => string;
+    confirmCodePlaceholder: string;
+    confirmButton: string;
+    confirmingButton: string;
+    switchToSignup: string;
+    switchToSignin: string;
   };
   onboarding: {
     heading: string;
@@ -304,6 +319,22 @@ export const translations: Record<Language, Translations> = {
         "In production, Cognito handles authentication. This simulates the OAuth redirect via POST /auth/callback intercepted by MSW.",
       signinButton: "Continue with Cognito",
       signingInButton: "Signing in…",
+      emailPlaceholder: "your@email.com",
+      passwordPlaceholder: "Password",
+      realSigninButton: "Sign in",
+      passwordConfirmPlaceholder: "Confirm password",
+      passwordMismatch: "Passwords do not match.",
+      signupHeading: "Create your account",
+      createAccountButton: "Create account",
+      creatingAccountButton: "Creating account…",
+      confirmHeading: "Confirm your email",
+      confirmDescription: (email) =>
+        `We sent a 6-digit code to ${email}. Enter it below to activate your account.`,
+      confirmCodePlaceholder: "6-digit code",
+      confirmButton: "Confirm email",
+      confirmingButton: "Confirming…",
+      switchToSignup: "Don't have an account? Sign up",
+      switchToSignin: "Already have an account? Sign in",
     },
     onboarding: {
       heading: "Set up your profile",
@@ -486,6 +517,22 @@ export const translations: Record<Language, Translations> = {
         "Em produção, o Cognito cuida da autenticação. Isso simula o redirecionamento OAuth via POST /auth/callback interceptado pelo MSW.",
       signinButton: "Continuar com Cognito",
       signingInButton: "Entrando…",
+      emailPlaceholder: "seu@email.com",
+      passwordPlaceholder: "Senha",
+      realSigninButton: "Entrar",
+      passwordConfirmPlaceholder: "Confirmar senha",
+      passwordMismatch: "As senhas não coincidem.",
+      signupHeading: "Criar sua conta",
+      createAccountButton: "Criar conta",
+      creatingAccountButton: "Criando conta…",
+      confirmHeading: "Confirmar seu e-mail",
+      confirmDescription: (email) =>
+        `Enviamos um código de 6 dígitos para ${email}. Digite abaixo para ativar sua conta.`,
+      confirmCodePlaceholder: "Código de 6 dígitos",
+      confirmButton: "Confirmar e-mail",
+      confirmingButton: "Confirmando…",
+      switchToSignup: "Não tem conta? Criar conta",
+      switchToSignin: "Já tem conta? Entrar",
     },
     onboarding: {
       heading: "Configure seu perfil",

@@ -1,6 +1,6 @@
 service: syntonia-backend
 
-frameworkVersion: '4'
+frameworkVersion: '>=3'
 
 plugins:
   - serverless-esbuild
@@ -24,7 +24,7 @@ custom:
 
 provider:
   name: aws
-  runtime: nodejs22.x
+  runtime: nodejs20.x
   region: sa-east-1
   stage: ${opt:stage, 'dev'}
 
@@ -274,7 +274,6 @@ functions:
     handler: src/functions/workerInternal.handler
     role: !GetAtt WorkerInternalLambdaRole.Arn
     timeout: 60
-    reservedConcurrency: 5
     description: "Consumes SQS queue and generates content with Gemini (includes dedup context)"
     events:
       - sqs:
@@ -935,10 +934,6 @@ resources:
         TreatMissingData: notBreaching
 
   Outputs:
-    ServiceEndpoint:
-      Value: !Sub 'https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}'
-      Export:
-        Name: syntonia-api-url-${self:provider.stage}
     UserPoolId:
       Value: !Ref CognitoUserPool
       Export:
