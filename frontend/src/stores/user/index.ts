@@ -36,7 +36,10 @@ export const useUserStore = create<UserState>()(
       extractedTags: [],
       activeTags: [],
       setDescription: (description) => set({ description }),
-      setTags: (activeTags) => set({ activeTags }),
+      setTags: (activeTags) => {
+        if (activeTags.length === 0) return;
+        set({ activeTags });
+      },
       toggleTag: (tag) => {
         const current = get().activeTags;
         const isActive = current.includes(tag);
@@ -51,12 +54,13 @@ export const useUserStore = create<UserState>()(
         set({ description, extractedTags: tags, activeTags: tags }),
       syncFromServer: (description, newActiveTags) =>
         set((state) => {
+          const tags = newActiveTags.length > 0 ? newActiveTags : state.activeTags;
           const merged = [
-            ...new Set([...state.extractedTags, ...newActiveTags]),
+            ...new Set([...state.extractedTags, ...tags]),
           ];
           return {
             description,
-            activeTags: newActiveTags,
+            activeTags: tags,
             extractedTags: merged,
           };
         }),

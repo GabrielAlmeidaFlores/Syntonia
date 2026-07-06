@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { appCache } from "@/lib/cache";
 import { VITE_MODE } from "@/lib/env";
 import type { UserProfile } from "@/types";
 
@@ -85,9 +86,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         void signOut();
       });
     }
-    void import("@/lib/cache").then(({ appCache }) => {
-      appCache.invalidateAll();
-    });
+    appCache.invalidateAll();
     set({ user: null, token: null, isAuthenticated: false });
   },
 
@@ -100,6 +99,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const session = await fetchAuthSession();
       if (session.tokens?.idToken === undefined) return;
       const token = session.tokens.idToken.toString();
+      if (token === "") return;
       const [attrs, { api }] = await Promise.all([
         fetchUserAttributes(),
         import("@/services/api"),

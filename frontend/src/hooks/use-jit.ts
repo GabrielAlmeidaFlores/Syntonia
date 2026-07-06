@@ -1,13 +1,15 @@
 import * as React from "react";
 
+import { useTranslation } from "@/hooks/use-translation";
 import {
   FEED_PAGE_SIZE,
   JIT_GENERATION_DELAY_MS,
   TRIGGER_THRESHOLD,
 } from "@/lib/constants";
 import { VITE_MODE } from "@/lib/env";
-import { api } from "@/services/api";
+import { api, getApiErrorMessage } from "@/services/api";
 import { useFeedStore } from "@/stores/feed";
+import { useToastStore } from "@/stores/toast";
 import { useUserStore } from "@/stores/user";
 import type { FeedResponse, GenerationResponse } from "@/types";
 
@@ -68,6 +70,8 @@ export function useJIT(currentIndex: number, totalPosts: number): void {
   const isGenerating = React.useRef(false);
   const activeTags = useUserStore((s) => s.activeTags);
   const setLoading = useFeedStore((s) => s.setLoading);
+  const addToast = useToastStore((s) => s.addToast);
+  const t = useTranslation();
 
   React.useEffect(() => {
     const postsRemaining = totalPosts - currentIndex;
@@ -96,6 +100,8 @@ export function useJIT(currentIndex: number, totalPosts: number): void {
         } else {
           await pollUntilPostsArrive(totalPosts);
         }
+      } catch (err) {
+        addToast({ type: "error", message: getApiErrorMessage(err, t.errors) });
       } finally {
         setLoading(false);
         setTimeout(() => {
@@ -105,5 +111,5 @@ export function useJIT(currentIndex: number, totalPosts: number): void {
     };
 
     void generate();
-  }, [currentIndex, totalPosts, activeTags, setLoading]);
+  }, [currentIndex, totalPosts, activeTags, setLoading, addToast, t.errors]);
 }

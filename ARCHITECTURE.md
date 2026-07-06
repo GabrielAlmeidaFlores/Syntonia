@@ -655,7 +655,7 @@ export function serverError(
 
 > All handlers are TypeScript (`.ts`). Each follows the same structure: extract userId from JWT, validate input with Zod, call DynamoDB/SQS/Gemini helpers, return typed response.
 
-**`src/functions/getFeed.ts`**
+**`src/functions/get-feed.ts`**
 ```typescript
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { AuthError, getUserId } from '../shared/auth.js';
@@ -676,29 +676,29 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 };
 ```
 
-**`src/functions/requestPost.ts`** — same logic as §4 specification; sends to SQS + persists to DynamoDB; returns `202 { requestIds, status }` (no `message` field).
+**`src/functions/request-post.ts`** — same logic as §4 specification; sends to SQS + persists to DynamoDB; returns `202 { requestIds, status }` (no `message` field).
 
-**`src/functions/workerInternal.ts`** — SQS trigger; fetches last 30 recent posts by active tags for deduplication context; calls `generatePost()` with context; saves post with 90-day TTL; exponential backoff 3×; marks PROCESSING → COMPLETED | FAILED.
+**`src/functions/worker-internal.ts`** — SQS trigger; fetches last 30 recent posts by active tags for deduplication context; calls `generatePost()` with context; saves post with 90-day TTL; exponential backoff 3×; marks PROCESSING → COMPLETED | FAILED.
 
-**`src/functions/getPost.ts`** — `GET /post/:id`; verifies `post.userId === userId` before returning.
+**`src/functions/get-post.ts`** — `GET /post/:id`; verifies `post.userId === userId` before returning.
 
-**`src/functions/savePost.ts`** — `POST /post/:id/save`; sets `savedAt`, removes `ttl`.
+**`src/functions/save-post.ts`** — `POST /post/:id/save`; sets `savedAt`, removes `ttl`.
 
-**`src/functions/unsavePost.ts`** — `DELETE /post/:id/save`; removes `savedAt`, restores `ttl = now + 30d`; returns `200 {}`.
+**`src/functions/unsave-post.ts`** — `DELETE /post/:id/save`; removes `savedAt`, restores `ttl = now + 30d`; returns `200 {}`.
 
-**`src/functions/getSavedPosts.ts`** — `GET /posts/saved`; queries `userId-savedAt-index` GSI; cursor pagination.
+**`src/functions/get-saved-posts.ts`** — `GET /posts/saved`; queries `userId-savedAt-index` GSI; cursor pagination.
 
-**`src/functions/getPreferences.ts`** — `GET /user/preferences`; upsert fallback if profile missing; returns `theme` and `language` from user record (defaults: `'dark'`, `'en'`).
+**`src/functions/get-preferences.ts`** — `GET /user/preferences`; upsert fallback if profile missing; returns `theme` and `language` from user record (defaults: `'dark'`, `'en'`).
 
-**`src/functions/updatePreferences.ts`** — `PUT /user/preferences`; patch semantics via `updateUserPreferences()`; any combination of `activeTags`, `theme`, `language`.
+**`src/functions/update-preferences.ts`** — `PUT /user/preferences`; patch semantics via `updateUserPreferences()`; any combination of `activeTags`, `theme`, `language`.
 
-**`src/functions/updateProfile.ts`** — `PUT /user/profile`; calls `extractTagsFromDescription()`; updates `description` + `activeTags` in `SintoniaUsers`; returns `{ description, activeTags, updatedAt }`.
+**`src/functions/update-profile.ts`** — `PUT /user/profile`; calls `extractTagsFromDescription()`; updates `description` + `activeTags` in `SintoniaUsers`; returns `{ description, activeTags, updatedAt }`.
 
 **`src/functions/health.ts`** — `GET /health`; no auth; returns `{ status: 'ok', timestamp }`.
 
-**`src/functions/onUserSignup.ts`** — Cognito Post-Confirmation trigger; creates user record with `DEFAULT_TAGS`; errors caught and logged (never thrown — would block signup).
+**`src/functions/on-user-signup.ts`** — Cognito Post-Confirmation trigger; creates user record with `DEFAULT_TAGS`; errors caught and logged (never thrown — would block signup).
 
-**`src/functions/getLegalTermsStatus.ts`**
+**`src/functions/get-legal-terms-status.ts`**
 ```typescript
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { AuthError, getUserId } from '../shared/auth.js';
@@ -730,7 +730,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 };
 ```
 
-**`src/functions/getLegalDocument.ts`**
+**`src/functions/get-legal-document.ts`**
 ```typescript
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { AuthError, getUserId } from '../shared/auth.js';
@@ -754,7 +754,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 };
 ```
 
-**`src/functions/acceptLegalTerms.ts`**
+**`src/functions/accept-legal-terms.ts`**
 ```typescript
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { AuthError, getUserId } from '../shared/auth.js';
@@ -920,8 +920,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
 | Key | Limit | Window | Applied in |
 |---|---|---|---|
-| `AI_GENERATION#{userId}#{bucket}` | 10 requests | 1 hour | `requestPost.ts` |
-| `API_REQUEST#{userId}#{bucket}` | 100 requests | 15 min | `requestPost.ts` |
+| `AI_GENERATION#{userId}#{bucket}` | 10 requests | 1 hour | `request-post.ts` |
+| `API_REQUEST#{userId}#{bucket}` | 100 requests | 15 min | `request-post.ts` |
 
 > **Design:** The time bucket is embedded in the key (`floor(now / windowSeconds)`), so each
 > time window is a separate item. No GSI needed — rate checks are always direct `GetItem`/`UpdateItem`
@@ -2126,7 +2126,7 @@ functions:
   # ── Legal / Terms ──────────────────────────────────────────────────
 
   getLegalTermsStatus:
-    handler: src/functions/getLegalTermsStatus.handler
+    handler: src/functions/get-legal-terms-status.handler
     role: !GetAtt GetLegalTermsStatusLambdaRole.Arn
     timeout: 5
     description: "Returns whether user needs to accept updated terms"
@@ -2140,7 +2140,7 @@ functions:
             authorizerId: !Ref ApiGatewayAuthorizer
 
   getLegalDocument:
-    handler: src/functions/getLegalDocument.handler
+    handler: src/functions/get-legal-document.handler
     role: !GetAtt GetLegalDocumentLambdaRole.Arn
     timeout: 5
     description: "Returns the active legal document (terms or privacy) from SintoniaLegal"
@@ -2154,7 +2154,7 @@ functions:
             authorizerId: !Ref ApiGatewayAuthorizer
 
   acceptLegalTerms:
-    handler: src/functions/acceptLegalTerms.handler
+    handler: src/functions/accept-legal-terms.handler
     role: !GetAtt AcceptLegalTermsLambdaRole.Arn
     timeout: 5
     description: "Records user acceptance of current terms and privacy policy versions"
@@ -2865,23 +2865,23 @@ syntonia-app/
     │   └── seed-legal.ts              # PutItem: Terms of Use + Privacy Policy v1.0 into SintoniaLegal
     └── src/
         ├── functions/                 # 17 Lambda handlers (.ts)
-        │   ├── getFeed.ts             # GET /feed
-        │   ├── requestPost.ts         # POST /feed/request
-        │   ├── getPost.ts             # GET /post/{id}
-        │   ├── savePost.ts            # POST /post/{id}/save
-        │   ├── unsavePost.ts          # DELETE /post/{id}/save
-        │   ├── likePost.ts            # POST /post/{id}/like
-        │   ├── unlikePost.ts          # DELETE /post/{id}/like
-        │   ├── getSavedPosts.ts       # GET /posts/saved
-        │   ├── getPreferences.ts      # GET /user/preferences (upsert fallback + returns theme/language)
-        │   ├── updatePreferences.ts   # PUT /user/preferences (patch: activeTags? + theme? + language?)
-        │   ├── updateProfile.ts       # PUT /user/profile (description → Gemini tag extraction)
+        │   ├── get-feed.ts            # GET /feed
+        │   ├── request-post.ts        # POST /feed/request
+        │   ├── get-post.ts            # GET /post/{id}
+        │   ├── save-post.ts           # POST /post/{id}/save
+        │   ├── unsave-post.ts         # DELETE /post/{id}/save
+        │   ├── like-post.ts           # POST /post/{id}/like
+        │   ├── unlike-post.ts         # DELETE /post/{id}/like
+        │   ├── get-saved-posts.ts     # GET /posts/saved
+        │   ├── get-preferences.ts     # GET /user/preferences (upsert fallback + returns theme/language)
+        │   ├── update-preferences.ts  # PUT /user/preferences (patch: activeTags? + theme? + language?)
+        │   ├── update-profile.ts      # PUT /user/profile (description → Gemini tag extraction)
         │   ├── health.ts              # GET /health (public, no auth)
-        │   ├── workerInternal.ts      # SQS trigger → Gemini → DynamoDB (reservedConcurrency: 5)
-        │   ├── onUserSignup.ts        # Cognito Post-Confirmation Trigger
-        │   ├── getLegalTermsStatus.ts # GET /legal/terms-status
-        │   ├── getLegalDocument.ts    # GET /legal/{type}?lang= (with language fallback)
-        │   └── acceptLegalTerms.ts    # POST /legal/accept
+        │   ├── worker-internal.ts     # SQS trigger → Gemini → DynamoDB
+        │   ├── on-user-signup.ts      # Cognito Post-Confirmation Trigger
+        │   ├── get-legal-terms-status.ts # GET /legal/terms-status
+        │   ├── get-legal-document.ts  # GET /legal/{type}?lang= (with language fallback)
+        │   └── accept-legal-terms.ts  # POST /legal/accept
         └── shared/                    # Reusable TypeScript modules (domain subfolders)
             ├── core/
             │   ├── types/             # 11 type files + index.ts barrel

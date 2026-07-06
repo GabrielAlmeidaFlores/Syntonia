@@ -52,6 +52,9 @@ export function App(): React.JSX.Element {
           status.privacyVersion,
         );
       })
+      .catch(() => {
+        void 0;
+      })
       .finally(() => {
         setChecking(false);
       });

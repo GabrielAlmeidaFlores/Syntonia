@@ -1,6 +1,6 @@
 import type { PostConfirmationTriggerEvent, Context } from 'aws-lambda';
 import { saveUser } from '../shared/db/index.js';
-import { DEFAULT_TAGS, DEFAULT_DESCRIPTION } from '../shared/core/default-tags.js';
+import { DEFAULT_TAGS } from '../shared/core/default-tags.js';
 import { createLogger } from '../shared/core/logger.js';
 import type { UserRecord } from '../shared/core/types/index.js';
 
@@ -62,7 +62,6 @@ export const handler = async (
     const user: UserRecord = {
       userId,
       email,
-      description: DEFAULT_DESCRIPTION,
       activeTags: DEFAULT_TAGS,
       createdAt: new Date().toISOString(),
       lastActiveAt: new Date().toISOString(),

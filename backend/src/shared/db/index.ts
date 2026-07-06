@@ -174,8 +174,9 @@ export async function markPostUnliked(postId: string, userId: string): Promise<v
   await db.send(new UpdateCommand({
     TableName: Tables.FEED,
     Key: { id: postId },
-    ConditionExpression: 'userId = :uid',
+    ConditionExpression: 'userId = :uid AND attribute_exists(#la)',
     UpdateExpression: 'REMOVE likedAt',
+    ExpressionAttributeNames: { '#la': 'likedAt' },
     ExpressionAttributeValues: { ':uid': userId },
   }));
 }

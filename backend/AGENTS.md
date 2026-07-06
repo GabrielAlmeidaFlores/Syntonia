@@ -446,7 +446,7 @@ const { tags, quantity } = validate(feedRequestSchema, body);
 |---|---|---|
 | `feedRequestSchema` | `requestPost.ts` | `tags`: array 1–20 strings; `quantity`: int 1–5, default 3 |
 | `updatePreferencesSchema` | `updatePreferences.ts` | Patch — at least one of `activeTags`, `theme`, `language` required |
-| `updateProfileSchema` | `updateProfile.ts` | `description`: string min 20, max 500 chars |
+| `updateProfileSchema` | `updateProfile.ts` | `description`: string min 20, max 10000 chars |
 | `acceptLegalTermsSchema` | `acceptLegalTerms.ts` | `termsVersion`: string min 1; `privacyVersion`: string min 1 |
 
 ---
@@ -486,7 +486,7 @@ await checkRateLimit(`AI_GENERATION#${userId}`, { max: 10, windowSeconds: 3600 }
 6. getUser(userId) → description (may be null — that's OK, Gemini prompt works without it)
 7. For each of the `quantity` posts in parallel:
    a. requestId = uuidv4()
-   b. sqsMessageId = sendGenerationRequest({ requestId, userId, tags, description })
+   b. sqsMessageId = sendGenerationRequest({ requestId, userId, tags, description, language })
    c. saveRequest({ id: requestId, userId, tags, sqsMessageId,
                     status: 'PENDING', createdAt: now,
                     ttl: Math.floor(Date.now() / 1000) + 259_200 })  // 3 days
@@ -494,7 +494,7 @@ await checkRateLimit(`AI_GENERATION#${userId}`, { max: 10, windowSeconds: 3600 }
    (NO "message" field — clean contract)
 ```
 
-**Why description goes into SQS:** The Gemini prompt is richer with the user's profile description. Including it in the SQS payload avoids an extra DynamoDB read in `workerInternal`.
+**Why description goes into SQS:** The Gemini prompt is richer with the user's profile description. Including it in the SQS payload avoids an extra DynamoDB read in `workerInternal`. The user's `language` is also included so Gemini generates content in the correct language.
 
 ---
 
@@ -568,7 +568,7 @@ return serverError(event, err);
 
 ## §14 — AI Layer (src/shared/ai/gemini.ts)
 
-**Primary model:** `gemini-1.5-flash` | **Fallback:** `gemini-1.5-pro`
+**Primary model:** `gemini-2.5-flash` | **Fallback:** `gemini-2.5-pro`
 
 ```typescript
 generatePost({ tags, description, recentPosts })    → GeneratedPost   // used by workerInternal
@@ -674,7 +674,7 @@ return ok(event, { needsAcceptance, termsVersion, privacyVersion });
 ## §17 — worker-internal (SQS Trigger)
 
 ```
-SQS record body: { requestId, userId, tags, description }
+SQS record body: { requestId, userId, tags, description, language }
   │
   ├─ UpdateItem: SintoniaRequests → status: PROCESSING, processingAt
   │

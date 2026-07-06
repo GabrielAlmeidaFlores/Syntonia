@@ -144,7 +144,7 @@ export default function PostPage(): React.JSX.Element {
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeHighlight]}
           >
-            {post.content}
+            {post.content ?? post.summary}
           </ReactMarkdown>
         </div>
       </article>

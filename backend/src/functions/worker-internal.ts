@@ -101,7 +101,7 @@ export const handler = async (event: SQSEvent, ctx: Context): Promise<void> => {
           throw err;
         }
 
-        const backoffMs = 1000 * Math.pow(2, attempt);
+        const backoffMs = 1000 * Math.pow(2, attempt - 1);
         attemptLog.debug(`Backing off before retry`, { backoffMs });
 
         await new Promise<void>((resolve) => {

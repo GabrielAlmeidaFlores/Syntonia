@@ -200,7 +200,7 @@ export default function SavedGridPage(): React.JSX.Element {
         />
         <div className="grid grid-cols-2 gap-3 px-4">
           {Array.from({ length: 6 }, (_, i) => (
-            <Skeleton key={i} className="aspect-[3/4] rounded-2xl" />
+            <Skeleton key={String(i)} className="aspect-[3/4] rounded-2xl" />
           ))}
         </div>
       </div>
