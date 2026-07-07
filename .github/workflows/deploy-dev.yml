@@ -6,7 +6,6 @@ on:
       - develop
 
 jobs:
-  # ──────────────────────────────────────────────────────────────────
   typecheck-backend:
     name: Typecheck backend
     runs-on: ubuntu-latest
@@ -28,7 +27,6 @@ jobs:
         working-directory: backend
         run: npm run build
 
-  # ──────────────────────────────────────────────────────────────────
   deploy-backend:
     name: Deploy backend
     runs-on: ubuntu-latest
@@ -86,7 +84,6 @@ jobs:
           echo "user_pool_id=$(get_output UserPoolId)"                              >> $GITHUB_OUTPUT
           echo "client_id=$(get_output UserPoolClientId)"                           >> $GITHUB_OUTPUT
 
-  # ──────────────────────────────────────────────────────────────────
   health-check:
     name: Health check
     runs-on: ubuntu-latest
@@ -208,7 +205,6 @@ jobs:
             exit 1
           fi
 
-  # ──────────────────────────────────────────────────────────────────
   build-frontend:
     name: Build frontend
     runs-on: ubuntu-latest
@@ -244,7 +240,6 @@ jobs:
           path: frontend/dist
           retention-days: 1
 
-  # ──────────────────────────────────────────────────────────────────
   deploy-frontend:
     name: Deploy frontend to Amplify
     runs-on: ubuntu-latest
