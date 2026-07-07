@@ -2,6 +2,13 @@
 
 AI-powered personal feed that generates in-depth, long-form articles tailored to each user's interests. Users describe their background, the AI extracts relevant tags, and a just-in-time pipeline generates fresh content on demand via a TikTok-style vertical snap-scroll feed.
 
+## Live environments
+
+| Environment | Frontend | Branch |
+|---|---|---|
+| **Production** | https://prod.d1ypuzce9lcl0c.amplifyapp.com | `main` |
+| **Development** | https://dev.d1ypuzce9lcl0c.amplifyapp.com | `develop` |
+
 ## Repository structure
 
 ```
