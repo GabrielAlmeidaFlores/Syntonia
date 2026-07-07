@@ -934,6 +934,10 @@ resources:
         TreatMissingData: notBreaching
 
   Outputs:
+    ServiceEndpoint:
+      Value: !Sub 'https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}'
+      Export:
+        Name: syntonia-service-endpoint-${self:provider.stage}
     UserPoolId:
       Value: !Ref CognitoUserPool
       Export:

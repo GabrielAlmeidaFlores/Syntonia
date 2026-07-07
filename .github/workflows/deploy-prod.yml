@@ -1,0 +1,132 @@
+name: Deploy PRD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to PRD
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # ── Backend ────────────────────────────────────────────────────
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Typecheck backend
+        working-directory: backend
+        run: npm run build
+
+      - name: Deploy backend (PRD)
+        working-directory: backend
+        run: npx serverless@3 deploy --stage prod
+
+      - name: Get backend CloudFormation outputs
+        id: cf
+        run: |
+          STACK="syntonia-backend-prod"
+          REGION="${{ vars.AWS_REGION }}"
+
+          get_output() {
+            aws cloudformation describe-stacks \
+              --stack-name "$STACK" \
+              --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" \
+              --output text \
+              --region "$REGION"
+          }
+
+          echo "api_url=$(get_output ServiceEndpoint)"         >> $GITHUB_OUTPUT
+          echo "user_pool_id=$(get_output UserPoolId)"         >> $GITHUB_OUTPUT
+          echo "client_id=$(get_output UserPoolClientId)"      >> $GITHUB_OUTPUT
+
+      # ── Frontend ───────────────────────────────────────────────────
+      - name: Enable Corepack (Yarn)
+        run: corepack enable
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: yarn install --frozen-lockfile
+
+      - name: Build frontend (PRD)
+        working-directory: frontend
+        env:
+          VITE_API_URL: ${{ steps.cf.outputs.api_url }}
+          VITE_COGNITO_USER_POOL_ID: ${{ steps.cf.outputs.user_pool_id }}
+          VITE_COGNITO_CLIENT_ID: ${{ steps.cf.outputs.client_id }}
+          VITE_AWS_REGION: ${{ vars.VITE_AWS_REGION }}
+        run: yarn build
+
+      - name: Deploy frontend to Amplify (PRD)
+        env:
+          APP_ID: ${{ vars.AMPLIFY_APP_ID }}
+          BRANCH: prod
+          REGION: ${{ vars.AWS_REGION }}
+        run: |
+          cd frontend/dist
+          zip -r /tmp/dist.zip .
+          cd -
+
+          DEPLOY=$(aws amplify create-deployment \
+            --app-id "$APP_ID" --branch-name "$BRANCH" \
+            --region "$REGION" --output json)
+
+          JOB_ID=$(echo "$DEPLOY"    | python3 -c "import sys,json; print(json.load(sys.stdin)['jobId'])")
+          UPLOAD_URL=$(echo "$DEPLOY" | python3 -c "import sys,json; print(json.load(sys.stdin)['zipUploadUrl'])")
+
+          curl -s -o /dev/null -w "%{http_code}" \
+            -X PUT -H "Content-Type: application/zip" \
+            --data-binary @/tmp/dist.zip "$UPLOAD_URL"
+
+          aws amplify start-deployment \
+            --app-id "$APP_ID" --branch-name "$BRANCH" \
+            --job-id "$JOB_ID" --region "$REGION"
+
+          echo "Waiting for Amplify deployment..."
+          for i in $(seq 1 30); do
+            STATUS=$(aws amplify get-job \
+              --app-id "$APP_ID" --branch-name "$BRANCH" --job-id "$JOB_ID" \
+              --region "$REGION" --output json \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['job']['summary']['status'])")
+            echo "[$i] $STATUS"
+            if [ "$STATUS" = "SUCCEED" ]; then break; fi
+            if [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "CANCELLED" ]; then
+              echo "Amplify deployment failed"; exit 1
+            fi
+            sleep 10
+          done
+
+      # ── Seed legal documents (only if table is empty) ──────────────
+      - name: Seed legal documents (PRD — first deploy only)
+        working-directory: backend
+        run: |
+          COUNT=$(aws dynamodb scan \
+            --table-name SintoniaLegal-prod \
+            --select COUNT \
+            --query Count \
+            --output text \
+            --region ${{ vars.AWS_REGION }})
+          echo "SintoniaLegal-prod item count: $COUNT"
+          if [ "$COUNT" = "0" ]; then
+            echo "Table is empty — seeding legal documents..."
+            npx tsx scripts/seed-legal.ts prod
+          else
+            echo "Table already has $COUNT items — skipping seed."
+          fi
