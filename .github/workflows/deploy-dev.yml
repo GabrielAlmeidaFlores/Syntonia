@@ -87,10 +87,132 @@ jobs:
           echo "client_id=$(get_output UserPoolClientId)"                           >> $GITHUB_OUTPUT
 
   # ──────────────────────────────────────────────────────────────────
+  health-check:
+    name: Health check
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ vars.AWS_REGION }}
+
+      - name: DynamoDB — check all tables
+        run: |
+          STAGE=dev
+          REGION="${{ vars.AWS_REGION }}"
+          FAIL=0
+          echo "=== DynamoDB Tables ==="
+          for TABLE in SintoniaFeed SintoniaUsers SintoniaRequests SintoniaRateLimit SintoniaLegal; do
+            STATUS=$(aws dynamodb describe-table \
+              --table-name "${TABLE}-${STAGE}" \
+              --query 'Table.TableStatus' \
+              --output text --region "$REGION" 2>&1)
+            if [ "$STATUS" = "ACTIVE" ]; then
+              echo "✓ ${TABLE}-${STAGE}: ACTIVE"
+            else
+              echo "✗ ${TABLE}-${STAGE}: $STATUS"
+              FAIL=1
+            fi
+          done
+          exit $FAIL
+
+      - name: SQS — check all queues
+        run: |
+          STAGE=dev
+          REGION="${{ vars.AWS_REGION }}"
+          FAIL=0
+          echo "=== SQS Queues ==="
+          for QUEUE in syntonia-generation syntonia-generation-dlq; do
+            URL=$(aws sqs get-queue-url \
+              --queue-name "${QUEUE}-${STAGE}" \
+              --region "$REGION" \
+              --query QueueUrl --output text 2>&1)
+            if echo "$URL" | grep -q "https://"; then
+              echo "✓ ${QUEUE}-${STAGE}: exists"
+            else
+              echo "✗ ${QUEUE}-${STAGE}: $URL"
+              FAIL=1
+            fi
+          done
+          exit $FAIL
+
+      - name: Cognito — check User Pool
+        run: |
+          REGION="${{ vars.AWS_REGION }}"
+          POOL_ID="${{ needs.deploy-backend.outputs.user_pool_id }}"
+          echo "=== Cognito User Pool ==="
+          STATUS=$(aws cognito-idp describe-user-pool \
+            --user-pool-id "$POOL_ID" \
+            --query 'UserPool.Status' \
+            --output text --region "$REGION" 2>&1)
+          if [ "$STATUS" = "Enabled" ]; then
+            echo "✓ User Pool $POOL_ID: Enabled"
+          else
+            echo "✗ User Pool $POOL_ID: $STATUS"
+            exit 1
+          fi
+
+      - name: Lambda — check all functions
+        run: |
+          STACK="syntonia-backend-dev"
+          REGION="${{ vars.AWS_REGION }}"
+          FAIL=0
+          echo "=== Lambda Functions ==="
+          FUNCTIONS=$(aws cloudformation list-stack-resources \
+            --stack-name "$STACK" \
+            --query "StackResourceSummaries[?ResourceType=='AWS::Lambda::Function'].PhysicalResourceId" \
+            --output text --region "$REGION")
+          for FUNC in $FUNCTIONS; do
+            STATE=$(aws lambda get-function \
+              --function-name "$FUNC" \
+              --query 'Configuration.State' \
+              --output text --region "$REGION" 2>&1)
+            if [ "$STATE" = "Active" ]; then
+              echo "✓ $FUNC: Active"
+            else
+              echo "✗ $FUNC: $STATE"
+              FAIL=1
+            fi
+          done
+          exit $FAIL
+
+      - name: SSM — check Gemini API key
+        run: |
+          REGION="${{ vars.AWS_REGION }}"
+          echo "=== SSM Parameter Store ==="
+          NAME=$(aws ssm describe-parameters \
+            --filters "Key=Name,Values=/syntonia/dev/gemini-api-key" \
+            --query 'Parameters[0].Name' \
+            --output text --region "$REGION" 2>&1)
+          if [ "$NAME" = "/syntonia/dev/gemini-api-key" ]; then
+            echo "✓ /syntonia/dev/gemini-api-key: present"
+          else
+            echo "✗ /syntonia/dev/gemini-api-key: not found"
+            exit 1
+          fi
+
+      - name: API — GET /health
+        run: |
+          API_URL="${{ needs.deploy-backend.outputs.api_url }}"
+          echo "=== API Health Endpoint ==="
+          HTTP_CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" "${API_URL}/health")
+          BODY=$(cat /tmp/health.json)
+          echo "Response: $BODY"
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✓ GET /health: 200 OK"
+          else
+            echo "✗ GET /health: HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+  # ──────────────────────────────────────────────────────────────────
   build-frontend:
     name: Build frontend
     runs-on: ubuntu-latest
-    needs: deploy-backend
+    needs: [deploy-backend, health-check]
     steps:
       - uses: actions/checkout@v4
 
