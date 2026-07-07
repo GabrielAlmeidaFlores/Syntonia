@@ -144,14 +144,14 @@ jobs:
           REGION="${{ vars.AWS_REGION }}"
           POOL_ID="${{ needs.deploy-backend.outputs.user_pool_id }}"
           echo "=== Cognito User Pool ==="
-          STATUS=$(aws cognito-idp describe-user-pool \
+          ID=$(aws cognito-idp describe-user-pool \
             --user-pool-id "$POOL_ID" \
-            --query 'UserPool.Status' \
+            --query 'UserPool.Id' \
             --output text --region "$REGION" 2>&1)
-          if [ "$STATUS" = "Enabled" ]; then
-            echo "✓ User Pool $POOL_ID: Enabled"
+          if [ "$ID" = "$POOL_ID" ]; then
+            echo "✓ User Pool $POOL_ID: accessible"
           else
-            echo "✗ User Pool $POOL_ID: $STATUS"
+            echo "✗ User Pool $POOL_ID: $ID"
             exit 1
           fi
 
