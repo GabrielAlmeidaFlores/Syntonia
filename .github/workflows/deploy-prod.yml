@@ -65,16 +65,26 @@ jobs:
       - name: Read CloudFormation outputs
         id: cf
         run: |
+          STACK="syntonia-backend-prod"
+          REGION="${{ vars.AWS_REGION }}"
+
           get_output() {
             aws cloudformation describe-stacks \
-              --stack-name "syntonia-backend-prod" \
+              --stack-name "$STACK" \
               --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" \
               --output text \
-              --region "${{ vars.AWS_REGION }}"
+              --region "$REGION"
           }
-          echo "api_url=$(get_output ServiceEndpoint)"       >> $GITHUB_OUTPUT
-          echo "user_pool_id=$(get_output UserPoolId)"       >> $GITHUB_OUTPUT
-          echo "client_id=$(get_output UserPoolClientId)"    >> $GITHUB_OUTPUT
+
+          API_ID=$(aws cloudformation describe-stack-resource \
+            --stack-name "$STACK" \
+            --logical-resource-id ApiGatewayRestApi \
+            --query 'StackResourceDetail.PhysicalResourceId' \
+            --output text --region "$REGION")
+
+          echo "api_url=https://${API_ID}.execute-api.${REGION}.amazonaws.com/prod" >> $GITHUB_OUTPUT
+          echo "user_pool_id=$(get_output UserPoolId)"                               >> $GITHUB_OUTPUT
+          echo "client_id=$(get_output UserPoolClientId)"                            >> $GITHUB_OUTPUT
 
   # ──────────────────────────────────────────────────────────────────
   build-frontend:
