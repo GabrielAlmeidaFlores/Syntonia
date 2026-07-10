@@ -7,7 +7,7 @@ import { VITE_MODE } from "@/lib/env";
 import "@/styles/globals.css";
 
 const SPLASH_MIN_MS = 1500;
-const SPLASH_FADE_MS = 500;
+const SPLASH_FADE_MS = 700;
 const splashStart = Date.now();
 
 /**
