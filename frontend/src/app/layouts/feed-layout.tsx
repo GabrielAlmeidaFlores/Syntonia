@@ -43,52 +43,55 @@ export function FeedLayout(): React.JSX.Element {
       </main>
 
       <nav
-        className="flex h-16 shrink-0 items-center justify-around border-t border-surface-border bg-surface-card px-4"
+        className="shrink-0 border-t border-surface-border bg-surface-card"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
         aria-label={t.nav.ariaMain}
       >
-        {BOTTOM_NAV.map((item) => (
-          <NavLink
-            key={item.href}
-            to={item.href}
-            end={item.exact}
-            className="flex flex-col items-center gap-0.5"
-          >
-            {({ isActive }) => (
-              <>
-                <div className="relative rounded-xl px-4 py-1.5">
-                  {isActive && (
-                    <motion.div
-                      layoutId="nav-active"
-                      className="absolute inset-0 rounded-xl bg-accent-muted"
-                      transition={{
-                        type: "spring",
-                        damping: 30,
-                        stiffness: 380,
-                      }}
-                    />
-                  )}
-                  <item.icon
-                    className={cn(
-                      "relative h-5 w-5 transition-colors duration-200",
-                      isActive ? "text-accent-light" : "text-content-subtle",
+        <div className="flex h-16 items-center justify-around px-4">
+          {BOTTOM_NAV.map((item) => (
+            <NavLink
+              key={item.href}
+              to={item.href}
+              end={item.exact}
+              className="flex flex-col items-center gap-0.5"
+            >
+              {({ isActive }) => (
+                <>
+                  <div className="relative rounded-xl px-4 py-1.5">
+                    {isActive && (
+                      <motion.div
+                        layoutId="nav-active"
+                        className="absolute inset-0 rounded-xl bg-accent-muted"
+                        transition={{
+                          type: "spring",
+                          damping: 30,
+                          stiffness: 380,
+                        }}
+                      />
                     )}
-                    aria-hidden
-                  />
-                </div>
-                <span
-                  className={cn(
-                    "text-xs transition-colors duration-200",
-                    isActive
-                      ? "font-semibold text-accent-light"
-                      : "font-medium text-content-subtle",
-                  )}
-                >
-                  {item.label}
-                </span>
-              </>
-            )}
-          </NavLink>
-        ))}
+                    <item.icon
+                      className={cn(
+                        "relative h-5 w-5 transition-colors duration-200",
+                        isActive ? "text-accent-light" : "text-content-subtle",
+                      )}
+                      aria-hidden
+                    />
+                  </div>
+                  <span
+                    className={cn(
+                      "text-xs transition-colors duration-200",
+                      isActive
+                        ? "font-semibold text-accent-light"
+                        : "font-medium text-content-subtle",
+                    )}
+                  >
+                    {item.label}
+                  </span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </div>
       </nav>
     </div>
   );

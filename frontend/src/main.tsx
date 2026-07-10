@@ -6,6 +6,10 @@ import { configureAmplify } from "@/lib/cognito";
 import { VITE_MODE } from "@/lib/env";
 import "@/styles/globals.css";
 
+const SPLASH_MIN_MS = 1500;
+const SPLASH_FADE_MS = 500;
+const splashStart = Date.now();
+
 /**
  * Application entry point.
  *
@@ -14,6 +18,7 @@ import "@/styles/globals.css";
  * 3. Attempts to restore an existing Cognito session before rendering, preventing
  *    a flash-redirect to the login page on page refresh.
  * 4. Renders the React tree.
+ * 5. Removes the splash screen after a minimum visible duration with a fade-out.
  */
 async function enableMocking(): Promise<void> {
   if (VITE_MODE !== "development") return;
@@ -32,6 +37,21 @@ async function restoreSession(): Promise<void> {
   await useAuthStore.getState().restoreSession();
 }
 
+function removeSplash(): void {
+  const splash = document.getElementById("splash");
+  if (splash === null) return;
+
+  const elapsed = Date.now() - splashStart;
+  const remaining = Math.max(0, SPLASH_MIN_MS - elapsed);
+
+  setTimeout(() => {
+    splash.classList.add("splash-exit");
+    setTimeout(() => {
+      splash.remove();
+    }, SPLASH_FADE_MS);
+  }, remaining);
+}
+
 const rootElement = document.getElementById("root");
 
 if (rootElement === null) {
@@ -48,4 +68,5 @@ void enableMocking()
         <App />
       </React.StrictMode>,
     );
+    removeSplash();
   });

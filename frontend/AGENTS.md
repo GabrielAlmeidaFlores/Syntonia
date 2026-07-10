@@ -56,7 +56,8 @@ public/
                                      no // comments. Loaded at /mock-service-worker.js by browser.ts.
 
 src/
-├── main.tsx                         Entry point. Starts MSW worker in dev, then renders App.
+├── main.tsx                         Entry point. Starts MSW worker in dev, restores session, renders App,
+│                                    then removes the splash screen (min 1500ms visible + 500ms fade-out).
 ├── app/
 │   ├── app.tsx                      Root component. Syncs theme class on <html>, mesh-gradient
 │   │                                outer background, Toast + Tooltip providers + AppRouter.
@@ -462,7 +463,7 @@ export type { ComponentProps };
 
 - `h-dvh` container, `flex-col`, `overflow-hidden`
 - `<Outlet />` fills `flex-1 overflow-hidden`
-- Bottom nav: `h-16 shrink-0` with **Feed · Saved · Profile** (three tabs — no Logout in nav)
+- Bottom nav: `shrink-0` with inner `h-16` content row + `paddingBottom: env(safe-area-inset-bottom, 0px)` for device nav bar clearance. **Feed · Saved · Profile** (three tabs — no Logout in nav)
 - **Logout** lives at the bottom of `ProfilePage`, not in the nav
 - No sidebar, no top header — Syntonia is mobile-first
 
@@ -497,7 +498,7 @@ The feed uses CSS snap, not JavaScript scroll control. Heights are controlled by
 
 | Usage                               | Height             | Why                                                   |
 | ----------------------------------- | ------------------ | ----------------------------------------------------- |
-| `FeedContainer` (inside FeedLayout) | `snap-feed h-full` | Parent `main` is `flex-1` = `dvh - 64px` (nav height) |
+| `FeedContainer` (inside FeedLayout) | `snap-feed h-full` | Parent `main` is `flex-1` = `dvh - nav height` (nav = 64px content row + `safe-area-inset-bottom`) |
 | `SavedFeedPage` (standalone)        | `snap-feed h-dvh`  | No nav — fills full viewport                          |
 | Each `PostCard`                     | `snap-card h-full` | Fills 100% of its snap container                      |
 
@@ -725,7 +726,7 @@ The feed is a CSS snap-scroll container. Each `PostCard` fills the available hei
 
 ```
 FeedPage
-  └── FeedContainer (div.snap-feed h-full)  ← h-full = dvh - nav height (64px)
+  └── FeedContainer (div.snap-feed h-full)  ← h-full = dvh - nav height (64px content + safe-area-inset-bottom)
        ├── PostCard (div.snap-card h-full) data-index="0"
        ├── PostCard (div.snap-card h-full) data-index="1"
        ├── PostCard (div.snap-card h-full) data-index="2"

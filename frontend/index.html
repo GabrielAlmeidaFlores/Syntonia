@@ -3,11 +3,137 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Syntonia — Personal Learning Engine" />
     <title>Syntonia</title>
+    <style>
+      #splash {
+        position: fixed;
+        inset: 0;
+        background: #030712;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        opacity: 1;
+        transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      #splash::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(ellipse 70% 60% at 20% 10%, rgba(79, 70, 229, 0.3) 0%, transparent 70%),
+          radial-gradient(ellipse 60% 55% at 80% 85%, rgba(124, 58, 237, 0.24) 0%, transparent 65%),
+          radial-gradient(ellipse 50% 40% at 55% 45%, rgba(99, 102, 241, 0.12) 0%, transparent 60%);
+        pointer-events: none;
+      }
+
+      #splash.splash-exit {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #splash-content {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 32px;
+        animation: splash-enter 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+      }
+
+      @keyframes splash-enter {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      #splash-wordmark {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+
+      #splash-title {
+        color: #ffffff;
+        font-size: 2.25rem;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 1;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      }
+
+      #splash-subtitle {
+        color: rgba(165, 180, 252, 0.7);
+        font-size: 0.75rem;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      }
+
+      #splash-dots {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .splash-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #4f46e5;
+        animation: splash-dot-pulse 1.3s ease-in-out infinite;
+      }
+
+      .splash-dot:nth-child(1) {
+        animation-delay: 0s;
+      }
+
+      .splash-dot:nth-child(2) {
+        animation-delay: 0.2s;
+        background: #6366f1;
+      }
+
+      .splash-dot:nth-child(3) {
+        animation-delay: 0.4s;
+        background: #818cf8;
+      }
+
+      @keyframes splash-dot-pulse {
+        0%, 60%, 100% {
+          transform: scale(0.65);
+          opacity: 0.35;
+        }
+        30% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="splash">
+      <div id="splash-content">
+        <div id="splash-wordmark">
+          <span id="splash-title">Syntonia</span>
+          <span id="splash-subtitle">Personal Learning Engine</span>
+        </div>
+        <div id="splash-dots">
+          <div class="splash-dot"></div>
+          <div class="splash-dot"></div>
+          <div class="splash-dot"></div>
+        </div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
