@@ -16,6 +16,8 @@ Every AI agent working on this backend must follow this exact sequence:
 6. **Typecheck** — `npm run build` → zero errors before finishing.
 7. **Update AGENTS.md** — if you add a function, handler, or shared module, document it here.
 
+> **NEVER make git commits automatically.** Do not run `git commit`, `git add`, or `git push` under any circumstance. All version control actions are performed exclusively by the human developer.
+
 **There are no exceptions to this flow.**
 
 ---
@@ -568,7 +570,7 @@ return serverError(event, err);
 
 ## §14 — AI Layer (src/shared/ai/gemini.ts)
 
-**Primary model:** `gemini-2.5-flash` | **Fallback:** `gemini-2.5-pro`
+**Primary model:** `gemini-2.0-flash` | **Fallback:** `gemini-1.5-flash`
 
 ```typescript
 generatePost({ tags, description, recentPosts })    → GeneratedPost   // used by workerInternal

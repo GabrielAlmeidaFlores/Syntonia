@@ -13,9 +13,11 @@ Every AI agent working on this codebase must follow this exact sequence before w
 3. **Identify the feature** — which panel, route, and store are involved.
 4. **Plan** — write out what you will create/modify before touching any file.
 5. **Implement** — follow every rule in this document without exception.
-6. **Typecheck** — run `yarn typecheck`. Zero errors before committing.
-7. **Lint** — run `yarn lint`. Zero warnings (`--max-warnings 0`) before committing.
+6. **Typecheck** — run `yarn typecheck`. Zero errors before finishing.
+7. **Lint** — run `yarn lint`. Zero warnings (`--max-warnings 0`) before finishing.
 8. **Update AGENTS.md** — if you add a component, page, store, or hook, document it here.
+
+> **NEVER make git commits automatically.** Do not run `git commit`, `git add`, or `git push` under any circumstance. All version control actions are performed exclusively by the human developer.
 
 **There are no exceptions to this flow.**
 
