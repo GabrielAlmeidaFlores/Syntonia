@@ -70,8 +70,7 @@ async function pollUntilPostsArrive(
  *
  * After requesting generation via POST /feed/request, polls GET /feed every
  * 5s until new posts arrive or 90s elapses. Works identically in development
- * and production — the MSW mock simulates the generation delay and generates
- * fresh posts with current timestamps so the poll finds them.
+ * and production — generated posts have current timestamps so the poll finds them.
  *
  * `sessionAfterRef` captures `lastViewedCreatedAt` once on mount and passes
  * it to the poll so only genuinely new posts are detected.

@@ -17,27 +17,18 @@ const raw = import.meta.env as Record<string, string | undefined>;
 
 /**
  * Base URL of the API Gateway REST endpoint.
- * Empty string in development — MSW intercepts relative paths.
- * In production: `https://xxx.execute-api.sa-east-1.amazonaws.com/prod`
+ * Example: `https://xxx.execute-api.sa-east-1.amazonaws.com/prod`
  */
 export const VITE_API_URL: string = raw["VITE_API_URL"] ?? "";
 
 /**
- * Current Vite build mode: "development" | "production" | "test".
- * Used to conditionally enable MSW and other dev-only tooling.
- */
-export const VITE_MODE: string = raw["MODE"] ?? "development";
-
-/**
  * AWS Cognito User Pool ID.
- * Required in production; unused in mock mode.
  */
 export const VITE_COGNITO_USER_POOL_ID: string =
   raw["VITE_COGNITO_USER_POOL_ID"] ?? "";
 
 /**
  * AWS Cognito App Client ID.
- * Required in production; unused in mock mode.
  */
 export const VITE_COGNITO_CLIENT_ID: string =
   raw["VITE_COGNITO_CLIENT_ID"] ?? "";

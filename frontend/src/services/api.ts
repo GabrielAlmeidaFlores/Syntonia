@@ -1,13 +1,9 @@
 /**
  * Central HTTP client for all API calls.
  *
- * In development, MSW (Mock Service Worker) intercepts every fetch request made
- * here and returns mock responses — no real network call leaves the browser.
- * In production, requests go to the real API Gateway endpoint defined in
- * VITE_API_URL (see `src/lib/env.ts`).
- *
- * When the real backend is ready, simply set VITE_API_URL in Amplify Console
- * and remove the MSW initialisation from main.tsx. No changes needed here.
+ * Requests go to the real API Gateway endpoint defined in VITE_API_URL.
+ * Every request fetches a fresh Cognito idToken from the current session
+ * and attaches it as `Authorization: Bearer <token>`.
  *
  * Error handling: non-2xx responses are parsed for a structured error body
  * `{ code, error, message }`. The `code` is a machine-readable `ApiErrorCode`
@@ -20,7 +16,7 @@
  * translated string from `t.errors[code]`.
  */
 
-import { VITE_API_URL, VITE_MODE } from "@/lib/env";
+import { VITE_API_URL } from "@/lib/env";
 import type { ApiErrorCode } from "@/types";
 
 const API_ERROR_PREFIX = "API_ERROR::";
@@ -132,7 +128,6 @@ async function parseResponseBody(response: Response): Promise<unknown> {
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  if (VITE_MODE === "development") return {};
   try {
     const { fetchAuthSession } = await import("@aws-amplify/auth");
     const session = await fetchAuthSession();

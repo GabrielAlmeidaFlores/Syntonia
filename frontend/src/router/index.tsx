@@ -11,7 +11,7 @@ import { Spinner } from "@/components/shared/spinner";
 import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
 
-const MockCognitoPage = React.lazy(
+const LoginPage = React.lazy(
   async () => import("@/features/auth/login/page"),
 );
 const OnboardingPage = React.lazy(
@@ -76,7 +76,7 @@ function RootRedirect(): React.JSX.Element {
 
 const router = createBrowserRouter([
   { path: "/", element: <RootRedirect /> },
-  { path: "/auth/login", element: withSuspense(MockCognitoPage) },
+  { path: "/auth/login", element: withSuspense(LoginPage) },
   {
     path: "/onboarding",
     element: <RequireAuth>{withSuspense(OnboardingPage)}</RequireAuth>,

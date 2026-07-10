@@ -11,17 +11,21 @@ import type { FeedResponse, Post } from "@/types";
  *
  * On the first render, reads `lastViewedCreatedAt` from the history store and
  * captures it in a session ref. All GET /feed calls within this session pass
- * `?after=<sessionAfter>` so the backend (and MSW mock) only returns posts
- * generated after the user's last viewing session. This prevents already-seen
- * posts from reappearing on page reload.
+ * `?after=<sessionAfter>` so the backend only returns posts generated after the
+ * user's last viewing session. This prevents already-seen posts from reappearing
+ * on page reload.
  *
  * The cursor is a base64-encoded DynamoDB LastEvaluatedKey in production — the
  * hook handles it opaquely.
+ *
+ * `reload` resets the feed store (restoring `hasMore: true`) and triggers a
+ * fresh fetch from scratch. Use this for the EmptyFeedScreen reload button.
  */
 export function useFeed(): {
   posts: Post[];
   isLoading: boolean;
   fetchMore: () => void;
+  reload: () => void;
 } {
   const {
     posts,
@@ -72,9 +76,13 @@ export function useFeed(): {
     setLoading,
   ]);
 
+  const reload = React.useCallback((): void => {
+    useFeedStore.getState().reset();
+  }, []);
+
   React.useEffect(() => {
     if (posts.length === 0) fetchMore();
   }, [fetchMore, posts.length]);
 
-  return { posts, isLoading, fetchMore };
+  return { posts, isLoading, fetchMore, reload };
 }

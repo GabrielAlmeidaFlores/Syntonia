@@ -1,15 +1,9 @@
 import { create } from "zustand";
 
 import { appCache } from "@/lib/cache";
-import { VITE_MODE } from "@/lib/env";
 import { useFeedStore } from "@/stores/feed";
 import { useHistoryStore } from "@/stores/history";
 import type { UserProfile } from "@/types";
-
-interface AuthCallbackResponse {
-  readonly user: UserProfile;
-  readonly token: string;
-}
 
 interface PrefsResponse {
   readonly userId: string;
@@ -24,22 +18,21 @@ interface AuthState {
   readonly token: string | null;
   readonly isAuthenticated: boolean;
   /**
-   * Signs the user in.
-   * In development, delegates to the MSW mock via POST /auth/callback.
-   * In production, calls Cognito via the Amplify SDK and then fetches the
-   * user's preferences to hydrate the profile.
+   * Signs the user in via Cognito using email and password.
+   * Calls Amplify signIn, fetches the session token and user preferences,
+   * then hydrates the auth store.
    */
   readonly login: (email: string, password: string) => Promise<void>;
   /**
    * Signs the user out.
-   * In production, calls Cognito signOut in the background before clearing
-   * local state so the refresh token is revoked.
+   * Calls Cognito signOut in the background to revoke the refresh token,
+   * then clears all local state and caches.
    */
   readonly logout: () => void;
   /**
    * Attempts to restore a previous Cognito session on app boot.
-   * No-op in development (MSW handles authentication state).
    * Called once from main.tsx before the React tree renders.
+   * If a valid idToken exists, hydrates the auth and user stores.
    */
   readonly restoreSession: () => Promise<void>;
 }
@@ -50,15 +43,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
 
   login: async (email, password) => {
-    if (VITE_MODE === "development") {
-      const { api } = await import("@/services/api");
-      const response = await api.post<AuthCallbackResponse>("/auth/callback", {
-        code: email,
-      });
-      set({ user: response.user, token: response.token, isAuthenticated: true });
-      return;
-    }
-
     const { signIn, fetchAuthSession, fetchUserAttributes } = await import(
       "@aws-amplify/auth"
     );
@@ -83,11 +67,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: () => {
-    if (VITE_MODE !== "development") {
-      void import("@aws-amplify/auth").then(({ signOut }) => {
-        void signOut();
-      });
-    }
+    void import("@aws-amplify/auth").then(({ signOut }) => {
+      void signOut();
+    });
     appCache.invalidateAll();
     useHistoryStore.getState().reset();
     useFeedStore.getState().reset();
@@ -95,7 +77,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   restoreSession: async () => {
-    if (VITE_MODE === "development") return;
     try {
       const { fetchAuthSession, fetchUserAttributes } = await import(
         "@aws-amplify/auth"

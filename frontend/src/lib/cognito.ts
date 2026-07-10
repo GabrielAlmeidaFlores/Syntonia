@@ -1,7 +1,7 @@
 /**
  * AWS Amplify configuration for Cognito authentication.
  * Called once at application bootstrap in `main.tsx` before the React tree renders.
- * No-op when Cognito env vars are absent (local dev with MSW mocks).
+ * No-op when Cognito env vars are absent (e.g. during local development without a deployed backend).
  */
 
 import { Amplify } from "aws-amplify";

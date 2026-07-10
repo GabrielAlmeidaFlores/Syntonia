@@ -20,9 +20,8 @@ interface DescriptionFormProps {
 /**
  * Description editing form on the ProfilePage.
  *
- * Saving a new description calls PUT /user/profile. MSW intercepts the request,
- * runs mockExtractTags() to simulate Gemini AI tag extraction, and returns the
- * new activeTags after a 2s delay that mirrors real API latency.
+ * Saving a new description calls PUT /user/profile. The backend runs Gemini
+ * AI tag extraction and returns the new activeTags.
  * Both the description and extracted tags are then synced to the user store.
  *
  * Signals extraction state changes to the parent via `onExtractionStateChange`

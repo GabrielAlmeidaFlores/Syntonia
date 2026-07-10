@@ -121,14 +121,11 @@ interface Translations {
   auth: {
     appTitle: string;
     appSubtitle: string;
-    mockLabel: string;
     signinHeading: string;
-    signinDescription: string;
     signinButton: string;
     signingInButton: string;
     emailPlaceholder: string;
     passwordPlaceholder: string;
-    realSigninButton: string;
     passwordConfirmPlaceholder: string;
     passwordMismatch: string;
     signupHeading: string;
@@ -331,15 +328,11 @@ export const translations: Record<Language, Translations> = {
     auth: {
       appTitle: "Syntonia",
       appSubtitle: "Personal Learning Engine",
-      mockLabel: "Mock Cognito Hosted UI",
       signinHeading: "Sign in to continue",
-      signinDescription:
-        "In production, Cognito handles authentication. This simulates the OAuth redirect via POST /auth/callback intercepted by MSW.",
-      signinButton: "Continue with Cognito",
+      signinButton: "Sign in",
       signingInButton: "Signing in…",
       emailPlaceholder: "your@email.com",
       passwordPlaceholder: "Password",
-      realSigninButton: "Sign in",
       passwordConfirmPlaceholder: "Confirm password",
       passwordMismatch: "Passwords do not match.",
       signupHeading: "Create your account",
@@ -545,15 +538,11 @@ export const translations: Record<Language, Translations> = {
     auth: {
       appTitle: "Syntonia",
       appSubtitle: "Motor de Aprendizado Pessoal",
-      mockLabel: "Mock Cognito Hosted UI",
       signinHeading: "Entrar para continuar",
-      signinDescription:
-        "Em produção, o Cognito cuida da autenticação. Isso simula o redirecionamento OAuth via POST /auth/callback interceptado pelo MSW.",
-      signinButton: "Continuar com Cognito",
+      signinButton: "Entrar",
       signingInButton: "Entrando…",
       emailPlaceholder: "seu@email.com",
       passwordPlaceholder: "Senha",
-      realSigninButton: "Entrar",
       passwordConfirmPlaceholder: "Confirmar senha",
       passwordMismatch: "As senhas não coincidem.",
       signupHeading: "Criar sua conta",

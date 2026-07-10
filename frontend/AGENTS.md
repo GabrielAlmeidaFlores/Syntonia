@@ -15,7 +15,7 @@ Every AI agent working on this codebase must follow this exact sequence before w
 5. **Implement** — follow every rule in this document without exception.
 6. **Typecheck** — run `yarn typecheck`. Zero errors before committing.
 7. **Lint** — run `yarn lint`. Zero warnings (`--max-warnings 0`) before committing.
-8. **Update AGENTS.md** — if you add a component, page, store, or mock, document it here.
+8. **Update AGENTS.md** — if you add a component, page, store, or hook, document it here.
 
 **There are no exceptions to this flow.**
 
@@ -43,21 +43,16 @@ Every AI agent working on this codebase must follow this exact sequence before w
 
 **Node version:** 22.15.0 (enforced via `engines` in package.json)
 
-**Development:** zero real API calls — all data comes from `src/mocks/data/` via MSW.
-**Production:** Cognito (`@aws-amplify/auth`) handles authentication; API Gateway handles all other endpoints.
+**All environments:** Cognito (`@aws-amplify/auth`) handles authentication; API Gateway handles all other endpoints. No mock layer — every API call goes to the real backend.
 
 ---
 
 ## §3 — Directory Structure
 
 ```
-public/
-└── mock-service-worker.js           MSW ServiceWorker script. kebab-case — no eslint-disable,
-                                     no // comments. Loaded at /mock-service-worker.js by browser.ts.
-
 src/
-├── main.tsx                         Entry point. Starts MSW worker in dev, restores session, renders App,
-│                                    then removes the splash screen (min 1500ms visible + 500ms fade-out).
+├── main.tsx                         Entry point. Configures Amplify, restores Cognito session,
+│                                    renders App, removes splash screen (min 1500ms + 500ms fade-out).
 ├── app/
 │   ├── app.tsx                      Root component. Syncs theme class on <html>, mesh-gradient
 │   │                                outer background, Toast + Tooltip providers + AppRouter.
@@ -93,10 +88,9 @@ src/
 │       └── toast/                   ToastContainer (Framer Motion, portal).
 ├── features/                        One folder per feature, structured as {feature}/page/.
 │   ├── auth/
-│   │   └── login/page/              LoginPage — three-mode auth form (signin / signup / confirm).
-│   │                                Dev: single button → POST /auth/callback (MSW mock).
-│   │                                Prod: email+password forms via @aws-amplify/auth; confirm mode
-│   │                                accepts the 6-digit Cognito verification code.
+│   │   └── login/page/              LoginPage — full auth form (signin / signup / confirm /
+│   │                                forgotPassword / resetPassword) via @aws-amplify/auth.
+│   │                                
 │   ├── onboarding/page/             OnboardingPage + extracted-tags.tsx
 │   ├── feed/page/                   FeedPage + feed-container.tsx + post-card.tsx + post-detail.tsx
 │   ├── profile/page/                ProfilePage (tabs: Profile | Settings | Legal) +
@@ -140,41 +134,18 @@ src/
 │   └── constants.ts                 AVAILABLE_TAGS, DEFAULT_TAGS, TRIGGER_THRESHOLD,
 │                                    MAX_PENDING_REQUESTS, FEED_PAGE_SIZE, SAVED_PAGE_SIZE,
 │                                    TAG_EXTRACTION_DELAY_MS, JIT_GENERATION_DELAY_MS.
-├── mocks/
-│   ├── browser.ts                   Configures and exports the MSW ServiceWorker instance.
-│   ├── handlers/
-│   │   ├── index.ts                 Barrel: [...authHandlers, ...feedHandlers, ...legalHandlers, ...likeHandlers, ...savedHandlers, ...userHandlers].
-│   │   ├── auth.ts                  POST /auth/callback → returns MOCK_USER + fake token (800ms).
-│   │   ├── feed.ts                  GET /feed, GET /post/:id, POST /feed/request.
-│   │   ├── legal.ts                 GET /legal/terms-status, GET /legal/terms?lang=, GET /legal/privacy?lang=,
-│   │   │                            POST /legal/accept. In-memory state: mockTermsStatus. Reads ?lang param.
-│   │   ├── likes.ts                 POST /post/:id/like, DELETE /post/:id/like.
-│   │   ├── saved.ts                 POST /post/:id/save, DELETE /post/:id/save, GET /posts/saved.
-│   │   └── user.ts                  GET /user/preferences, PUT /user/preferences, PUT /user/profile.
-│   └── data/
-│       ├── index.ts                 Barrel: exports MOCK_POSTS, MOCK_USER, mockExtractTags, TAG_COLORS,
-│       │                            MOCK_SAVED_AT, getMockSavedPosts, getMockLegalDocument, mockTermsStatus,
-│       │                            mockAcceptTerms.
-│       ├── legal.ts                 mockTermsStatus + mockAcceptTerms() + getMockLegalDocument(type, lang?).
-│       │                            Full Terms of Use and Privacy Policy in EN + PT-BR.
-│       ├── posts.ts                 15 mock posts (5 topics × 3) with Markdown content.
-│       ├── saved.ts                 MOCK_SAVED_AT map + getMockSavedPosts() helper.
-│       ├── user.ts                  MOCK_USER — single source of truth for the mock authenticated user.
-│       └── tags.ts                  TAG_COLORS map + mockExtractTags() simulation function.
 ├── router/
 │   └── index.tsx                    createBrowserRouter, RequireAuth, RootRedirect, AppRouter.
 ├── services/
-│   └── api.ts                       Central HTTP client (api.get/post/put/delete). MSW intercepts
-│                                    all calls in dev; real API Gateway in production.
-│                                    Exports `getApiErrorMessage(err, errors)` helper — maps
-│                                    backend `ApiErrorCode` to a translated string from `t.errors`.
+│   └── api.ts                       Central HTTP client (api.get/post/put/delete). All calls go to
+│                                    the real API Gateway. Exports `getApiErrorMessage(err, errors)`
+│                                    helper — maps backend `ApiErrorCode` to a translated string from `t.errors`.
 ├── stores/
 │   ├── auth/
 │   │   └── index.ts                 useAuthStore — user, token, isAuthenticated,
 │   │                                login(email, password), logout(), restoreSession().
-│   │                                Dev: login calls POST /auth/callback (MSW).
-│   │                                Prod: login uses @aws-amplify/auth signIn; restoreSession()
-│   │                                checks for an existing Cognito session on app boot.
+│   │                                login() uses @aws-amplify/auth signIn + GET /user/preferences.
+│   │                                restoreSession() checks for an existing Cognito session on app boot.
 │   ├── feed/
 │   │   └── index.ts                 useFeedStore — posts[], currentIndex, cursor, isLoading,
 │   │                                hasMore, isPostExpanded (locks snap container when PostDetail open).
@@ -231,16 +202,16 @@ src/
 | Hook files       | `use-kebab-case.ts`                    | `use-feed.ts`                      |
 | Store files      | `kebab-case/index.ts`                  | `feed/index.ts`                    |
 | Mock files       | `kebab-case.ts`                        | `posts.ts`                         |
-| Public assets    | `kebab-case.js`                        | `mock-service-worker.js`           |
+| Public assets    | `kebab-case.js`                        | `favicon.svg`                      |
 | Constants        | `SCREAMING_SNAKE_CASE`                 | `TRIGGER_THRESHOLD`                |
 | Types/Interfaces | `PascalCase`                           | `Post`, `UserProfile`              |
-| Functions        | `camelCase`                            | `mockExtractTags`                  |
+| Functions        | `camelCase`                            | `getApiErrorMessage`               |
 | React components | `PascalCase` named export              | `export function PostCard`         |
 | Pages            | `default export` + PascalCase          | `export default function FeedPage` |
 
 **File structure rule:** Each UI component lives in its own folder with `index.tsx`. Sub-components for a feature page live alongside the page's `index.tsx`.
 
-**PascalCase and camelCase filenames are forbidden everywhere** — including `public/` and `src/`. All source files must use `kebab-case`: words separated by `-`, all lowercase. No `mockServiceWorker.js`, no `App.tsx`, no `feedStore.ts`, no `useFeed.ts` → must be `use-feed.ts`.
+**PascalCase and camelCase filenames are forbidden everywhere** — including `public/` and `src/`. All source files must use `kebab-case`: words separated by `-`, all lowercase. No `App.tsx`, no `feedStore.ts`, no `useFeed.ts` → must be `use-feed.ts`.
 
 ---
 
@@ -510,7 +481,7 @@ The feed uses CSS snap, not JavaScript scroll control. Heights are controlled by
 
 ```
 /                  RootRedirect → /auth/login | /onboarding | /feed
-/auth/login        MockCognitoPage (no auth required)
+/auth/login        LoginPage (no auth required)
 /onboarding        OnboardingPage (RequireAuth)
 /feed              FeedPage (RequireAuth + FeedLayout)
 /saved             SavedGridPage (RequireAuth + FeedLayout)
@@ -577,11 +548,11 @@ export const useMyStore = create<MyState>((set) => ({
 
 ---
 
-## §12 — Mock Data Rules & MSW
+## §12 — API Rules
 
 ### The HTTP flow
 
-All API calls go through `src/services/api.ts` → `fetch()` → **MSW intercepts in dev** → mock handler returns JSON.
+All API calls go through `src/services/api.ts` → `fetch()` → real API Gateway.
 
 ```
 Component / Hook
@@ -590,19 +561,16 @@ Component / Hook
 api.get('/feed') ← src/services/api.ts
      │
      ▼
-fetch('/feed')   ← browser native fetch
-     │
-     ▼  [MSW ServiceWorker intercepts]
-Handler in src/mocks/handlers/feed.ts
+fetch('https://api.execute-api…/feed', { Authorization: Bearer <idToken> })
      │
      ▼
-HttpResponse.json({ posts: MOCK_POSTS.slice(...) })
+API Gateway → Lambda → DynamoDB
      │
      ▼
 Component receives { posts, cursor, hasMore }
 ```
 
-In production: remove MSW initialisation from `main.tsx`, set `VITE_API_URL`, and all requests go to the real API Gateway.
+`VITE_API_URL` must be set in the environment (`.env.local` for dev, Amplify Console for prod).
 
 ### Toast on every API action
 
@@ -641,80 +609,9 @@ All non-2xx backend responses carry `{ code: ApiErrorCode, error: string, messag
 
 ### Adding a new API endpoint
 
-1. Add the handler in `src/mocks/handlers/{domain}.ts`
-2. Add it to the barrel in `src/mocks/handlers/index.ts`
-3. Call it via `api.get/post/put/delete(...)` in the component/hook
-4. Never import mock data directly in components or hooks — always via `api.ts`
-
-### Adding mock posts
-
-Add to `src/mocks/data/posts.ts`. Follow this shape:
-
-```typescript
-{
-  id: 'post-NNN',           // Unique, sequential
-  userId: 'user-mock-001',  // Always the mock user
-  title: '...',             // Max 60 characters
-  summary: '...',           // Max 120 characters
-  tags: ['AWS'] as Tag[],   // 1–3 tags from AVAILABLE_TAGS
-  gradient: ['#hex1', '#hex2'],  // See §6 gradient convention
-  createdAt: '2026-07-0xTxx:00:00Z',
-  content: `## Heading\n\nMarkdown content with \`code blocks\`...`,
-}
-```
-
-### Mock delays (defined in MSW handlers)
-
-| Endpoint                  | Delay  | Simulates                                        |
-| ------------------------- | ------ | ------------------------------------------------ |
-| `POST /auth/callback`     | 800ms  | Cognito OAuth round-trip                         |
-| `GET /feed`               | 400ms  | DynamoDB GSI Query + Lambda                      |
-| `GET /post/:id`           | 200ms  | DynamoDB GetItem                                 |
-| `POST /feed/request`      | 300ms  | SQS SendMessage                                  |
-| `GET /user/preferences`   | 200ms  | DynamoDB GetItem                                 |
-| `PUT /user/preferences`   | 400ms  | DynamoDB UpdateItem                              |
-| `PUT /user/profile`       | 2000ms | Gemini API tag extraction                        |
-| `POST /post/:id/save`     | 300ms  | DynamoDB UpdateItem (remove TTL, set savedAt)    |
-| `DELETE /post/:id/save`   | 300ms  | DynamoDB UpdateItem (restore TTL, clear savedAt) |
-| `GET /posts/saved`        | 400ms  | DynamoDB GSI Query (userId-savedAt-index)        |
-| `GET /legal/terms-status` | 300ms  | DynamoDB GetItem (SintoniaUsers + SintoniaLegal) |
-| `GET /legal/terms`        | 500ms  | DynamoDB Query (SintoniaLegal)                   |
-| `GET /legal/privacy`      | 500ms  | DynamoDB Query (SintoniaLegal)                   |
-| `POST /legal/accept`      | 400ms  | DynamoDB UpdateItem (SintoniaUsers)              |
-
-### `mockExtractTags(description: string): Tag[]`
-
-Keyword-matching function that simulates Gemini's `extractTagsFromDescription`.
-Used by the `PUT /user/profile` MSW handler. Always returns at least 3 tags.
-Source: `src/mocks/data/tags.ts`.
-
-### Cursor format — mock matches production
-
-Both `GET /feed` and `GET /posts/saved` cursors use **base64-encoded JSON** to match the production DynamoDB `LastEvaluatedKey` encoding:
-
-```typescript
-// Encoding (in MSW handler)
-const nextCursor = btoa(JSON.stringify({ offset: nextOffset }));
-
-// Decoding (in MSW handler)
-const offset = cursorParam !== null
-  ? (JSON.parse(atob(cursorParam)) as { offset: number }).offset
-  : 0;
-```
-
-This ensures cursor behaviour is identical between mock and production — swapping MSW for the real backend requires zero frontend changes.
-
-### Mock delays
-
-Always simulate realistic latency using `sleep()` from `@/lib/utils`:
-
-| Operation          | Delay  | Constant                      |
-| ------------------ | ------ | ----------------------------- |
-| Initial feed load  | 400ms  | (inline in `useFeed`)         |
-| JIT generation     | 1500ms | `JIT_GENERATION_DELAY_MS`     |
-| Tag extraction     | 2000ms | `TAG_EXTRACTION_DELAY_MS`     |
-| Tag save           | 400ms  | (inline in `TagManager`)      |
-| Mock Cognito login | 800ms  | (inline in `MockCognitoPage`) |
+1. Call it via `api.get/post/put/delete(...)` in the component/hook
+2. Add the error code to `ApiErrorCode` in `src/types/domain.ts` if needed
+3. Add translations in `t.errors` for all languages in `src/lib/i18n.ts`
 
 ---
 
@@ -741,15 +638,6 @@ FeedPage
 
 `useJIT` runs inside `FeedPage` on every render. Triggers when `activeTags.length > 0` AND `postsRemaining ≤ TRIGGER_THRESHOLD` — including when the feed is completely empty (first load for a new user).
 
-**Development path:**
-```
-postsRemaining ≤ TRIGGER_THRESHOLD && !isGenerating && activeTags.length > 0
-  → POST /feed/request (MSW intercepts, returns 202)
-  → await sleep(JIT_GENERATION_DELAY_MS)   [1500ms simulated delay]
-  → setLoading(false); isGenerating locked for 10s (debounce)
-```
-
-**Production path:**
 ```
 postsRemaining ≤ TRIGGER_THRESHOLD && !isGenerating && activeTags.length > 0
   → POST /feed/request → real SQS → Gemini worker (~15–60s)
@@ -838,7 +726,7 @@ Never hardcode tag strings in components — always import from `@/lib/constants
 
 1. User writes description in `DescriptionForm` (min 20, max 500 chars).
 2. On save → calls `onExtractionStateChange(true)` → `ProfilePage` sets `isExtractingTags = true` → `TagManager` renders skeleton chips.
-3. `PUT /user/profile` → `mockExtractTags(description)` simulates Gemini API (2s delay).
+3. `PUT /user/profile` → Gemini API extracts tags (2s delay in real backend).
 4. Returns `Tag[]` → `useUserStore.setProfile(description, extractedTags)`.
 5. `setProfile` sets both `extractedTags = tags` and `activeTags = tags` — all start active.
 6. `onExtractionStateChange(false)` → `ProfilePage` sets `isExtractingTags = false` → `TagManager` renders real tags.
@@ -902,18 +790,6 @@ main.tsx → useAuthStore.restoreSession()
   → if description non-empty: syncFromServer(description, activeTags) in user store
   → React tree renders with isAuthenticated = true → RootRedirect sends to /feed
 ```
-
-### Development (mock)
-
-```
-User → /auth/login → LoginPage (single button, isMock = true)
-  → click "Continue with Cognito"
-  → useAuthStore.login(email, password) [dev branch: POST /auth/callback → MSW → MOCK_USER + token]
-  → afterSignIn(): syncFromServer(description, activeTags)
-  → navigate(returnTo) → /feed (mock user has description set)
-```
-
-The mock user has a pre-set description and active tags so the feed works immediately after login.
 
 ### RequireAuth
 
@@ -1135,8 +1011,7 @@ src/features/{feature-name}/page/
 2. Add the `React.lazy` import in `src/router/index.tsx`.
 3. Add the route to the `createBrowserRouter` array.
 4. If it needs the bottom nav, nest it under the `FeedLayout` route group.
-5. If it needs mock data, add it to `src/mocks/data/`.
-6. If it needs state, add a Zustand store in `src/stores/`.
+5. If it needs state, add a Zustand store in `src/stores/`.
 7. Update §3 (directory tree) and §9 (routing) in this file.
 
 ---
@@ -1157,7 +1032,7 @@ src/features/{feature-name}/page/
 2. **`React.memo`** — use on components that receive stable props and render frequently (e.g., `PostCard` inside a long list).
 3. **Stable references** — use `React.useCallback` for functions passed as props, `React.useMemo` for expensive derived values.
 4. **Avoid re-renders** — use Zustand selectors `(s) => s.field` to subscribe to only what you need.
-5. **Image optimisation** — not applicable in the mock (no images). When added, always specify `width` + `height`.
+5. **Image optimisation** — not applicable currently (no image uploads). When added, always specify `width` + `height`.
 
 ---
 
@@ -1212,7 +1087,7 @@ export function useFeed(): FeedResult { ... }
 
 /** ✅ Correct */
 /**
- * Paginates the mock post list, simulating GET /feed?limit=5&cursor=...
+ * Fetches and paginates the authenticated user's feed via GET /feed.
  * In production this calls the real API Gateway endpoint.
  */
 export function useFeed(): FeedResult { ... }
@@ -1230,7 +1105,7 @@ export function cn(...inputs: ClassValue[]): string { ... }
  * Multi-line description for complex functions.
  * Second sentence adds more context.
  */
-export function mockExtractTags(description: string): Tag[] { ... }
+export function formatRelativeTime(date: string): string { ... }
 ```
 
 ### What is forbidden
@@ -1385,7 +1260,6 @@ Usage:
 ### What NOT to translate
 
 - Tag names (`AWS`, `TypeScript`, etc.) — these are domain identifiers, not UI labels.
-- Mock/debug strings (e.g. `POST /auth/callback → MSW → mock user session`) — developer-facing only.
 - Post titles and content — generated by Gemini (language controlled via Gemini prompt, future feature).
 
 ### `common` namespace

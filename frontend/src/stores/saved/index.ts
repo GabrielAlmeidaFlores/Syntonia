@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-import { MOCK_SAVED_AT } from "@/mocks/data/saved";
 import type { Post } from "@/types";
 
 interface SavedState {
@@ -29,7 +28,7 @@ interface SavedState {
 export const useSavedStore = create<SavedState>()(
   persist(
     (set, get) => ({
-      savedIds: new Set<string>(Object.keys(MOCK_SAVED_AT)),
+      savedIds: new Set<string>(),
       posts: [],
       isLoading: false,
       cursor: null,

@@ -14,14 +14,14 @@ import { useFeedStore } from "@/stores/feed";
  * FeedContainer renders the scrollable PostCard list.
  */
 export default function FeedPage(): React.JSX.Element {
-  const { posts, isLoading, fetchMore } = useFeed();
+  const { posts, isLoading, reload } = useFeed();
   const currentIndex = useFeedStore((s) => s.currentIndex);
 
   useJIT(currentIndex, posts.length);
 
   return (
     <div className="h-full overflow-hidden">
-      <FeedContainer posts={posts} isLoading={isLoading} onReload={fetchMore} />
+      <FeedContainer posts={posts} isLoading={isLoading} onReload={reload} />
     </div>
   );
 }

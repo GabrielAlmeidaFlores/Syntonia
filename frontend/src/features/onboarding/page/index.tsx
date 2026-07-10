@@ -20,9 +20,8 @@ type Step = "input" | "extracting" | "review";
  * Guides the user through writing a profile description and confirming their
  * AI-extracted areas of interest before redirecting to /feed.
  *
- * Calls PUT /user/profile with the description. MSW intercepts the request,
- * runs mockExtractTags() to simulate Gemini, and returns { description, activeTags }
- * after a 2s delay that mirrors the real API latency.
+ * Calls PUT /user/profile with the description. The backend runs Gemini
+ * to extract tags and returns { description, activeTags } after processing.
  */
 export default function OnboardingPage(): React.JSX.Element {
   const navigate = useNavigate();

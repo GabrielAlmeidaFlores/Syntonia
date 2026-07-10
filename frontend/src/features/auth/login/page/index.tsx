@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useTranslation } from "@/hooks/use-translation";
-import { VITE_MODE } from "@/lib/env";
 import { getApiErrorMessage } from "@/services/api";
 import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
@@ -28,15 +27,13 @@ interface SwitchLinkConfig {
 
 /**
  * Authentication page — handles sign-in, sign-up, email confirmation,
- * forgot-password and password-reset flows.
+ * forgot-password and password-reset flows via the Cognito User Pool.
  *
- * In development: shows a single "Continue with Cognito" button (MSW mock).
- * In production: real email+password forms connected to the Cognito User Pool.
- *   - Sign-in: email + password → Amplify signIn
- *   - Sign-up: email + password + confirm password → Amplify signUp
- *   - Confirm: 6-digit code → Amplify confirmSignUp → auto sign-in
- *   - Forgot password: email → Amplify resetPassword (sends code)
- *   - Reset password: code + new password → Amplify confirmResetPassword → back to sign-in
+ * - Sign-in: email + password → Amplify signIn
+ * - Sign-up: email + password + confirm password → Amplify signUp
+ * - Confirm: 6-digit code → Amplify confirmSignUp → auto sign-in
+ * - Forgot password: email → Amplify resetPassword (sends code)
+ * - Reset password: code + new password → Amplify confirmResetPassword → back to sign-in
  */
 export default function LoginPage(): React.JSX.Element {
   const t = useTranslation();
@@ -46,8 +43,6 @@ export default function LoginPage(): React.JSX.Element {
 
   const login = useAuthStore((s) => s.login);
   const syncFromServer = useUserStore((s) => s.syncFromServer);
-
-  const isMock = VITE_MODE === "development";
 
   const [mode, setMode] = React.useState<AuthMode>("signin");
   const [email, setEmail] = React.useState("");
@@ -175,7 +170,7 @@ export default function LoginPage(): React.JSX.Element {
   };
 
   const descriptions: Record<AuthMode, string> = {
-    signin: isMock ? t.auth.signinDescription : t.auth.appSubtitle,
+    signin: t.auth.appSubtitle,
     signup: t.auth.appSubtitle,
     confirm: t.auth.confirmDescription(email),
     forgotPassword: t.auth.forgotPasswordDescription,
@@ -184,10 +179,10 @@ export default function LoginPage(): React.JSX.Element {
 
   const buttonConfigs: Record<AuthMode, ButtonConfig> = {
     signin: {
-      text: isMock ? t.auth.signinButton : t.auth.realSigninButton,
+      text: t.auth.signinButton,
       loadingText: t.auth.signingInButton,
       onClick: () => { void handleSignIn(); },
-      disabled: !isMock && (email.length === 0 || password.length === 0),
+      disabled: email.length === 0 || password.length === 0,
     },
     signup: {
       text: t.auth.createAccountButton,
@@ -243,14 +238,6 @@ export default function LoginPage(): React.JSX.Element {
       </div>
 
       <div className="w-full overflow-hidden rounded-2xl border border-surface-border bg-surface-card">
-        {isMock && (
-          <div className="border-b border-surface-border bg-accent-muted/40 px-4 py-2 text-center">
-            <span className="text-xs font-medium text-accent-light">
-              {t.auth.mockLabel}
-            </span>
-          </div>
-        )}
-
         <div className="flex flex-col gap-5 p-6">
           <div className="border-b border-surface-border pb-4">
             <h2 className="text-base font-semibold text-content-primary">
@@ -261,87 +248,9 @@ export default function LoginPage(): React.JSX.Element {
             </p>
           </div>
 
-          {!isMock && (
-            <div className="flex flex-col gap-3">
-              {mode === "signin" && (
-                <>
-                  <Input
-                    type="email"
-                    placeholder={t.auth.emailPlaceholder}
-                    value={email}
-                    onChange={(e) => { setEmail(e.target.value); }}
-                    disabled={loading}
-                    aria-label={t.auth.emailPlaceholder}
-                  />
-                  <div className="flex flex-col gap-1.5">
-                    <PasswordInput
-                      placeholder={t.auth.passwordPlaceholder}
-                      value={password}
-                      onChange={(e) => { setPassword(e.target.value); }}
-                      disabled={loading}
-                      aria-label={t.auth.passwordPlaceholder}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !loading) void handleSignIn();
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => { switchMode("forgotPassword"); }}
-                      className="self-end text-xs text-content-subtle transition-colors hover:text-accent-light"
-                    >
-                      {t.auth.forgotPasswordLink}
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {mode === "signup" && (
-                <>
-                  <Input
-                    type="email"
-                    placeholder={t.auth.emailPlaceholder}
-                    value={email}
-                    onChange={(e) => { setEmail(e.target.value); }}
-                    disabled={loading}
-                    aria-label={t.auth.emailPlaceholder}
-                  />
-                  <PasswordInput
-                    placeholder={t.auth.passwordPlaceholder}
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); }}
-                    disabled={loading}
-                    aria-label={t.auth.passwordPlaceholder}
-                  />
-                  <PasswordInput
-                    placeholder={t.auth.passwordConfirmPlaceholder}
-                    value={confirmPassword}
-                    onChange={(e) => { setConfirmPassword(e.target.value); }}
-                    disabled={loading}
-                    aria-label={t.auth.passwordConfirmPlaceholder}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !loading) void handleSignUp();
-                    }}
-                  />
-                </>
-              )}
-
-              {mode === "confirm" && (
-                <Input
-                  type="text"
-                  placeholder={t.auth.confirmCodePlaceholder}
-                  value={confirmCode}
-                  onChange={(e) => { setConfirmCode(e.target.value); }}
-                  disabled={loading}
-                  aria-label={t.auth.confirmCodePlaceholder}
-                  maxLength={6}
-                  inputMode="numeric"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !loading) void handleConfirm();
-                  }}
-                />
-              )}
-
-              {mode === "forgotPassword" && (
+          <div className="flex flex-col gap-3">
+            {mode === "signin" && (
+              <>
                 <Input
                   type="email"
                   placeholder={t.auth.emailPlaceholder}
@@ -349,38 +258,114 @@ export default function LoginPage(): React.JSX.Element {
                   onChange={(e) => { setEmail(e.target.value); }}
                   disabled={loading}
                   aria-label={t.auth.emailPlaceholder}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !loading) void handleForgotPassword();
-                  }}
                 />
-              )}
-
-              {mode === "resetPassword" && (
-                <>
-                  <Input
-                    type="text"
-                    placeholder={t.auth.confirmCodePlaceholder}
-                    value={resetCode}
-                    onChange={(e) => { setResetCode(e.target.value); }}
-                    disabled={loading}
-                    aria-label={t.auth.confirmCodePlaceholder}
-                    maxLength={6}
-                    inputMode="numeric"
-                  />
+                <div className="flex flex-col gap-1.5">
                   <PasswordInput
-                    placeholder={t.auth.newPasswordPlaceholder}
-                    value={newPassword}
-                    onChange={(e) => { setNewPassword(e.target.value); }}
+                    placeholder={t.auth.passwordPlaceholder}
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); }}
                     disabled={loading}
-                    aria-label={t.auth.newPasswordPlaceholder}
+                    aria-label={t.auth.passwordPlaceholder}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && !loading) void handleResetPassword();
+                      if (e.key === "Enter" && !loading) void handleSignIn();
                     }}
                   />
-                </>
-              )}
-            </div>
-          )}
+                  <button
+                    type="button"
+                    onClick={() => { switchMode("forgotPassword"); }}
+                    className="self-end text-xs text-content-subtle transition-colors hover:text-accent-light"
+                  >
+                    {t.auth.forgotPasswordLink}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {mode === "signup" && (
+              <>
+                <Input
+                  type="email"
+                  placeholder={t.auth.emailPlaceholder}
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); }}
+                  disabled={loading}
+                  aria-label={t.auth.emailPlaceholder}
+                />
+                <PasswordInput
+                  placeholder={t.auth.passwordPlaceholder}
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); }}
+                  disabled={loading}
+                  aria-label={t.auth.passwordPlaceholder}
+                />
+                <PasswordInput
+                  placeholder={t.auth.passwordConfirmPlaceholder}
+                  value={confirmPassword}
+                  onChange={(e) => { setConfirmPassword(e.target.value); }}
+                  disabled={loading}
+                  aria-label={t.auth.passwordConfirmPlaceholder}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !loading) void handleSignUp();
+                  }}
+                />
+              </>
+            )}
+
+            {mode === "confirm" && (
+              <Input
+                type="text"
+                placeholder={t.auth.confirmCodePlaceholder}
+                value={confirmCode}
+                onChange={(e) => { setConfirmCode(e.target.value); }}
+                disabled={loading}
+                aria-label={t.auth.confirmCodePlaceholder}
+                maxLength={6}
+                inputMode="numeric"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !loading) void handleConfirm();
+                }}
+              />
+            )}
+
+            {mode === "forgotPassword" && (
+              <Input
+                type="email"
+                placeholder={t.auth.emailPlaceholder}
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); }}
+                disabled={loading}
+                aria-label={t.auth.emailPlaceholder}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !loading) void handleForgotPassword();
+                }}
+              />
+            )}
+
+            {mode === "resetPassword" && (
+              <>
+                <Input
+                  type="text"
+                  placeholder={t.auth.confirmCodePlaceholder}
+                  value={resetCode}
+                  onChange={(e) => { setResetCode(e.target.value); }}
+                  disabled={loading}
+                  aria-label={t.auth.confirmCodePlaceholder}
+                  maxLength={6}
+                  inputMode="numeric"
+                />
+                <PasswordInput
+                  placeholder={t.auth.newPasswordPlaceholder}
+                  value={newPassword}
+                  onChange={(e) => { setNewPassword(e.target.value); }}
+                  disabled={loading}
+                  aria-label={t.auth.newPasswordPlaceholder}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !loading) void handleResetPassword();
+                  }}
+                />
+              </>
+            )}
+          </div>
 
           <AnimatePresence mode="wait">
             {error !== null && (
