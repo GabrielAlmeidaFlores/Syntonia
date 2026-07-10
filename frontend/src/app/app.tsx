@@ -17,7 +17,9 @@ import type { TermsStatus } from "@/types";
  * The outer background is a mesh-gradient effect that adapts to the active theme.
  *
  * Theme synchronisation: on every change to `usePreferencesStore.theme`, the
- * corresponding class (`dark` or `light`) is applied to `<html>`.
+ * corresponding class (`dark` or `light`) is applied to `<html>`, and the
+ * `<meta name="theme-color">` tag is updated so the browser status bar and
+ * toolbar match the app shell colour on mobile.
  *
  * Terms check: after authentication, GET /legal/terms-status is called once.
  * If `needsAcceptance: true`, TermsAcceptanceModal blocks the entire app until
@@ -37,6 +39,16 @@ export function App(): React.JSX.Element {
     } else {
       root.classList.add("dark");
       root.classList.remove("light");
+    }
+
+    const metaThemeColor = document.querySelector<HTMLMetaElement>(
+      'meta[name="theme-color"]',
+    );
+    if (metaThemeColor !== null) {
+      metaThemeColor.setAttribute(
+        "content",
+        theme === "light" ? "#ffffff" : "#111827",
+      );
     }
   }, [theme]);
 
