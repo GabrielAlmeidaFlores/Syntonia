@@ -570,7 +570,7 @@ return serverError(event, err);
 
 ## §14 — AI Layer (src/shared/ai/gemini.ts)
 
-**Primary model:** `gemini-2.0-flash` | **Fallback:** `gemini-1.5-flash`
+**Primary model:** `gemini-flash-lite-latest` | **Fallback:** `gemini-flash-latest`
 
 ```typescript
 generatePost({ tags, description, recentPosts })    → GeneratedPost   // used by workerInternal
