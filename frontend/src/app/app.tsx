@@ -94,7 +94,7 @@ export function App(): React.JSX.Element {
         style={{ backgroundColor: backdropBg }}
       >
         <div
-          className="relative w-full max-w-[560px] overflow-hidden"
+          className="relative w-full overflow-hidden lg:max-w-[560px]"
           style={{ backgroundColor: outerBg }}
         >
           <div
