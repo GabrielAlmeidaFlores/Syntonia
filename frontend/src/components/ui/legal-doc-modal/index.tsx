@@ -97,7 +97,7 @@ export function LegalDocModal({
               role="dialog"
               aria-modal
               aria-label={title}
-              className="mx-auto flex w-full max-w-[560px] flex-col rounded-t-2xl border-t border-surface-border bg-surface-card"
+              className="mx-auto flex w-full flex-col rounded-t-2xl border-t border-surface-border bg-surface-card lg:max-w-[560px]"
               style={{ maxHeight: "88dvh" }}
             >
               <div className="flex shrink-0 items-center justify-between border-b border-surface-border px-5 py-4">

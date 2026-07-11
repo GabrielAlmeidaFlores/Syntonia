@@ -94,7 +94,7 @@ export function TermsAcceptanceModal(): React.JSX.Element {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <div className="flex h-full w-full max-w-[560px] flex-col bg-surface">
+          <div className="flex h-full w-full flex-col bg-surface lg:max-w-[560px]">
             <div className="flex-1 overflow-y-auto overscroll-contain scrollbar-thin">
               <div className="flex flex-col items-center gap-3 border-b border-surface-border px-6 py-8 text-center">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-muted">

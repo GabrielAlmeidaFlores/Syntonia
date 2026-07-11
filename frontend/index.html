@@ -11,9 +11,8 @@
       #splash {
         position: fixed;
         inset: 0;
-        background: #030712;
+        background: #02020d;
         display: flex;
-        align-items: center;
         justify-content: center;
         z-index: 99999;
         opacity: 1;
@@ -23,7 +22,30 @@
                     transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
-      #splash::before {
+      #splash.splash-exit {
+        opacity: 0;
+        transform: scale(1.04);
+        pointer-events: none;
+      }
+
+      #splash-inner {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        background: #030712;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      @media (min-width: 1024px) {
+        #splash-inner {
+          max-width: 560px;
+        }
+      }
+
+      #splash-inner::before {
         content: '';
         position: absolute;
         inset: 0;
@@ -31,12 +53,6 @@
           radial-gradient(ellipse 70% 60% at 20% 10%, rgba(79, 70, 229, 0.3) 0%, transparent 70%),
           radial-gradient(ellipse 60% 55% at 80% 85%, rgba(124, 58, 237, 0.24) 0%, transparent 65%),
           radial-gradient(ellipse 50% 40% at 55% 45%, rgba(99, 102, 241, 0.12) 0%, transparent 60%);
-        pointer-events: none;
-      }
-
-      #splash.splash-exit {
-        opacity: 0;
-        transform: scale(1.04);
         pointer-events: none;
       }
 
@@ -129,15 +145,17 @@
   </head>
   <body>
     <div id="splash">
-      <div id="splash-content">
-        <div id="splash-wordmark">
-          <span id="splash-title">Syntonia</span>
-          <span id="splash-subtitle">Personal Learning Engine</span>
-        </div>
-        <div id="splash-dots">
-          <div class="splash-dot"></div>
-          <div class="splash-dot"></div>
-          <div class="splash-dot"></div>
+      <div id="splash-inner">
+        <div id="splash-content">
+          <div id="splash-wordmark">
+            <span id="splash-title">Syntonia</span>
+            <span id="splash-subtitle">Personal Learning Engine</span>
+          </div>
+          <div id="splash-dots">
+            <div class="splash-dot"></div>
+            <div class="splash-dot"></div>
+            <div class="splash-dot"></div>
+          </div>
         </div>
       </div>
     </div>

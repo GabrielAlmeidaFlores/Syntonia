@@ -95,7 +95,7 @@ export function ShareModal({
               role="dialog"
               aria-modal
               aria-label={title}
-              className="mx-auto w-full max-w-[560px] rounded-t-2xl border-t border-surface-border bg-surface-card px-5 pb-10 pt-4"
+              className="mx-auto w-full rounded-t-2xl border-t border-surface-border bg-surface-card px-5 pb-10 pt-4 lg:max-w-[560px]"
             >
               <div
                 className="mx-auto mb-4 h-1 w-10 rounded-full bg-surface-border"
