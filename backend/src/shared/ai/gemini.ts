@@ -2,8 +2,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_API_KEY } from '../core/env.js';
 import type { GeneratedPost, PostSummaryWithLike, Tag } from '../core/types/index.js';
 
-const PRIMARY_MODEL = 'gemini-2.0-flash';
-const FALLBACK_MODEL = 'gemini-1.5-flash';
+const PRIMARY_MODEL = 'gemini-flash-lite-latest';
+const FALLBACK_MODEL = 'gemini-flash-latest';
 
 /** Thrown when Gemini fails to generate usable content after all retries. */
 export class GeminiError extends Error {
